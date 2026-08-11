@@ -63,13 +63,24 @@ directly from `@nestjs/config` — no extra wrapper module is introduced, per th
 
 ## Lint fix
 
-`eslint-plugin-unicorn`'s `prevent-abbreviations` rule flags the word "config" (wants
-"configuration") by default, which would fire on `ConfigService`, `rabbitmqConfig`, etc. —
-the same category of noise the project's `allowList` already carves out exceptions for
-(`Dto`, `E2e`, ...). Fix: add `config: true, Config: true` to the `unicorn/prevent-abbreviations`
-`allowList` in all three (currently identical) `eslint.config.mjs` files.
+Verified empirically (installed the exact toolchain versions from each service's
+`package.json` in an isolated sandbox and ran `eslint` against the real planned file
+contents) before assuming anything:
 
-No identifier will be named `env`, so no equivalent exception is needed for that word.
+- `eslint-plugin-unicorn`'s `prevent-abbreviations` rule does **not** flag "config" —
+  in its abbreviation table `config` is a suggested *replacement* for the abbreviation
+  `conf`, not an abbreviation itself. No `allowList`/`eslint.config.mjs` change is needed
+  for `ConfigModule`, `ConfigType`, `registerAs`, `appConfig`, `rabbitmqConfig`, etc.
+- The one real lint finding: writing `registerAs('app', (): AppConfiguration => schema.parse({...}))`
+  as a single call with the arrow function inline doesn't match this project's Prettier
+  config (`printWidth: 100`) — Prettier reformats it to put the factory arrow function as
+  its own argument on a new line. The task steps below show the file contents in that
+  already-`--fix`ed, lint-clean form, so no separate "fix lint" step is needed at
+  implementation time — `pnpm lint` should pass on the first run.
+
+No identifier will be named `env`, so no `unicorn/prevent-abbreviations` exception is
+needed for that word either (bare `process.env` member access isn't a declared
+identifier and isn't checked by that rule).
 
 ## Out of scope
 

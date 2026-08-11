@@ -3,13 +3,16 @@ import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 import { AppModule } from './app.module';
+import rabbitmqConfig from './config/rabbitmq.config';
 
 async function bootstrap(): Promise<void> {
+  const { url, queue } = rabbitmqConfig();
+
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672'],
-      queue: process.env.RABBITMQ_QUEUE ?? 'users_service_queue',
+      urls: [url],
+      queue,
       queueOptions: { durable: true },
     },
   });

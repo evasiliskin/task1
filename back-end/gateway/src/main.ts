@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
+import appConfig from './config/app.config';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -14,7 +15,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  const port = process.env.PORT ?? 3000;
+  const { port } = appConfig();
   await app.listen(port);
 }
 

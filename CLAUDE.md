@@ -33,6 +33,16 @@ Never guess APIs when documentation is available.
 
 ---
 
+# Git
+
+Never create git commits automatically. The user commits their own work manually.
+
+This applies even when a process/skill (e.g. brainstorming's spec-writing step)
+would normally commit as part of its flow — skip the commit step and leave
+changes staged/unstaged for the user instead.
+
+---
+
 # Core Principles
 
 Always prioritize:
