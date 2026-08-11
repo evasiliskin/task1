@@ -20,6 +20,7 @@ FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY back-end/gateway/package.json back-end/gateway/package.json
 COPY back-end/users-service/package.json back-end/users-service/package.json
+COPY back-end/products-service/package.json back-end/products-service/package.json
 COPY front-end/package.json front-end/package.json
 
 RUN --mount=type=cache,target=/pnpm/store \
@@ -49,7 +50,14 @@ USER node
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+  CMD node -e "\
+    const http = require('http'); \
+    const check = (path) => new Promise((resolve, reject) => { \
+      http.get('http://127.0.0.1:3000' + path, (r) => (r.statusCode === 200 ? resolve() : reject())).on('error', reject); \
+    }); \
+    Promise.all([check('/health/users-service'), check('/health/products-service')]) \
+      .then(() => process.exit(0)) \
+      .catch(() => process.exit(1));"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 

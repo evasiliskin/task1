@@ -1,16 +1,13 @@
 {
   "name": "users-service",
   "version": "0.0.1",
-  "description": "Users domain microservice (TCP transport, Prisma + PostgreSQL persistence)",
+  "description": "Users domain microservice (RabbitMQ transport)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
   "type": "commonjs",
   "engines": {
     "node": "24.11.0"
-  },
-  "prisma": {
-    "schema": "prisma/schema.prisma"
   },
   "scripts": {
     "build": "nest build",
@@ -22,18 +19,16 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
-    "postinstall": "prisma generate"
+    "test:cov": "vitest run --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/microservices": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@prisma/client": "^5.22.0",
+    "@nestjs/terminus": "^11.1.1",
+    "amqp-connection-manager": "^5.0.0",
+    "amqplib": "^2.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
@@ -64,7 +59,6 @@
     "eslint-plugin-sonarjs": "^4.0.2",
     "eslint-plugin-unicorn": "^63.0.0",
     "prettier": "^3.4.2",
-    "prisma": "^5.22.0",
     "source-map-support": "^0.5.21",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",

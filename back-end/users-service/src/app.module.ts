@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
 
 import { ExceptionHandlingModule } from './core/exception-handling/exception-handling.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { UsersModule } from './users/users.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
-  imports: [ExceptionHandlingModule, PrismaModule, UsersModule],
+  imports: [ExceptionHandlingModule, HealthModule],
 })
 export class AppModule {}

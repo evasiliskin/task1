@@ -1,29 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 
-import {
-  type AppError,
-  ConflictError,
-  InternalError,
-  NotFoundError,
-  ValidationError,
-} from '../errors';
+import { type AppError } from '../errors';
 
-export function statusFromAppError(error: AppError): number {
-  if (error instanceof NotFoundError) {
-    return HttpStatus.NOT_FOUND;
-  }
-
-  if (error instanceof ConflictError) {
-    return HttpStatus.CONFLICT;
-  }
-
-  if (error instanceof ValidationError) {
-    return HttpStatus.BAD_REQUEST;
-  }
-
-  if (error instanceof InternalError) {
-    return HttpStatus.INTERNAL_SERVER_ERROR;
-  }
-
+export function statusFromAppError(_error: AppError): number {
   return HttpStatus.INTERNAL_SERVER_ERROR;
 }

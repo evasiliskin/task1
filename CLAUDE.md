@@ -12,7 +12,6 @@ skills/*.md
 - Nest.js
 - TypeScript
 - PostgreSQL
-- Prisma ORM
 - AWS
 - pnpm
 - Vitest
@@ -24,7 +23,6 @@ skills/*.md
 Always use Context7 MCP for:
 
 - Nest.js
-- Prisma
 - PostgreSQL
 - AWS
 - any library or framework documentation
@@ -67,8 +65,6 @@ Controller
     │
 Application Service
     │
-Prisma
-    │
 PostgreSQL
 ```
 
@@ -108,7 +104,7 @@ Responsible for:
 
 Must NOT:
 
-- expose Prisma models
+- expose persistence models
 - depend on HTTP
 - perform serialization
 
@@ -116,11 +112,12 @@ Must NOT:
 
 ## Persistence
 
-Prisma is the persistence layer.
+No persistence layer is configured yet (previously Prisma; removed — to be
+decided when persistence is added back).
 
 Rules:
 
-- Prisma models never leave the persistence boundary.
+- Persistence models never leave the persistence boundary.
 - Database access belongs only to the owning module.
 - Do not introduce Repository pattern unless explicitly requested.
 
@@ -137,7 +134,7 @@ Each module owns:
 
 Communication between modules must happen only through exported services.
 
-Never access another module's Prisma models.
+Never access another module's persistence models.
 
 Avoid circular dependencies.
 
@@ -293,7 +290,7 @@ Verify:
 ## Architecture
 
 - correct module boundaries
-- no leaked Prisma models
+- no leaked persistence models
 - no unnecessary abstractions
 
 ## Security

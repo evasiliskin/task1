@@ -9,7 +9,7 @@ async function bootstrap(): Promise<void> {
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672'],
-      queue: process.env.RABBITMQ_QUEUE ?? 'users_service_queue',
+      queue: process.env.RABBITMQ_QUEUE ?? 'products_service_queue',
       queueOptions: { durable: true },
     },
   });

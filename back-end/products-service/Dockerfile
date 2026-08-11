@@ -29,9 +29,9 @@ RUN --mount=type=cache,target=/pnpm/store \
 # ---- Build --------------------------------------------------------------
 FROM deps AS build
 
-COPY back-end/users-service back-end/users-service
+COPY back-end/products-service back-end/products-service
 
-RUN pnpm --filter users-service run build
+RUN pnpm --filter products-service run build
 
 # ---- Runtime ------------------------------------------------------------
 FROM base AS runtime
@@ -41,8 +41,8 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
-COPY --chown=node:node --from=build /app/back-end/users-service/dist ./dist
-COPY --chown=node:node back-end/users-service/package.json ./package.json
+COPY --chown=node:node --from=build /app/back-end/products-service/dist ./dist
+COPY --chown=node:node back-end/products-service/package.json ./package.json
 
 USER node
 

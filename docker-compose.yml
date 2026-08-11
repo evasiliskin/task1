@@ -1,44 +1,21 @@
 name: task1
 
-x-users-service-database-url: &users_service_database_url
-  DATABASE_URL: postgresql://task1:task1@postgres:5432/users_service?schema=public
+x-rabbitmq-url: &rabbitmq_url
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: task1-postgres
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: task1-rabbitmq
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: task1
-      POSTGRES_PASSWORD: task1
-      POSTGRES_DB: users_service
     ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U task1"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
-
-  # One-off job: applies Prisma migrations, then exits. Run explicitly with
-  # `docker compose run --rm users-service-migrate`, or add it to
-  # `depends_on` with `condition: service_completed_successfully` once you
-  # want migrations to gate service startup automatically.
-  users-service-migrate:
-    container_name: task1-users-service-migrate
-    build:
-      context: .
-      dockerfile: back-end/users-service/Dockerfile
-      target: migrate
-    environment:
-      <<: *users_service_database_url
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-    profiles: ["migrate"]
 
   users-service:
     container_name: task1-users-service
@@ -48,11 +25,24 @@ services:
       target: runtime
     restart: unless-stopped
     environment:
-      <<: *users_service_database_url
-      USERS_SERVICE_HOST: 0.0.0.0
-      USERS_SERVICE_PORT: 3001
+      <<: *rabbitmq_url
+      RABBITMQ_QUEUE: users_service_queue
     depends_on:
-      postgres:
+      rabbitmq:
+        condition: service_healthy
+
+  products-service:
+    container_name: task1-products-service
+    build:
+      context: .
+      dockerfile: back-end/products-service/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq_url
+      RABBITMQ_QUEUE: products_service_queue
+    depends_on:
+      rabbitmq:
         condition: service_healthy
 
   gateway:
@@ -65,11 +55,13 @@ services:
     ports:
       - "3000:3000"
     environment:
+      <<: *rabbitmq_url
       PORT: 3000
-      USERS_SERVICE_HOST: users-service
-      USERS_SERVICE_PORT: 3001
+      RABBITMQ_USERS_QUEUE: users_service_queue
+      RABBITMQ_PRODUCTS_QUEUE: products_service_queue
     depends_on:
-      - users-service
+      rabbitmq:
+        condition: service_healthy
 
   front-end:
     container_name: task1-front-end
@@ -81,6 +73,3 @@ services:
       - "4200:80"
     depends_on:
       - gateway
-
-volumes:
-  postgres-data:
