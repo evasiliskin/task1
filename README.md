@@ -36,29 +36,6 @@ Adding a new microservice: copy `back-end/users-service` as a template,
 give it its own Prisma schema/database, define its own `@MessagePattern`s,
 and register a matching `ClientsModule` entry + controller in the gateway.
 
-## Error handling
-
-Both back-end services share one error-handling pattern (ported from an
-existing project at `d:\Dev\tensi-backend`, trimmed to this project's needs -
-no i18n or request-context layer here):
-
-- `core/errors/` - `AppError` abstract base class with `code`/`category`,
-  and concrete errors grouped by category (`NotFoundError`, `ConflictError`,
-  `ValidationError`, `InternalError`). Business logic throws these, never a
-  raw `Error`.
-- `core/exception-handling/` - a strategy-based `ErrorFormatService`
-  (`AppErrorFormatStrategy`, `HttpExceptionFormatStrategy`,
-  `DefaultFormatStrategy`) turns any exception into a consistent
-  `{ statusCode, error: { code, category, message, details } }` shape.
-- **gateway**: `GlobalExceptionFilter` (HTTP) writes that shape as the JSON
-  response, plus a `correlationId`/`timestamp`/`path`.
-- **users-service**: `RpcAppExceptionFilter` flattens the same shape into a
-  plain object before it crosses the TCP boundary (class instances don't
-  survive serialization). The gateway's `SerializedRpcErrorFormatStrategy`
-  recognizes that shape and maps it straight through, so an
-  `EntityNotFoundError` thrown in users-service still becomes an HTTP 404 at
-  the gateway.
-
 ## Getting started
 
 ```bash

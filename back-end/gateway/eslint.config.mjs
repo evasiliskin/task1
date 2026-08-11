@@ -1,5 +1,3 @@
-// Ported from D:\Dev\tensi-backend\eslint.config.mjs, adapted to this app's
-// own tsconfig.json and to Vitest (instead of Jest) globals in test files.
 import { FlatCompat } from '@eslint/eslintrc';
 import { importX } from 'eslint-plugin-import-x';
 import unicorn from 'eslint-plugin-unicorn';

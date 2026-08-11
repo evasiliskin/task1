@@ -1,8 +1,3 @@
-# Build context is the repo root (this is a pnpm workspace) - see
-# docker-compose.yml: `build.context: .`, `build.dockerfile: back-end/users-service/Dockerfile`.
-# Multi-stage layout ported from D:\Dev\tensi-backend\Dockerfile, including
-# its pattern of a dedicated `migrate` target for running Prisma migrations
-# as a one-off job separate from the running service.
 ARG NODE_VERSION=24.11.0-bookworm-slim
 
 # ---- Base -------------------------------------------------------------
@@ -20,7 +15,6 @@ RUN corepack enable
 
 WORKDIR /app
 
-# ---- Dependencies (whole workspace, so pnpm can resolve it) -----------
 FROM base AS deps
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -31,9 +25,6 @@ COPY front-end/package.json front-end/package.json
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
 
-# ---- Prisma client generation ------------------------------------------
-# Needs the schema but not a real database - DATABASE_URL is a placeholder
-# only used to satisfy the generator's env() lookup.
 FROM deps AS prisma
 
 COPY back-end/users-service/prisma back-end/users-service/prisma

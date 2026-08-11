@@ -1,7 +1,3 @@
-# Build context is the repo root (this is a pnpm workspace) - see
-# docker-compose.yml: `build.context: .`, `build.dockerfile: back-end/gateway/Dockerfile`.
-# Multi-stage layout ported from D:\Dev\tensi-backend\Dockerfile, trimmed to
-# this app (no Prisma here - gateway has no database).
 ARG NODE_VERSION=24.11.0-bookworm-slim
 
 # ---- Base -------------------------------------------------------------
@@ -19,7 +15,6 @@ RUN corepack enable
 
 WORKDIR /app
 
-# ---- Dependencies (whole workspace, so pnpm can resolve it) -----------
 FROM base AS deps
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
