@@ -1,0 +1,28 @@
+{
+  "name": "task1",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Multi-service workspace: Angular front-end + NestJS microservices back-end",
+  "scripts": {
+    "dev:gateway": "pnpm --filter gateway run start:dev",
+    "dev:users-service": "pnpm --filter users-service run start:dev",
+    "dev:front-end": "pnpm --filter front-end run start",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm run lint && pnpm run test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "engines": {
+    "node": "24.11.0"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2"
+  }
+}

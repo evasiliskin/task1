@@ -1,0 +1,86 @@
+name: task1
+
+x-users-service-database-url: &users_service_database_url
+  DATABASE_URL: postgresql://task1:task1@postgres:5432/users_service?schema=public
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: task1-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: task1
+      POSTGRES_PASSWORD: task1
+      POSTGRES_DB: users_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U task1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-off job: applies Prisma migrations, then exits. Run explicitly with
+  # `docker compose run --rm users-service-migrate`, or add it to
+  # `depends_on` with `condition: service_completed_successfully` once you
+  # want migrations to gate service startup automatically.
+  users-service-migrate:
+    container_name: task1-users-service-migrate
+    build:
+      context: .
+      dockerfile: back-end/users-service/Dockerfile
+      target: migrate
+    environment:
+      <<: *users_service_database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["migrate"]
+
+  users-service:
+    container_name: task1-users-service
+    build:
+      context: .
+      dockerfile: back-end/users-service/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *users_service_database_url
+      USERS_SERVICE_HOST: 0.0.0.0
+      USERS_SERVICE_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    container_name: task1-gateway
+    build:
+      context: .
+      dockerfile: back-end/gateway/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      USERS_SERVICE_HOST: users-service
+      USERS_SERVICE_PORT: 3001
+    depends_on:
+      - users-service
+
+  front-end:
+    container_name: task1-front-end
+    build:
+      context: .
+      dockerfile: front-end/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    depends_on:
+      - gateway
+
+volumes:
+  postgres-data:

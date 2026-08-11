@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.angular/
+
+# Environment
+.env
+.env.local
+*.env.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing / coverage
+coverage/
+
+# IDE
+.idea/
+.vscode/
+
+# AI skill docs (kept local, not committed)
+skills/
+
+# OS
+.DS_Store
+
+# Prisma
+back-end/*/prisma/*.db
+
+# Husky (generated on `pnpm install` via the "prepare" script)
+.husky/_/
+
+# Misc
+*.tsbuildinfo
