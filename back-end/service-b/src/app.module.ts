@@ -7,7 +7,7 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [rabbitmqConfig] }),
+    ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [rabbitmqConfig] }),
     ExceptionHandlingModule,
     HealthModule,
   ],

@@ -11,11 +11,11 @@ skills/*.md
 
 - Nest.js
 - TypeScript
-- PostgreSQL
 - AWS
 - pnpm
 - Vitest
-
+- RabbitMQ
+- Monorepo
 ---
 
 # AI Instructions

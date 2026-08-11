@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const rabbitmqConfigSchema = z.object({
   url: z.url().default('amqp://guest:guest@localhost:5672'),
-  queue: z.string().min(1).default('products_service_queue'),
+  queue: z.string().min(1).default('service_b_queue'),
 });
 
 export type RabbitmqConfiguration = z.infer<typeof rabbitmqConfigSchema>;

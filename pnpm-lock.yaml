@@ -160,7 +160,7 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)
 
-  back-end/products-service:
+  back-end/service-a:
     dependencies:
       '@nestjs/common':
         specifier: ^11.0.1
@@ -299,7 +299,7 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)
 
-  back-end/users-service:
+  back-end/service-b:
     dependencies:
       '@nestjs/common':
         specifier: ^11.0.1

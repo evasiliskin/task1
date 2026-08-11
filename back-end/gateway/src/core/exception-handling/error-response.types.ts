@@ -13,6 +13,7 @@ export interface IApiErrorResponse {
   statusCode: number;
   error: IApiErrorBody;
   correlationId: string;
+  requestId: string;
   timestamp: string;
   path: string;
 }

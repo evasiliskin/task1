@@ -19,8 +19,8 @@ FROM base AS deps
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY back-end/gateway/package.json back-end/gateway/package.json
-COPY back-end/users-service/package.json back-end/users-service/package.json
-COPY back-end/products-service/package.json back-end/products-service/package.json
+COPY back-end/service-b/package.json back-end/service-b/package.json
+COPY back-end/service-a/package.json back-end/service-a/package.json
 COPY front-end/package.json front-end/package.json
 
 RUN --mount=type=cache,target=/pnpm/store \
@@ -55,7 +55,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     const check = (path) => new Promise((resolve, reject) => { \
       http.get('http://127.0.0.1:3000' + path, (r) => (r.statusCode === 200 ? resolve() : reject())).on('error', reject); \
     }); \
-    Promise.all([check('/health/users-service'), check('/health/products-service')]) \
+    Promise.all([check('/health/service-b'), check('/health/service-a')]) \
       .then(() => process.exit(0)) \
       .catch(() => process.exit(1));"
 

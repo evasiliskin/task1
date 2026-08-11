@@ -1,37 +1,109 @@
+import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
-import { TerminusModule } from '@nestjs/terminus';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { type HealthIndicatorService } from '@nestjs/terminus';
 import { of, throwError } from 'rxjs';
+
+import type rabbitmqConfig from '../config/rabbitmq.config';
+import { RequestContextService } from '../core/request-context/request-context.service';
 
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
 
 describe('RabbitMqPingHealthIndicator', () => {
   let indicator: RabbitMqPingHealthIndicator;
+  let requestContextService: RequestContextService;
+  let upMock: ReturnType<typeof vi.fn>;
+  let downMock: ReturnType<typeof vi.fn>;
 
-  beforeEach(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [TerminusModule],
-      providers: [RabbitMqPingHealthIndicator],
-    }).compile();
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-    indicator = moduleRef.get(RabbitMqPingHealthIndicator);
+    upMock = vi.fn();
+    downMock = vi.fn();
+
+    const healthIndicatorService = {
+      check: vi.fn().mockReturnValue({ up: upMock, down: downMock }),
+    } as unknown as HealthIndicatorService;
+
+    requestContextService = new RequestContextService();
+
+    indicator = new RabbitMqPingHealthIndicator(healthIndicatorService, requestContextService, {
+      pingTimeoutMs: 3000,
+    } as ConfigType<typeof rabbitmqConfig>);
   });
+
+  const runWithinContext = <T>(callback: () => T): T =>
+    requestContextService.run({ correlationId: 'c-123', requestId: 'r-inbound' }, callback);
 
   it('should report the indicator as up, when the target service replies to health.check', async () => {
-    const client = { send: () => of({ status: 'ok' }) } as unknown as ClientProxy;
+    const expectedResult = { 'service-b': { status: 'up' } };
+    upMock.mockReturnValue(expectedResult);
 
-    const result = await indicator.isHealthy('users-service', client);
-
-    expect(result['users-service'].status).toBe('up');
-  });
-
-  it('should report the indicator as down, when the target service errors or times out', async () => {
     const client = {
-      send: () => throwError(() => new Error('connection refused')),
+      send: vi.fn().mockReturnValue(of({ status: 'ok' })),
     } as unknown as ClientProxy;
 
-    const result = await indicator.isHealthy('users-service', client);
+    const result = await runWithinContext(() => indicator.isHealthy('service-b', client));
 
-    expect(result['users-service'].status).toBe('down');
+    expect(result).toEqual(expectedResult);
+  });
+
+  it('should report the indicator as down, when the target service errors', async () => {
+    const expectedResult = {
+      'service-b': { status: 'down', message: 'connection refused' },
+    };
+    downMock.mockReturnValue(expectedResult);
+
+    const client = {
+      send: vi.fn().mockReturnValue(throwError(() => new Error('connection refused'))),
+    } as unknown as ClientProxy;
+
+    const result = await runWithinContext(() => indicator.isHealthy('service-b', client));
+
+    expect(result).toEqual(expectedResult);
+  });
+
+  it('should report the indicator as down with unknown error, when the target service throws a non-Error value', async () => {
+    const expectedResult = {
+      'service-a': { status: 'down', message: 'unknown error' },
+    };
+    downMock.mockReturnValue(expectedResult);
+
+    const client = {
+      send: vi.fn().mockReturnValue(throwError(() => 'timeout')),
+    } as unknown as ClientProxy;
+
+    const result = await runWithinContext(() => indicator.isHealthy('service-a', client));
+
+    expect(result).toEqual(expectedResult);
+  });
+
+  it('should send a message record whose headers forward the active correlation id and a fresh request id', async () => {
+    upMock.mockReturnValue({ 'service-b': { status: 'up' } });
+
+    const send = vi.fn().mockReturnValue(of({ status: 'ok' }));
+    const client = { send } as unknown as ClientProxy;
+
+    await runWithinContext(() => indicator.isHealthy('service-b', client));
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const [pattern, record] = send.mock.calls[0] as [
+      string,
+      { options: { headers: Record<string, string> } },
+    ];
+
+    expect(pattern).toBe('health.check');
+    expect(record.options.headers['x-correlation-id']).toBe('c-123');
+    expect(record.options.headers['x-request-id']).not.toBe('r-inbound');
+    expect(typeof record.options.headers['x-request-id']).toBe('string');
+  });
+
+  it('should throw MissingRequestContextError, when called outside of any request context', async () => {
+    const client = {
+      send: vi.fn().mockReturnValue(of({ status: 'ok' })),
+    } as unknown as ClientProxy;
+
+    await expect(indicator.isHealthy('service-b', client)).rejects.toThrow(
+      'RequestContextService was accessed outside of an active request context',
+    );
   });
 });

@@ -1,7 +1,7 @@
 {
-  "name": "users-service",
+  "name": "service-a",
   "version": "0.0.1",
-  "description": "Users domain microservice (RabbitMQ transport)",
+  "description": "Service A microservice (RabbitMQ transport)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

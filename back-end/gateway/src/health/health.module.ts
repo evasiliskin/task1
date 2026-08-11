@@ -6,7 +6,7 @@ import { TerminusModule } from '@nestjs/terminus';
 import rabbitmqConfig from '../config/rabbitmq.config';
 
 import { HealthController } from './health.controller';
-import { PRODUCTS_SERVICE_RMQ_CLIENT, USERS_SERVICE_RMQ_CLIENT } from './rabbitmq-clients.tokens';
+import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens';
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
 
 @Module({
@@ -14,25 +14,25 @@ import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
     TerminusModule,
     ClientsModule.registerAsync([
       {
-        name: USERS_SERVICE_RMQ_CLIENT,
+        name: SERVICE_B_RMQ_CLIENT,
         inject: [rabbitmqConfig.KEY],
         useFactory: (config: ConfigType<typeof rabbitmqConfig>) => ({
           transport: Transport.RMQ,
           options: {
             urls: [config.url],
-            queue: config.usersQueue,
+            queue: config.serviceBQueue,
             queueOptions: { durable: true },
           },
         }),
       },
       {
-        name: PRODUCTS_SERVICE_RMQ_CLIENT,
+        name: SERVICE_A_RMQ_CLIENT,
         inject: [rabbitmqConfig.KEY],
         useFactory: (config: ConfigType<typeof rabbitmqConfig>) => ({
           transport: Transport.RMQ,
           options: {
             urls: [config.url],
-            queue: config.productsQueue,
+            queue: config.serviceAQueue,
             queueOptions: { durable: true },
           },
         }),

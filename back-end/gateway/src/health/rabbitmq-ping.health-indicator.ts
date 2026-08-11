@@ -1,19 +1,30 @@
-import { Injectable } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { Inject, Injectable } from '@nestjs/common';
+import { type ConfigType } from '@nestjs/config';
+import { ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import { firstValueFrom, timeout } from 'rxjs';
 
-const PING_TIMEOUT_MS = 3000;
+import rabbitmqConfig from '../config/rabbitmq.config';
+import { buildOutboundHeaders } from '../core/request-context/propagation.util';
+import { RequestContextService } from '../core/request-context/request-context.service';
 
 @Injectable()
 export class RabbitMqPingHealthIndicator {
-  public constructor(private readonly healthIndicatorService: HealthIndicatorService) {}
+  public constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
+    private readonly requestContextService: RequestContextService,
+    @Inject(rabbitmqConfig.KEY) private readonly config: ConfigType<typeof rabbitmqConfig>,
+  ) {}
 
   public async isHealthy(key: string, client: ClientProxy): Promise<HealthIndicatorResult> {
     const indicator = this.healthIndicatorService.check(key);
+    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
+    const record = new RmqRecordBuilder({}).setOptions({ headers }).build();
 
     try {
-      await firstValueFrom(client.send('health.check', {}).pipe(timeout(PING_TIMEOUT_MS)));
+      await firstValueFrom(
+        client.send('health.check', record).pipe(timeout(this.config.pingTimeoutMs)),
+      );
 
       return indicator.up();
     } catch (error) {

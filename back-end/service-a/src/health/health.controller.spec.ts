@@ -15,9 +15,16 @@ describe('HealthController', () => {
     controller = moduleRef.get(HealthController);
   });
 
-  it('should return an "ok" health check result when the health.check message is handled', async () => {
-    const result = await controller.check();
+  describe('check', () => {
+    it('should return ok health check result, when health.check message is handled', async () => {
+      const result = await controller.check();
 
-    expect(result.status).toBe('ok');
+      expect(result).toEqual({
+        status: 'ok',
+        info: {},
+        error: {},
+        details: {},
+      });
+    });
   });
 });

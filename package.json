@@ -5,8 +5,8 @@
   "description": "Multi-service workspace: Angular front-end + NestJS microservices back-end",
   "scripts": {
     "dev:gateway": "pnpm --filter gateway run start:dev",
-    "dev:users-service": "pnpm --filter users-service run start:dev",
-    "dev:products-service": "pnpm --filter products-service run start:dev",
+    "dev:service-b": "pnpm --filter service-b run start:dev",
+    "dev:service-a": "pnpm --filter service-a run start:dev",
     "dev:front-end": "pnpm --filter front-end run start",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",

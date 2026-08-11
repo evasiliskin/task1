@@ -7,7 +7,7 @@ task1/
 ├── front-end/              Angular app (talks only to the gateway's REST API)
 └── back-end/
     ├── gateway/             Public HTTP entrypoint - REST API, forwards to microservices over TCP
-    └── users-service/       Users domain microservice (TCP transport, Prisma + PostgreSQL)
+    └── service-b/       Users domain microservice (TCP transport, Prisma + PostgreSQL)
 ```
 
 ## Architecture
@@ -22,7 +22,7 @@ for the pattern this follows). Internal services expose no HTTP at all.
 Angular (front-end)
       │  HTTP (REST)
       ▼
-gateway  ── TCP / @MessagePattern ──▶  users-service ── Prisma ──▶ PostgreSQL
+gateway  ── TCP / @MessagePattern ──▶  service-b ── Prisma ──▶ PostgreSQL
 ```
 
 This keeps services loosely coupled without requiring a message broker
@@ -32,7 +32,7 @@ pub/sub or delivery guarantees), swap the `Transport.TCP` options for
 Redis/RabbitMQ in `back-end/*/src/main.ts` and `*/src/*/*.module.ts` without
 changing controllers or services.
 
-Adding a new microservice: copy `back-end/users-service` as a template,
+Adding a new microservice: copy `back-end/service-b` as a template,
 give it its own Prisma schema/database, define its own `@MessagePattern`s,
 and register a matching `ClientsModule` entry + controller in the gateway.
 
@@ -41,25 +41,25 @@ and register a matching `ClientsModule` entry + controller in the gateway.
 ```bash
 pnpm install
 
-# start PostgreSQL for users-service
+# start PostgreSQL for service-b
 pnpm docker:up
 
 # copy env files and adjust if needed
 cp back-end/gateway/.env.example back-end/gateway/.env
-cp back-end/users-service/.env.example back-end/users-service/.env
+cp back-end/service-b/.env.example back-end/service-b/.env
 
-# create the users-service database schema
-pnpm --filter users-service run prisma:migrate:dev
+# create the service-b database schema
+pnpm --filter service-b run prisma:migrate:dev
 
 # run everything (each in its own terminal)
-pnpm dev:users-service
+pnpm dev:service-b
 pnpm dev:gateway
 pnpm dev:front-end
 ```
 
 - Front-end: http://localhost:4200
 - Gateway REST API: http://localhost:3000/v1 (health check at `/health`)
-- users-service: internal only, TCP port 3001 (not exposed to the browser)
+- service-b: internal only, TCP port 3001 (not exposed to the browser)
 
 ## Common tasks
 
@@ -79,7 +79,7 @@ pnpm dev:front-end
   end-to-end tests for the gateway's HTTP layer).
 - **Prettier**: one shared config at the repo root (`.prettierrc.mjs`), ported
   from tensi-backend, applies to every package.
-- **ESLint**: `back-end/gateway` and `back-end/users-service` each have their
+- **ESLint**: `back-end/gateway` and `back-end/service-b` each have their
   own `eslint.config.mjs`, ported from tensi-backend's flat config
   (typescript-eslint + import ordering + security/sonarjs/unicorn rules),
   pointed at each app's own `tsconfig.json`. `front-end` doesn't use this

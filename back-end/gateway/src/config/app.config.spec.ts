@@ -1,33 +1,53 @@
 import appConfig from './app.config';
 
 describe('appConfig', () => {
-  const ORIGINAL_ENV = { ...process.env };
+  const originalEnv = { ...process.env };
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    process.env = { ...originalEnv };
   });
 
-  it('defaults port to 3000 when PORT is not set', () => {
-    delete process.env.PORT;
+  describe('port', () => {
+    it('should default port to 3000, when PORT is not set', () => {
+      delete process.env.PORT;
 
-    expect(appConfig()).toEqual({ port: 3000 });
-  });
+      expect(appConfig()).toEqual({ port: 3000 });
+    });
 
-  it('coerces PORT from a string to a number', () => {
-    process.env.PORT = '8080';
+    it('should coerce PORT from a string to a number, when PORT is a numeric string', () => {
+      process.env.PORT = '8080';
 
-    expect(appConfig()).toEqual({ port: 8080 });
-  });
+      expect(appConfig()).toEqual({ port: 8080 });
+    });
 
-  it('throws when PORT is out of range', () => {
-    process.env.PORT = '70000';
+    it('should accept the minimum valid port, when PORT is 1', () => {
+      process.env.PORT = '1';
 
-    expect(() => appConfig()).toThrow();
-  });
+      expect(appConfig()).toEqual({ port: 1 });
+    });
 
-  it('throws when PORT is not numeric', () => {
-    process.env.PORT = 'not-a-number';
+    it('should accept the maximum valid port, when PORT is 65535', () => {
+      process.env.PORT = '65535';
 
-    expect(() => appConfig()).toThrow();
+      expect(appConfig()).toEqual({ port: 65535 });
+    });
+
+    it('should throw, when PORT exceeds the maximum valid value', () => {
+      process.env.PORT = '70000';
+
+      expect(() => appConfig()).toThrow();
+    });
+
+    it('should throw, when PORT is below the minimum valid value', () => {
+      process.env.PORT = '0';
+
+      expect(() => appConfig()).toThrow();
+    });
+
+    it('should throw, when PORT is not numeric', () => {
+      process.env.PORT = 'not-a-number';
+
+      expect(() => appConfig()).toThrow();
+    });
   });
 });

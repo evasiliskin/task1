@@ -1,7 +1,7 @@
 {
-  "name": "products-service",
+  "name": "service-b",
   "version": "0.0.1",
-  "description": "Products domain microservice (RabbitMQ transport)",
+  "description": "Service B microservice (RabbitMQ transport)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

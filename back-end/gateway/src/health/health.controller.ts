@@ -2,7 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { HealthCheck, HealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
 
-import { PRODUCTS_SERVICE_RMQ_CLIENT, USERS_SERVICE_RMQ_CLIENT } from './rabbitmq-clients.tokens';
+import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens';
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
 
 @Controller('health')
@@ -10,23 +10,19 @@ export class HealthController {
   public constructor(
     private readonly health: HealthCheckService,
     private readonly rabbitMqPing: RabbitMqPingHealthIndicator,
-    @Inject(USERS_SERVICE_RMQ_CLIENT) private readonly usersServiceClient: ClientProxy,
-    @Inject(PRODUCTS_SERVICE_RMQ_CLIENT) private readonly productsServiceClient: ClientProxy,
+    @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
+    @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
   ) {}
 
-  @Get('users-service')
+  @Get('service-b')
   @HealthCheck()
-  public checkUsersService(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.rabbitMqPing.isHealthy('users-service', this.usersServiceClient),
-    ]);
+  public checkServiceB(): Promise<HealthCheckResult> {
+    return this.health.check([() => this.rabbitMqPing.isHealthy('service-b', this.serviceBClient)]);
   }
 
-  @Get('products-service')
+  @Get('service-a')
   @HealthCheck()
-  public checkProductsService(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.rabbitMqPing.isHealthy('products-service', this.productsServiceClient),
-    ]);
+  public checkServiceA(): Promise<HealthCheckResult> {
+    return this.health.check([() => this.rabbitMqPing.isHealthy('service-a', this.serviceAClient)]);
   }
 }

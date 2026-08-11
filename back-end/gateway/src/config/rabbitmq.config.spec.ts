@@ -1,45 +1,67 @@
 import rabbitmqConfig from './rabbitmq.config';
 
 describe('rabbitmqConfig', () => {
-  const ORIGINAL_ENV = { ...process.env };
+  const originalEnv = { ...process.env };
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    process.env = { ...originalEnv };
   });
 
-  it('returns the documented defaults when no env vars are set', () => {
-    delete process.env.RABBITMQ_URL;
-    delete process.env.RABBITMQ_USERS_QUEUE;
-    delete process.env.RABBITMQ_PRODUCTS_QUEUE;
+  describe('defaults', () => {
+    it('should return documented defaults, when no environment variables are set', () => {
+      delete process.env.RABBITMQ_URL;
+      delete process.env.RABBITMQ_SERVICE_B_QUEUE;
+      delete process.env.RABBITMQ_SERVICE_A_QUEUE;
+      delete process.env.RABBITMQ_PING_TIMEOUT_MS;
 
-    expect(rabbitmqConfig()).toEqual({
-      url: 'amqp://guest:guest@localhost:5672',
-      usersQueue: 'users_service_queue',
-      productsQueue: 'products_service_queue',
+      expect(rabbitmqConfig()).toEqual({
+        url: 'amqp://guest:guest@localhost:5672',
+        serviceBQueue: 'service_b_queue',
+        serviceAQueue: 'service_a_queue',
+        pingTimeoutMs: 3000,
+      });
     });
   });
 
-  it('parses values from environment variables', () => {
-    process.env.RABBITMQ_URL = 'amqp://user:pass@rabbit-host:5672';
-    process.env.RABBITMQ_USERS_QUEUE = 'custom_users_queue';
-    process.env.RABBITMQ_PRODUCTS_QUEUE = 'custom_products_queue';
+  describe('environment overrides', () => {
+    it('should parse values from environment variables, when all variables are set', () => {
+      process.env.RABBITMQ_URL = 'amqp://user:pass@rabbit-host:5672';
+      process.env.RABBITMQ_SERVICE_B_QUEUE = 'custom_service_b_queue';
+      process.env.RABBITMQ_SERVICE_A_QUEUE = 'custom_service_a_queue';
+      process.env.RABBITMQ_PING_TIMEOUT_MS = '5000';
 
-    expect(rabbitmqConfig()).toEqual({
-      url: 'amqp://user:pass@rabbit-host:5672',
-      usersQueue: 'custom_users_queue',
-      productsQueue: 'custom_products_queue',
+      expect(rabbitmqConfig()).toEqual({
+        url: 'amqp://user:pass@rabbit-host:5672',
+        serviceBQueue: 'custom_service_b_queue',
+        serviceAQueue: 'custom_service_a_queue',
+        pingTimeoutMs: 5000,
+      });
     });
   });
 
-  it('throws when RABBITMQ_URL is not a valid url', () => {
-    process.env.RABBITMQ_URL = 'not-a-valid-url';
+  describe('validation', () => {
+    it('should throw, when RABBITMQ_URL is not a valid url', () => {
+      process.env.RABBITMQ_URL = 'not-a-valid-url';
 
-    expect(() => rabbitmqConfig()).toThrow();
-  });
+      expect(() => rabbitmqConfig()).toThrow();
+    });
 
-  it('throws when RABBITMQ_USERS_QUEUE is an empty string', () => {
-    process.env.RABBITMQ_USERS_QUEUE = '';
+    it('should throw, when RABBITMQ_SERVICE_B_QUEUE is an empty string', () => {
+      process.env.RABBITMQ_SERVICE_B_QUEUE = '';
 
-    expect(() => rabbitmqConfig()).toThrow();
+      expect(() => rabbitmqConfig()).toThrow();
+    });
+
+    it('should throw, when RABBITMQ_SERVICE_A_QUEUE is an empty string', () => {
+      process.env.RABBITMQ_SERVICE_A_QUEUE = '';
+
+      expect(() => rabbitmqConfig()).toThrow();
+    });
+
+    it('should throw, when RABBITMQ_PING_TIMEOUT_MS is not a positive number', () => {
+      process.env.RABBITMQ_PING_TIMEOUT_MS = '-1';
+
+      expect(() => rabbitmqConfig()).toThrow();
+    });
   });
 });

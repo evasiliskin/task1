@@ -19,8 +19,8 @@ FROM base AS deps
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY back-end/gateway/package.json back-end/gateway/package.json
-COPY back-end/users-service/package.json back-end/users-service/package.json
-COPY back-end/products-service/package.json back-end/products-service/package.json
+COPY back-end/service-b/package.json back-end/service-b/package.json
+COPY back-end/service-a/package.json back-end/service-a/package.json
 COPY front-end/package.json front-end/package.json
 
 RUN --mount=type=cache,target=/pnpm/store \
@@ -29,9 +29,9 @@ RUN --mount=type=cache,target=/pnpm/store \
 # ---- Build --------------------------------------------------------------
 FROM deps AS build
 
-COPY back-end/users-service back-end/users-service
+COPY back-end/service-b back-end/service-b
 
-RUN pnpm --filter users-service run build
+RUN pnpm --filter service-b run build
 
 # ---- Runtime ------------------------------------------------------------
 FROM base AS runtime
@@ -41,8 +41,8 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
-COPY --chown=node:node --from=build /app/back-end/users-service/dist ./dist
-COPY --chown=node:node back-end/users-service/package.json ./package.json
+COPY --chown=node:node --from=build /app/back-end/service-b/dist ./dist
+COPY --chown=node:node back-end/service-b/package.json ./package.json
 
 USER node
 

@@ -54,9 +54,15 @@ directly from `@nestjs/config` — no extra wrapper module is introduced, per th
 
 ## Consumers
 
-- `main.ts` (all three services): after the Nest application/microservice instance is
-  created, read config via `app.get(rabbitmqConfig.KEY)` (and `appConfig.KEY` for the
-  gateway's port) instead of `process.env`.
+- `main.ts` (all three services): calls the `registerAs`-wrapped config factory (e.g.
+  `rabbitmqConfig()`, and `appConfig()` for the gateway's port) directly as a plain
+  function — not via `app.get()`/DI — instead of reading `process.env`. This is required
+  because the config values are needed before any Nest application/microservice instance
+  exists (for `products-service`/`users-service`, the transport options are constructor
+  arguments to `NestFactory.createMicroservice`, so no DI container is available yet).
+  `registerAs(name, factory)` returns the factory itself as a plain callable function
+  (tagged with a `.KEY` property used for DI elsewhere), so it can be invoked directly
+  with no Nest container involved.
 - gateway `health.module.ts`: `ClientsModule.registerAsync` uses
   `inject: [rabbitmqConfig.KEY]` with a typed factory instead of reading `process.env`
   inside `useFactory`.
