@@ -24,6 +24,7 @@ import {
 
 describe('HealthController (HTTP Integration)', () => {
   let app: INestApplication;
+  let httpServer: App;
   let serviceAClient: { send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
   let connectionManager: { isConnected: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
@@ -63,6 +64,8 @@ describe('HealthController (HTTP Integration)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    httpServer = app.getHttpServer();
   });
 
   afterAll(async () => {
@@ -81,7 +84,7 @@ describe('HealthController (HTTP Integration)', () => {
 
   describe('GET /health', () => {
     it('should return 200 and status ok, when every dependency is healthy', async () => {
-      const response = await request(app.getHttpServer() as App).get('/health');
+      const response = await request(httpServer).get('/health');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -100,7 +103,7 @@ describe('HealthController (HTTP Integration)', () => {
     it('should return 200 and status degraded, when service-b is unavailable', async () => {
       serviceBClient.send.mockReturnValue(throwError(() => new Error('connection refused')));
 
-      const response = await request(app.getHttpServer() as App).get('/health');
+      const response = await request(httpServer).get('/health');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -119,7 +122,7 @@ describe('HealthController (HTTP Integration)', () => {
 
   describe('GET /health/live', () => {
     it('should return 200 and status ok, without checking any dependency', async () => {
-      const response = await request(app.getHttpServer() as App).get('/health/live');
+      const response = await request(httpServer).get('/health/live');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ status: 'ok', service: 'gateway' });
@@ -131,7 +134,7 @@ describe('HealthController (HTTP Integration)', () => {
     it('should return 200, when all critical dependencies are healthy even if redis is down', async () => {
       redisClient.ping.mockRejectedValue(new Error('connection refused'));
 
-      const response = await request(app.getHttpServer() as App).get('/health/ready');
+      const response = await request(httpServer).get('/health/ready');
 
       expect(response.status).toBe(200);
       expect((response.body as IAggregatedHealth).services.redis).toBe('unavailable');
@@ -140,7 +143,7 @@ describe('HealthController (HTTP Integration)', () => {
     it('should return 503, when service-a is unavailable', async () => {
       serviceAClient.send.mockReturnValue(throwError(() => new Error('connection refused')));
 
-      const response = await request(app.getHttpServer() as App).get('/health/ready');
+      const response = await request(httpServer).get('/health/ready');
 
       expect(response.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
       expect((response.body as IAggregatedHealth).services.serviceA).toBe('unavailable');

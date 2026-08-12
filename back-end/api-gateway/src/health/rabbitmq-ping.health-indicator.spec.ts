@@ -88,9 +88,12 @@ describe('RabbitMqPingHealthIndicator', () => {
     expect(send).toHaveBeenCalledWith(
       'health.check',
       expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         options: expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             'x-correlation-id': 'c-123',
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             'x-request-id': expect.any(String),
           }),
         }),
