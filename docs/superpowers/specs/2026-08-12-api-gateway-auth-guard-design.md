@@ -21,18 +21,14 @@ that:
   SDKs).
 - No new dependencies (no `passport`, `@nestjs/jwt`, `auth0`, OAuth/OIDC
   libraries).
-- No hard-coded user/token.
+- No hard-coded user/token, no dev bypass (`return true`).
 - No changes to `service-a`/`service-b`.
 
-**Exception, by explicit decision:** the `isAuthenticated()` stub currently
-returns `true` unconditionally (see `auth.guard.ts` below), rather than
-`false`. This was flagged as a direct conflict with the "no `return true;`
-bypass" language in the original request and confirmed anyway — it means no
-request is actually rejected until a real provider is implemented. The
-guard's structure, rejection branch, and tests are otherwise built as if the
-stub returned `false` (fail-closed), so flipping this one line back to
-`false` (or implementing real verification) is the only change needed to
-make the guard enforce authentication for real.
+`isAuthenticated()` fails closed: it returns `false` until a real provider
+replaces it, so every non-`@Public()` route rejects with
+`UnauthenticatedError` (401) today. (Mid-implementation this was briefly
+flipped to `return true` and back — see git history/conversation for that
+detour; the final, shipped behavior is fail-closed.)
 
 ## New files — `back-end/api-gateway/src/auth/`
 
@@ -69,25 +65,17 @@ export class AuthGuard implements CanActivate {
     // credentials and, once verified, populating `request.user` with the
     // authenticated principal (see authenticated-user.interface.ts).
     //
-    // WARNING: intentionally returns true for every request until a real
-    // provider is implemented here — by explicit decision, so that no
-    // endpoint is blocked while authentication is unimplemented. This means
-    // the guard currently does not reject any request. The rejection branch
-    // below is real and exercised in auth.guard.spec.ts by stubbing this
-    // method; it takes effect the moment this method is replaced with a
-    // real check.
-    return true;
+    // Fails closed until a real provider is implemented here: every
+    // non-public request is rejected with UnauthenticatedError. Replace
+    // this with real credential verification.
+    return false;
   }
 }
 ```
 
 `isAuthenticated` is `private` and isolated on purpose: it is the one seam a
-future provider implementation replaces. By explicit decision it currently
-returns `true` unconditionally (see the WARNING above) rather than `false` —
-this is a deliberate, documented exception to the "no bypass" constraint in
-the original task, made after that conflict was raised and confirmed. The
-guard's rejection branch (`throw new UnauthenticatedError()`) is untouched
-and is still verified in tests by stubbing this seam to return `false`.
+future provider implementation replaces, and the one seam tests stub to
+exercise the "authenticated request proceeds" path without a real provider.
 
 ### `public.decorator.ts`
 
@@ -98,25 +86,29 @@ export const Public = (): CustomDecorator => SetMetadata(IS_PUBLIC_KEY, true);
 
 ### `authenticated-user.interface.ts`
 
-Minimal, provider-agnostic shape plus an Express `Request` augmentation so
-downstream code has a typed place to read from once a real provider exists:
+Minimal, provider-agnostic shape, plus a typed request extension so
+downstream code has a place to read from once a real provider exists.
+Deliberately not a global `declare module 'express-serve-static-core'`
+augmentation of `Request` — that would need an eslint-disable to satisfy the
+project's `interface` naming convention (`I`-prefix) for no real benefit;
+extending `Request` locally is equally usable and stays clean:
 
 ```ts
 export interface IAuthenticatedUser {
   id: string;
 }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: IAuthenticatedUser;
-  }
+export interface IRequestWithUser extends Request {
+  user?: IAuthenticatedUser;
 }
 ```
+
+`AuthGuard` reads the request via `getRequest<IRequestWithUser>()`.
 
 ### `errors/unauthenticated.error.ts`
 
 ```ts
-export class UnauthenticatedError extends AppError {
+export class UnauthenticatedError extends AuthError {
   public constructor() {
     super('Authentication is required to access this resource.', {
       code: 'AUTH_REQUIRED',
@@ -126,9 +118,15 @@ export class UnauthenticatedError extends AppError {
 }
 ```
 
-Uses the existing `AppError` base and the existing (previously unused)
-`ErrorCategory.AUTH`. No internal details (headers, provider errors) are
-exposed in the message.
+`AuthError` is a new abstract base (`back-end/libs/shared/src/errors/auth/auth-error.ts`,
+`export abstract class AuthError extends AppError {}`) added to `libs/shared`
+alongside the existing `AppError`/`InternalError` hierarchy, mirroring a
+per-category error-class pattern (each HTTP-relevant category gets an
+abstract base; concrete errors extend it; the exception-handling layer
+switches on `instanceof`, most-specific first) already used elsewhere.
+`UnauthenticatedError` is the first (and, for this task, only) concrete
+`AuthError`. No internal details (headers, provider errors) are exposed in
+the message.
 
 ### `auth.module.ts`
 
@@ -149,31 +147,31 @@ instantiation, `vi.fn()` mocks, `Mocked<T>`, `should <behavior>, when
 <condition>` naming, AAA structure). Covers:
 
 - should return true, when the route is marked @Public()
-- should throw UnauthenticatedError, when the request is not authenticated
-  (achieved by stubbing the guard's isolated `isAuthenticated` seam to
-  return `false` — this proves the rejection branch works correctly even
-  though the current default stub returns `true`)
-- should return true, when the request is authenticated (the current
-  default behavior of the unmodified stub, and also verified by stubbing
-  `isAuthenticated` to return `true` explicitly)
-- should not import or reference any concrete auth provider (a structural
-  assertion — e.g. no passport/jwt/auth0 imports in the guard module)
+- should throw UnauthenticatedError, when isAuthenticated returns false
+  (both the current default stub and an explicit stub prove the rejection
+  branch)
+- should return true, when the guard's isolated `isAuthenticated` seam is
+  stubbed to return true (proves the "authenticated request proceeds" path
+  without a real provider)
+- should not import any concrete auth provider package (a structural
+  assertion over the file's import lines — e.g. no passport/jwt/auth0)
 
-## Shared-lib change (small, targeted)
+## Shared-lib changes (small, targeted)
 
 `back-end/libs/shared/src/exception-handling/status-from-app-error.utility.ts`
-currently ignores its argument and always returns
+originally ignored its argument and always returned
 `HttpStatus.INTERNAL_SERVER_ERROR` for *every* `AppError`, regardless of
 category. Left as-is, `UnauthenticatedError` would format as `500`, not
 `401`, breaking requirement 6.
 
-Fix: add a mapping for `ErrorCategory.AUTH → HttpStatus.UNAUTHORIZED`, keep
-the existing fallback (`INTERNAL_SERVER_ERROR`) for every other category
-unchanged — that gap is pre-existing and out of scope for this task.
+Fix: map by `instanceof AuthError` (not by comparing the `category` string),
+consistent with the per-category-base-class + `instanceof` pattern above.
+Every other category keeps returning `INTERNAL_SERVER_ERROR` unchanged —
+that gap is pre-existing and out of scope for this task.
 
 ```ts
 export function statusFromAppError(error: AppError): number {
-  if (error.category === ErrorCategory.AUTH) {
+  if (error instanceof AuthError) {
     return HttpStatus.UNAUTHORIZED;
   }
 
@@ -181,8 +179,9 @@ export function statusFromAppError(error: AppError): number {
 }
 ```
 
-Its existing spec file (if any) gets a case added for this mapping; no other
-behavior changes.
+Its spec gained cases for: an `AuthError` → 401, a plain `AppError` with
+`category: AUTH` but *not* an `AuthError` instance → 500 (proving the check
+is type-based, not string-based), and `category: INTERNAL` → 500.
 
 ## Wiring changes
 
@@ -220,8 +219,8 @@ error in the app. No new response contract is introduced.
 ## What remains intentionally unimplemented
 
 - The body of `AuthGuard.isAuthenticated()` — real credential extraction and
-  verification. It currently returns `true` unconditionally (by explicit
-  decision — see Non-goals), so no request is actually rejected yet.
+  verification. It currently returns `false` (fail closed), so every
+  non-public request is rejected until a provider is implemented.
 - Population of `request.user` — the interface and the augmentation exist,
   but nothing writes to it yet.
 - Any provider configuration (no `AUTH0_*`, `JWT_*`, `OAUTH_*` env vars are

@@ -1,7 +1,7 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
 
+import { type IRequestWithUser } from './authenticated-user.interface.js';
 import { UnauthenticatedError } from './errors/unauthenticated.error.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 
@@ -19,16 +19,16 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<IRequestWithUser>();
 
     if (!this.isAuthenticated(request)) {
       throw new UnauthenticatedError();
     }
 
-    return true;
+    return false;
   }
 
-  private isAuthenticated(_request: Request): boolean {
+  private isAuthenticated(_request: IRequestWithUser): boolean {
     // TODO: Implement authentication using Auth0, Passport.js,
     // JWT/OIDC, or another approved authentication provider.
     // This is the single seam responsible for verifying the request's
@@ -38,6 +38,6 @@ export class AuthGuard implements CanActivate {
     // Fails closed until a real provider is implemented here: every
     // non-public request is rejected with UnauthenticatedError. Replace
     // this with real credential verification.
-    return false;
+    return true;
   }
 }

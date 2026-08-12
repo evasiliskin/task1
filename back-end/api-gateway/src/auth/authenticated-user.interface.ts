@@ -1,9 +1,9 @@
+import type { Request } from 'express';
+
 export interface IAuthenticatedUser {
   id: string;
 }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: IAuthenticatedUser;
-  }
+export interface IRequestWithUser extends Request {
+  user?: IAuthenticatedUser;
 }
