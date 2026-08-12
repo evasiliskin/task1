@@ -5,4 +5,5 @@ export enum ErrorCategory {
   NOT_FOUND = 'NOT_FOUND',
   CONFLICT = 'CONFLICT',
   RATE_LIMIT = 'RATE_LIMIT',
+  EXTERNAL = 'EXTERNAL',
 }
