@@ -1,5 +1,7 @@
 export * from './errors/index.js';
 
+export * from './github-archive/index.js';
+
 export * from './exception-handling/error-format.service.js';
 export * from './exception-handling/error-format.strategy.interface.js';
 export * from './exception-handling/error-format.tokens.js';

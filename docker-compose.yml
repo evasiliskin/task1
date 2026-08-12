@@ -28,7 +28,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: task1-redis
     restart: unless-stopped
     healthcheck:
@@ -47,8 +47,14 @@ services:
     environment:
       <<: *rabbitmq_url
       RABBITMQ_QUEUE: service_b_queue
+      MONGODB_URI: mongodb://mongodb:27017/service_b
+      REDIS_URL: redis://redis:6379
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   service-a:
@@ -61,8 +67,18 @@ services:
     environment:
       <<: *rabbitmq_url
       RABBITMQ_QUEUE: service_a_queue
+      MONGODB_URI: mongodb://mongodb:27017/service_a
+      MONGO_BATCH_SIZE: 500
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/archives
+    volumes:
+      - archive-storage:/data/archives
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   api-gateway:
@@ -99,3 +115,6 @@ services:
       - "4200:80"
     depends_on:
       - api-gateway
+
+volumes:
+  archive-storage:

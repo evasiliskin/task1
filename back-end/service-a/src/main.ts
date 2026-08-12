@@ -33,6 +33,8 @@ async function bootstrap(): Promise<void> {
       }),
     );
 
+    app.enableShutdownHooks();
+
     await app.listen();
   } catch (error) {
     bootstrapLogger.fatal(
