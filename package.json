@@ -13,8 +13,7 @@
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm run lint",
-    "check1": "pnpm run lint && pnpm run test",
+    "check": "pnpm run lint && pnpm run test",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "prepare": "husky"

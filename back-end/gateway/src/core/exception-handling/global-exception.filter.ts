@@ -43,6 +43,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId,
     };
 
+    // x-correlation-id/x-request-id are already set on this response by RequestContextMiddleware,
+    // which runs globally before any exception can reach this filter - no need to set them again.
     response.status(statusCode).json(body);
   }
 

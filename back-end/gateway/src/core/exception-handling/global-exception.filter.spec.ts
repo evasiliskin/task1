@@ -46,13 +46,12 @@ describe('GlobalExceptionFilter', () => {
     } as unknown as ArgumentsHost;
   });
 
-  it('should set the x-correlation-id and x-request-id response headers from the active context', () => {
+  it('should not touch response headers, relying on RequestContextMiddleware to have set them', () => {
     requestContextService.run({ correlationId: 'c-1', requestId: 'r-1' }, () => {
       filter.catch(new Error('boom'), host);
     });
 
-    expect(response.setHeader).toHaveBeenCalledWith('x-correlation-id', 'c-1');
-    expect(response.setHeader).toHaveBeenCalledWith('x-request-id', 'r-1');
+    expect(response.setHeader).not.toHaveBeenCalled();
   });
 
   it('should include correlationId and requestId in the JSON error body', () => {

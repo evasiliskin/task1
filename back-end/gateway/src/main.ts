@@ -3,9 +3,14 @@ import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
 import appConfig from './config/app.config';
+import { LoggerService } from './core/logger/logger.service';
+import { NestLoggerBridge } from './core/logger/nest-logger.bridge';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  const loggerService = app.get(LoggerService);
+  app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'bootstrap')));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -19,7 +24,6 @@ async function bootstrap(): Promise<void> {
   await app.listen(port);
 }
 
-bootstrap().catch((error: unknown) => {
-  console.error(error);
+bootstrap().catch(() => {
   process.exitCode = 1;
 });

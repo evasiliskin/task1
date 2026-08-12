@@ -4,6 +4,8 @@ import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 import { AppModule } from './app.module';
 import rabbitmqConfig from './config/rabbitmq.config';
+import { LoggerService } from './core/logger/logger.service';
+import { NestLoggerBridge } from './core/logger/nest-logger.bridge';
 
 async function bootstrap(): Promise<void> {
   const { url, queue } = rabbitmqConfig();
@@ -15,7 +17,11 @@ async function bootstrap(): Promise<void> {
       queue,
       queueOptions: { durable: true },
     },
+    bufferLogs: true,
   });
+
+  const loggerService = app.get(LoggerService);
+  app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'bootstrap')));
 
   app.useGlobalPipes(
     new ValidationPipe({

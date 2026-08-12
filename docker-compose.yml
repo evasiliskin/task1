@@ -41,6 +41,7 @@ services:
     environment:
       <<: *rabbitmq_url
       RABBITMQ_QUEUE: service_a_queue
+      RABBITMQ_SERVICE_B_QUEUE: service_b_queue
     depends_on:
       rabbitmq:
         condition: service_healthy
