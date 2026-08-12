@@ -1,3 +1,5 @@
+import type { Mock } from 'vitest';
+
 import { FatalError } from '../errors/index.js';
 
 import { type CentralizedErrorHandlerService } from './centralized-error-handler.service.js';
@@ -6,7 +8,7 @@ import { ProcessErrorHandlerService } from './process-error-handler.service.js';
 describe('ProcessErrorHandlerService', () => {
   let centralizedErrorHandler: { handleError: ReturnType<typeof vi.fn> };
   let service: ProcessErrorHandlerService;
-  let onSpy: ReturnType<typeof vi.spyOn>;
+  let onSpy: Mock<typeof process.on>;
 
   beforeEach(() => {
     centralizedErrorHandler = { handleError: vi.fn() };

@@ -1,8 +1,11 @@
 import type { Request, Response } from 'express';
+import type { Mock } from 'vitest';
 
 import { RequestContextService } from '../request-context.service.js';
 
 import { RequestContextMiddleware } from './request-context.middleware.js';
+
+type NextCallback = (err?: unknown) => void;
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -10,13 +13,13 @@ describe('RequestContextMiddleware', () => {
   let middleware: RequestContextMiddleware;
   let requestContextService: RequestContextService;
   let response: { setHeader: ReturnType<typeof vi.fn> };
-  let next: ReturnType<typeof vi.fn>;
+  let next: Mock<NextCallback>;
 
   beforeEach(() => {
     requestContextService = new RequestContextService();
     middleware = new RequestContextMiddleware(requestContextService);
     response = { setHeader: vi.fn() };
-    next = vi.fn();
+    next = vi.fn<NextCallback>();
   });
 
   it('should generate a valid UUID v4 correlation id, when x-correlation-id is absent', () => {
@@ -90,7 +93,7 @@ describe('RequestContextMiddleware', () => {
       },
     } as unknown as Request;
     let nextWasCalled = false;
-    next = vi.fn(() => {
+    next = vi.fn<NextCallback>(() => {
       nextWasCalled = true;
       expect(requestContextService.getCorrelationId()).toBe('11111111-1111-4111-8111-111111111111');
       expect(requestContextService.getRequestId()).toBe('22222222-2222-4222-8222-222222222222');

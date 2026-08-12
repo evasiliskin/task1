@@ -1,3 +1,5 @@
+import type { Mock } from 'vitest';
+
 import { FatalError } from '../errors/index.js';
 import { type AppLogger } from '../logger/app-logger.js';
 
@@ -6,7 +8,7 @@ import { CentralizedErrorHandlerService } from './centralized-error-handler.serv
 describe('CentralizedErrorHandlerService', () => {
   let logger: { error: ReturnType<typeof vi.fn>; fatal: ReturnType<typeof vi.fn> };
   let service: CentralizedErrorHandlerService;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: Mock<typeof process.exit>;
 
   beforeEach(() => {
     logger = { error: vi.fn(), fatal: vi.fn() };

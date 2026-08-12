@@ -1,13 +1,15 @@
-import { AppLogger } from './app-logger.js';
+import type { Mock } from 'vitest';
+
+import { AppLogger, type IPinoLikeLogger } from './app-logger.js';
 
 describe('AppLogger', () => {
   let pinoLogger: {
-    trace: ReturnType<typeof vi.fn>;
-    debug: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    fatal: ReturnType<typeof vi.fn>;
+    trace: Mock<IPinoLikeLogger['trace']>;
+    debug: Mock<IPinoLikeLogger['debug']>;
+    info: Mock<IPinoLikeLogger['info']>;
+    warn: Mock<IPinoLikeLogger['warn']>;
+    error: Mock<IPinoLikeLogger['error']>;
+    fatal: Mock<IPinoLikeLogger['fatal']>;
   };
   let logger: AppLogger;
 
