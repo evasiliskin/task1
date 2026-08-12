@@ -6,7 +6,6 @@ import loggerConfig from '@task1/shared/config/logger.config';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of, throwError } from 'rxjs';
 import request from 'supertest';
-import type { App } from 'supertest/types';
 
 import { AuthModule } from '../auth/auth.module.js';
 import mongodbConfig from '../config/mongodb.config.js';
@@ -21,6 +20,8 @@ import {
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
 } from './rabbitmq-clients.tokens.js';
+
+type App = Parameters<typeof request>[0];
 
 describe('HealthController (HTTP Integration)', () => {
   let app: INestApplication;
