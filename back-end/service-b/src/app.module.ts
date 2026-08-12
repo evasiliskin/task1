@@ -5,7 +5,9 @@ import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/ex
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
+import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
+import redisConfig from './config/redis.config.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
@@ -13,7 +15,7 @@ import { HealthModule } from './health/health.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,
-      load: [loggerConfig, rabbitmqConfig],
+      load: [loggerConfig, rabbitmqConfig, mongodbConfig, redisConfig],
     }),
     RequestContextModule,
     LoggerModule,
