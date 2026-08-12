@@ -328,6 +328,12 @@ importers:
       class-validator:
         specifier: ^0.14.1
         version: 0.14.4
+      ioredis:
+        specifier: ^6.0.0
+        version: 6.0.0
+      mongodb:
+        specifier: ^7.5.0
+        version: 7.5.0(socks@2.8.9)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
