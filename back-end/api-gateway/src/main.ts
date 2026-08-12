@@ -1,6 +1,8 @@
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { type INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { FatalError } from '@task1/shared/errors/internal/fatal-error';
+import { CentralizedErrorHandlerService } from '@task1/shared/exception-handling/centralized-error-handler.service';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
 import { NestLoggerBridge } from '@task1/shared/logger/nest-logger.bridge';
 import { createHelmetMiddleware } from '@task1/shared/security/helmet.config';
@@ -9,13 +11,15 @@ import { AppModule } from './app.module.js';
 import appConfig from './config/app.config.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
-
-  const loggerService = app.get(LoggerService);
-  const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
-  app.useLogger(new NestLoggerBridge(bootstrapLogger));
+  let app: INestApplication | undefined;
 
   try {
+    app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+    const loggerService = app.get(LoggerService);
+    const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
+    app.useLogger(new NestLoggerBridge(bootstrapLogger));
+
     app.use(createHelmetMiddleware());
 
     app.setGlobalPrefix('api');
@@ -40,12 +44,12 @@ async function bootstrap(): Promise<void> {
     const { port } = appConfig();
     await app.listen(port);
   } catch (error) {
-    bootstrapLogger.fatal(
-      { error: error instanceof Error ? error.message : String(error) },
-      'Application bootstrap failed',
-    );
+    if (app === undefined) {
+      // eslint-disable-next-line n/no-process-exit -- no DI container available yet to resolve CentralizedErrorHandlerService
+      process.exit(1);
+    }
 
-    throw error;
+    app.get(CentralizedErrorHandlerService).handleError(new FatalError(error));
   }
 }
 

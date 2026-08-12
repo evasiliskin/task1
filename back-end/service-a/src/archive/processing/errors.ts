@@ -8,7 +8,7 @@ export class ArchiveProcessingError extends AppError {
         code: 'ARCHIVE_PROCESSING_FAILED',
         category: ErrorCategory.EXTERNAL,
         params: { importId, filePath },
-        ...(cause === undefined ? {} : { cause }),
+        cause,
       }),
     );
   }

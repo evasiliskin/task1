@@ -7,12 +7,13 @@ export interface IAppErrorOptions {
   category: ErrorCategory;
   path?: readonly string[];
   params?: Record<string, unknown>;
-  cause?: Error;
+  cause?: unknown;
 }
 
 type OptionalErrorOptions = Pick<IAppErrorOptions, 'cause' | 'path' | 'params'>;
 
 export abstract class AppError extends Error {
+  public override readonly cause?: Error;
   public readonly code: string;
   public readonly category: string;
   public readonly path?: readonly string[];
@@ -30,10 +31,16 @@ export abstract class AppError extends Error {
   }
 
   protected constructor(message: string, options: IAppErrorOptions) {
-    super(message, options.cause !== undefined ? { cause: options.cause } : {});
+    const cause = options.cause !== undefined ? AppError.toError(options.cause) : undefined;
+
+    super(message, cause !== undefined ? { cause } : {});
     this.name = new.target.name;
     this.code = options.code;
     this.category = options.category;
+
+    if (cause !== undefined) {
+      this.cause = cause;
+    }
 
     if (options.path !== undefined) {
       this.path = options.path;
@@ -44,6 +51,10 @@ export abstract class AppError extends Error {
     }
 
     Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  protected static toError(value: unknown): Error {
+    return value instanceof Error ? value : new Error(String(value));
   }
 
   protected static buildOptions(

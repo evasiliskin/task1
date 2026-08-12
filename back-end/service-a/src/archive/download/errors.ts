@@ -24,7 +24,7 @@ export class ArchiveDownloadError extends AppError {
         code: 'ARCHIVE_DOWNLOAD_FAILED',
         category: ErrorCategory.EXTERNAL,
         params: errorParameters,
-        ...(cause === undefined ? {} : { cause }),
+        cause,
       }),
     );
   }
