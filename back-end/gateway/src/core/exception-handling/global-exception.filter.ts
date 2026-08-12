@@ -46,8 +46,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       path: request.url,
     };
 
-    response.setHeader(CORRELATION_ID_HEADER, correlationId);
-    response.setHeader(REQUEST_ID_HEADER, requestId);
     response.status(statusCode).json(body);
   }
 
