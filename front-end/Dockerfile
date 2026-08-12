@@ -14,7 +14,7 @@ WORKDIR /app
 FROM base AS deps
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY back-end/gateway/package.json back-end/gateway/package.json
+COPY back-end/api-gateway/package.json back-end/api-gateway/package.json
 COPY back-end/service-b/package.json back-end/service-b/package.json
 COPY front-end/package.json front-end/package.json
 

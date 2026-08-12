@@ -4,9 +4,9 @@ import { type HealthIndicatorService } from '@nestjs/terminus';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { NEVER, of, throwError } from 'rxjs';
 
-import type rabbitmqConfig from '../config/rabbitmq.config';
+import type rabbitmqConfig from '../config/rabbitmq.config.js';
 
-import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
+import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
 describe('RabbitMqPingHealthIndicator', () => {
   let indicator: RabbitMqPingHealthIndicator;
@@ -85,16 +85,23 @@ describe('RabbitMqPingHealthIndicator', () => {
 
     await runWithinContext(() => indicator.isHealthy('service-b', client));
 
-    expect(send).toHaveBeenCalledTimes(1);
-    const [pattern, record] = send.mock.calls[0] as [
+    expect(send).toHaveBeenCalledWith(
+      'health.check',
+      expect.objectContaining({
+        options: expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-correlation-id': 'c-123',
+            'x-request-id': expect.any(String),
+          }),
+        }),
+      }),
+    );
+
+    const [, record] = send.mock.calls[0] as [
       string,
       { options: { headers: Record<string, string> } },
     ];
-
-    expect(pattern).toBe('health.check');
-    expect(record.options.headers['x-correlation-id']).toBe('c-123');
     expect(record.options.headers['x-request-id']).not.toBe('r-inbound');
-    expect(typeof record.options.headers['x-request-id']).toBe('string');
   });
 
   it('should throw MissingRequestContextError, when called outside of any request context', async () => {

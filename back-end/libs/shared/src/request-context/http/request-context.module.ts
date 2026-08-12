@@ -6,9 +6,9 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 
-import { RequestContextService } from '../request-context.service';
+import { RequestContextService } from '../request-context.service.js';
 
-import { RequestContextMiddleware } from './request-context.middleware';
+import { RequestContextMiddleware } from './request-context.middleware.js';
 
 @Global()
 @Module({

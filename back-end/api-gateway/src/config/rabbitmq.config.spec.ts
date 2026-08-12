@@ -1,4 +1,4 @@
-import rabbitmqConfig from './rabbitmq.config';
+import rabbitmqConfig from './rabbitmq.config.js';
 
 describe('rabbitmqConfig', () => {
   const originalEnv = { ...process.env };

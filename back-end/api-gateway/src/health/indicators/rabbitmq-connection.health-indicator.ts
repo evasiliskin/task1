@@ -2,7 +2,7 @@ import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import { type AmqpConnectionManager } from 'amqp-connection-manager';
 
-import { RABBITMQ_CONNECTION_MANAGER } from '../rabbitmq-clients.tokens';
+import { RABBITMQ_CONNECTION_MANAGER } from '../rabbitmq-clients.tokens.js';
 
 @Injectable()
 export class RabbitMqConnectionHealthIndicator implements OnModuleDestroy {

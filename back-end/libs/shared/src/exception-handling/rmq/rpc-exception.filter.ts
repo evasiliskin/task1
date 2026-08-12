@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 
-import { ErrorFormatService } from '../error-format.service';
+import { ErrorFormatService } from '../error-format.service.js';
 
 @Catch()
 @Injectable()

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 
-import { AppLogger } from '../app-logger';
-import { type LogChannel } from '../types';
+import { AppLogger } from '../app-logger.js';
+import { type LogChannel } from '../types.js';
 
 @Injectable()
 export class LoggerService {

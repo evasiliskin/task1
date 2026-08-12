@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { z } from 'zod';
 
-import { isProduction } from './environment.helper';
+import { isProduction } from './environment.helper.js';
 
 const loggerConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),

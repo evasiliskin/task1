@@ -1,5 +1,5 @@
-import { MissingRequestContextError } from './missing-request-context.error';
-import { RequestContextService } from './request-context.service';
+import { MissingRequestContextError } from './missing-request-context.error.js';
+import { RequestContextService } from './request-context.service.js';
 
 describe('RequestContextService', () => {
   let service: RequestContextService;

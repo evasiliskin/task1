@@ -2,9 +2,9 @@ import { type CallHandler, type ExecutionContext } from '@nestjs/common';
 import { type RmqContext } from '@nestjs/microservices';
 import { firstValueFrom, Observable, of } from 'rxjs';
 
-import { RequestContextService } from '../request-context.service';
+import { RequestContextService } from '../request-context.service.js';
 
-import { RmqContextInterceptor } from './rmq-context.interceptor';
+import { RmqContextInterceptor } from './rmq-context.interceptor.js';
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

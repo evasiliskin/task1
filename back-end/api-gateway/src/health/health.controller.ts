@@ -7,7 +7,7 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 
-import { type IAggregatedHealth, HealthCheckService } from './health-check.service';
+import { type IAggregatedHealth, HealthCheckService } from './health-check.service.js';
 
 const HEALTHY_EXAMPLE = {
   status: 'ok',

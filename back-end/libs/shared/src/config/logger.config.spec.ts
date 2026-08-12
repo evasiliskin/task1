@@ -1,4 +1,4 @@
-import loggerConfig from './logger.config';
+import loggerConfig from './logger.config.js';
 
 describe('loggerConfig', () => {
   const originalEnv = { ...process.env };

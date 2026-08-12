@@ -4,8 +4,8 @@ import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/term
 import { type MongoClient } from 'mongodb';
 import { firstValueFrom, from, timeout } from 'rxjs';
 
-import mongodbConfig from '../../config/mongodb.config';
-import { MONGO_CLIENT } from '../infra-clients.tokens';
+import mongodbConfig from '../../config/mongodb.config.js';
+import { MONGO_CLIENT } from '../infra-clients.tokens.js';
 
 @Injectable()
 export class MongoHealthIndicator {

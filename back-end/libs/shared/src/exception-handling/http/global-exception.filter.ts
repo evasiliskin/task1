@@ -8,10 +8,10 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { RequestContextService } from '../../request-context/request-context.service';
-import { ErrorFormatService } from '../error-format.service';
+import { RequestContextService } from '../../request-context/request-context.service.js';
+import { ErrorFormatService } from '../error-format.service.js';
 
-import { IApiErrorResponse } from './error-response.types';
+import { IApiErrorResponse } from './error-response.types.js';
 
 @Catch()
 @Injectable()

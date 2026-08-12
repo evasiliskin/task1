@@ -1,4 +1,4 @@
-import { AppLogger } from './app-logger';
+import { AppLogger } from './app-logger.js';
 
 describe('AppLogger', () => {
   let pinoLogger: {

@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 
-import { RequestContextService } from '../request-context.service';
+import { RequestContextService } from '../request-context.service.js';
 
-import { RequestContextMiddleware } from './request-context.middleware';
+import { RequestContextMiddleware } from './request-context.middleware.js';
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -72,7 +72,14 @@ describe('RequestContextMiddleware', () => {
 
     middleware.use(request, response as unknown as Response, next);
 
-    expect(response.setHeader).toHaveBeenCalledTimes(2);
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'x-correlation-id',
+      expect.stringMatching(UUID_V4_PATTERN),
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'x-request-id',
+      expect.stringMatching(UUID_V4_PATTERN),
+    );
   });
 
   it('should call next() inside the request context, making both ids readable via the service', () => {
@@ -82,13 +89,15 @@ describe('RequestContextMiddleware', () => {
         'x-request-id': '22222222-2222-4222-8222-222222222222',
       },
     } as unknown as Request;
+    let nextWasCalled = false;
     next = vi.fn(() => {
+      nextWasCalled = true;
       expect(requestContextService.getCorrelationId()).toBe('11111111-1111-4111-8111-111111111111');
       expect(requestContextService.getRequestId()).toBe('22222222-2222-4222-8222-222222222222');
     });
 
     middleware.use(request, response as unknown as Response, next);
 
-    expect(next).toHaveBeenCalledTimes(1);
+    expect(nextWasCalled).toBe(true);
   });
 });

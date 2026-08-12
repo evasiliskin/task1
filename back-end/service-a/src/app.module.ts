@@ -5,8 +5,8 @@ import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/ex
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
-import rabbitmqConfig from './config/rabbitmq.config';
-import { HealthModule } from './health/health.module';
+import rabbitmqConfig from './config/rabbitmq.config.js';
+import { HealthModule } from './health/health.module.js';
 
 @Module({
   imports: [

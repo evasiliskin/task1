@@ -1,4 +1,4 @@
-import { type IApiErrorBody } from './error-response.types';
+import { type IApiErrorBody } from './error-response.types.js';
 
 export interface IFormattedError {
   statusCode: number;

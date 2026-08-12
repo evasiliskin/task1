@@ -1,11 +1,12 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
 import { NestLoggerBridge } from '@task1/shared/logger/nest-logger.bridge';
+import { createHelmetMiddleware } from '@task1/shared/security/helmet.config';
 
-import { AppModule } from './app.module';
-import appConfig from './config/app.config';
+import { AppModule } from './app.module.js';
+import appConfig from './config/app.config.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -15,6 +16,15 @@ async function bootstrap(): Promise<void> {
   app.useLogger(new NestLoggerBridge(bootstrapLogger));
 
   try {
+    app.use(createHelmetMiddleware());
+
+    app.setGlobalPrefix('api');
+
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -39,6 +49,4 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-bootstrap().catch(() => {
-  process.exitCode = 1;
-});
+await bootstrap();

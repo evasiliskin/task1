@@ -7,23 +7,23 @@ import * as amqp from 'amqp-connection-manager';
 import { Redis } from 'ioredis';
 import { MongoClient } from 'mongodb';
 
-import mongodbConfig from '../config/mongodb.config';
-import rabbitmqConfig from '../config/rabbitmq.config';
-import redisConfig from '../config/redis.config';
+import mongodbConfig from '../config/mongodb.config.js';
+import rabbitmqConfig from '../config/rabbitmq.config.js';
+import redisConfig from '../config/redis.config.js';
 
-import { HealthCheckService } from './health-check.service';
-import { HealthController } from './health.controller';
-import { GatewayHealthIndicator } from './indicators/gateway.health-indicator';
-import { MongoHealthIndicator } from './indicators/mongo.health-indicator';
-import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator';
-import { RedisHealthIndicator } from './indicators/redis.health-indicator';
-import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens';
+import { HealthCheckService } from './health-check.service.js';
+import { HealthController } from './health.controller.js';
+import { GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
+import { MongoHealthIndicator } from './indicators/mongo.health-indicator.js';
+import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
+import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
+import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens.js';
 import {
   RABBITMQ_CONNECTION_MANAGER,
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
-} from './rabbitmq-clients.tokens';
-import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
+} from './rabbitmq-clients.tokens.js';
+import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
 @Module({
   imports: [

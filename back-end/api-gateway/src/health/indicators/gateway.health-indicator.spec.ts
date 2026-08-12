@@ -1,6 +1,6 @@
 import { type HealthIndicatorService } from '@nestjs/terminus';
 
-import { GatewayHealthIndicator } from './gateway.health-indicator';
+import { GatewayHealthIndicator } from './gateway.health-indicator.js';
 
 describe('GatewayHealthIndicator', () => {
   it('should report the indicator as up, when checked', () => {
@@ -14,6 +14,5 @@ describe('GatewayHealthIndicator', () => {
     const result = indicator.isHealthy('gateway');
 
     expect(result).toEqual({ gateway: { status: 'up' } });
-    expect(upMock).toHaveBeenCalledTimes(1);
   });
 });

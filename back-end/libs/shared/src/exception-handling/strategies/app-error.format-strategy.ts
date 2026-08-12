@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
-import { AppError } from '../../errors';
-import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface';
-import { statusFromAppError } from '../status-from-app-error.utility';
+import { AppError } from '../../errors/index.js';
+import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface.js';
+import { statusFromAppError } from '../status-from-app-error.utility.js';
 
 @Injectable()
 export class AppErrorFormatStrategy implements IErrorFormatStrategy {

@@ -1,13 +1,15 @@
-import { type CentralizedErrorHandlerService } from './centralized-error-handler.service';
-import { ProcessErrorHandlerService } from './process-error-handler.service';
+import { FatalError } from '../errors/index.js';
+
+import { type CentralizedErrorHandlerService } from './centralized-error-handler.service.js';
+import { ProcessErrorHandlerService } from './process-error-handler.service.js';
 
 describe('ProcessErrorHandlerService', () => {
-  let centralizedErrorHandler: { handleFatalError: ReturnType<typeof vi.fn> };
+  let centralizedErrorHandler: { handleError: ReturnType<typeof vi.fn> };
   let service: ProcessErrorHandlerService;
   let onSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    centralizedErrorHandler = { handleFatalError: vi.fn() };
+    centralizedErrorHandler = { handleError: vi.fn() };
     service = new ProcessErrorHandlerService(
       centralizedErrorHandler as unknown as CentralizedErrorHandlerService,
     );
@@ -44,6 +46,6 @@ describe('ProcessErrorHandlerService', () => {
 
     (handler as (error: unknown) => void)(error);
 
-    expect(centralizedErrorHandler.handleFatalError).toHaveBeenCalledWith(error);
+    expect(centralizedErrorHandler.handleError).toHaveBeenCalledWith(new FatalError(error));
   });
 });

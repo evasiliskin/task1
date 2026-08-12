@@ -1,4 +1,4 @@
-import appConfig from './app.config';
+import appConfig from './app.config.js';
 
 describe('appConfig', () => {
   const originalEnv = { ...process.env };

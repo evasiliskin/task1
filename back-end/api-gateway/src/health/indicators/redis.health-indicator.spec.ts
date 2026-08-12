@@ -2,9 +2,9 @@ import { type ConfigType } from '@nestjs/config';
 import { type HealthIndicatorService } from '@nestjs/terminus';
 import { type Redis } from 'ioredis';
 
-import type redisConfig from '../../config/redis.config';
+import type redisConfig from '../../config/redis.config.js';
 
-import { RedisHealthIndicator } from './redis.health-indicator';
+import { RedisHealthIndicator } from './redis.health-indicator.js';
 
 describe('RedisHealthIndicator', () => {
   let upMock: ReturnType<typeof vi.fn>;

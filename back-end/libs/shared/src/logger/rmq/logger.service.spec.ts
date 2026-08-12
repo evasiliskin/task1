@@ -1,8 +1,8 @@
 import { type Logger } from 'pino';
 
-import { AppLogger } from '../app-logger';
+import { AppLogger } from '../app-logger.js';
 
-import { LoggerService } from './logger.service';
+import { LoggerService } from './logger.service.js';
 
 describe('LoggerService', () => {
   it('should return an AppLogger bound to the given source and default "rmq" channel', () => {

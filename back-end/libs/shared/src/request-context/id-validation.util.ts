@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { MAX_ID_LENGTH } from './request-context.types';
+import { MAX_ID_LENGTH } from './request-context.types.js';
 
 // Printable ASCII, no whitespace/control chars - blocks header/log injection
 // via a spoofed id while still allowing non-UUID correlation ids from clients.

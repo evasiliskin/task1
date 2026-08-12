@@ -1,4 +1,4 @@
-import { type IErrorDetail } from '../errors/base/error-detail.types';
+import { type IErrorDetail } from '../errors/base/error-detail.types.js';
 
 export type IApiErrorDetail = IErrorDetail;
 

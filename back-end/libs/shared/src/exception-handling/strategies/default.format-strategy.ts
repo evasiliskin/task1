@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface';
+import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface.js';
 
 @Injectable()
 export class DefaultFormatStrategy implements IErrorFormatStrategy {

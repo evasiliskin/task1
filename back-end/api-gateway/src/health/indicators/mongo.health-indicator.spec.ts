@@ -2,9 +2,9 @@ import { type ConfigType } from '@nestjs/config';
 import { type HealthIndicatorService } from '@nestjs/terminus';
 import { type MongoClient } from 'mongodb';
 
-import type mongodbConfig from '../../config/mongodb.config';
+import type mongodbConfig from '../../config/mongodb.config.js';
 
-import { MongoHealthIndicator } from './mongo.health-indicator';
+import { MongoHealthIndicator } from './mongo.health-indicator.js';
 
 describe('MongoHealthIndicator', () => {
   let upMock: ReturnType<typeof vi.fn>;

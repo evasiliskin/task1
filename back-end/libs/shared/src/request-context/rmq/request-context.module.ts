@@ -1,9 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import { RequestContextService } from '../request-context.service';
+import { RequestContextService } from '../request-context.service.js';
 
-import { RmqContextInterceptor } from './rmq-context.interceptor';
+import { RmqContextInterceptor } from './rmq-context.interceptor.js';
 
 @Global()
 @Module({

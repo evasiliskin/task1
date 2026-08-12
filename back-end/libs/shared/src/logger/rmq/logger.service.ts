@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type Logger } from 'pino';
 
-import { AppLogger } from '../app-logger';
-import { type LogChannel } from '../types';
+import { AppLogger } from '../app-logger.js';
+import { type LogChannel } from '../types.js';
 
-import { PINO_LOGGER } from './pino-instance.token';
+import { PINO_LOGGER } from './pino-instance.token.js';
 
 @Injectable()
 export class LoggerService {

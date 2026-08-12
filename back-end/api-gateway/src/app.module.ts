@@ -5,11 +5,11 @@ import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/e
 import { LoggerModule } from '@task1/shared/logger/http/logger.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 
-import appConfig from './config/app.config';
-import mongodbConfig from './config/mongodb.config';
-import rabbitmqConfig from './config/rabbitmq.config';
-import redisConfig from './config/redis.config';
-import { HealthModule } from './health/health.module';
+import appConfig from './config/app.config.js';
+import mongodbConfig from './config/mongodb.config.js';
+import rabbitmqConfig from './config/rabbitmq.config.js';
+import redisConfig from './config/redis.config.js';
+import { HealthModule } from './health/health.module.js';
 
 @Module({
   imports: [

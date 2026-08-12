@@ -1,9 +1,9 @@
 import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 
-import { resolveId } from '../id-validation.util';
-import { RequestContextService } from '../request-context.service';
-import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context.types';
+import { resolveId } from '../id-validation.util.js';
+import { RequestContextService } from '../request-context.service.js';
+import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context.types.js';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {

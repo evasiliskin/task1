@@ -1,8 +1,8 @@
 import { type LoggerOptions } from 'pino';
 
-import { type ILoggerConfiguration } from '../../config/logger.config';
-import { type RequestContextService } from '../../request-context/request-context.service';
-import { REDACT_CENSOR, REDACT_PATHS } from '../redact-paths';
+import { type ILoggerConfiguration } from '../../config/logger.config.js';
+import { type RequestContextService } from '../../request-context/request-context.service.js';
+import { REDACT_CENSOR, REDACT_PATHS } from '../redact-paths.js';
 
 export function pinoConfigFactory(
   config: ILoggerConfiguration,

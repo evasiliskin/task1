@@ -1,6 +1,6 @@
 import { type LoggerService, type LogLevel } from '@nestjs/common';
 
-import { type AppLogger } from './app-logger';
+import { type AppLogger } from './app-logger.js';
 
 export class NestLoggerBridge implements LoggerService {
   public constructor(private readonly logger: AppLogger) {}

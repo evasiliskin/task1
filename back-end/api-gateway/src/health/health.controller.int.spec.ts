@@ -8,18 +8,18 @@ import { of, throwError } from 'rxjs';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import mongodbConfig from '../config/mongodb.config';
-import rabbitmqConfig from '../config/rabbitmq.config';
-import redisConfig from '../config/redis.config';
+import mongodbConfig from '../config/mongodb.config.js';
+import rabbitmqConfig from '../config/rabbitmq.config.js';
+import redisConfig from '../config/redis.config.js';
 
-import { type IAggregatedHealth } from './health-check.service';
-import { HealthModule } from './health.module';
-import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens';
+import { type IAggregatedHealth } from './health-check.service.js';
+import { HealthModule } from './health.module.js';
+import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens.js';
 import {
   RABBITMQ_CONNECTION_MANAGER,
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
-} from './rabbitmq-clients.tokens';
+} from './rabbitmq-clients.tokens.js';
 
 describe('HealthController (HTTP Integration)', () => {
   let app: INestApplication;

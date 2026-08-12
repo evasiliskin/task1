@@ -2,10 +2,10 @@ import { HttpStatus } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { RequestContextService } from '../../request-context/request-context.service';
-import { type ErrorFormatService } from '../error-format.service';
+import { RequestContextService } from '../../request-context/request-context.service.js';
+import { type ErrorFormatService } from '../error-format.service.js';
 
-import { GlobalExceptionFilter } from './global-exception.filter';
+import { GlobalExceptionFilter } from './global-exception.filter.js';
 
 describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;

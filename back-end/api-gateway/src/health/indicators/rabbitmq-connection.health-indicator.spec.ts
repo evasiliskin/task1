@@ -1,7 +1,7 @@
 import { type HealthIndicatorService } from '@nestjs/terminus';
 import { type AmqpConnectionManager } from 'amqp-connection-manager';
 
-import { RabbitMqConnectionHealthIndicator } from './rabbitmq-connection.health-indicator';
+import { RabbitMqConnectionHealthIndicator } from './rabbitmq-connection.health-indicator.js';
 
 describe('RabbitMqConnectionHealthIndicator', () => {
   let upMock: ReturnType<typeof vi.fn>;
@@ -62,6 +62,6 @@ describe('RabbitMqConnectionHealthIndicator', () => {
 
     await indicator.onModuleDestroy();
 
-    expect(closeMock).toHaveBeenCalledTimes(1);
+    expect(closeMock).toHaveBeenCalledWith();
   });
 });

@@ -4,8 +4,8 @@ import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { NestLoggerBridge } from '@task1/shared/logger/nest-logger.bridge';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 
-import { AppModule } from './app.module';
-import rabbitmqConfig from './config/rabbitmq.config';
+import { AppModule } from './app.module.js';
+import rabbitmqConfig from './config/rabbitmq.config.js';
 
 async function bootstrap(): Promise<void> {
   const { url, queue } = rabbitmqConfig();
@@ -44,6 +44,4 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-bootstrap().catch(() => {
-  process.exitCode = 1;
-});
+await bootstrap();

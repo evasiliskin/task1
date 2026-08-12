@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface';
+import { IErrorFormatStrategy, IFormattedError } from '../error-format.strategy.interface.js';
 
 interface ISerializedRpcError {
   statusCode: number;

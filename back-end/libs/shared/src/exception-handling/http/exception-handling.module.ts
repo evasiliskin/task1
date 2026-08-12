@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 
-import { LoggerModule } from '../../logger/http/logger.module';
-import { LoggerService } from '../../logger/http/logger.service';
-import { CentralizedErrorHandlerService } from '../centralized-error-handler.service';
-import { CENTRALIZED_ERROR_LOGGER } from '../centralized-error-handler.tokens';
-import { ErrorFormatService } from '../error-format.service';
-import { ERROR_FORMAT_STRATEGIES } from '../error-format.tokens';
-import { ProcessErrorHandlerService } from '../process-error-handler.service';
-import { AppErrorFormatStrategy } from '../strategies/app-error.format-strategy';
-import { DefaultFormatStrategy } from '../strategies/default.format-strategy';
-import { HttpExceptionFormatStrategy } from '../strategies/http-exception.format-strategy';
+import { LoggerModule } from '../../logger/http/logger.module.js';
+import { LoggerService } from '../../logger/http/logger.service.js';
+import { CentralizedErrorHandlerService } from '../centralized-error-handler.service.js';
+import { CENTRALIZED_ERROR_LOGGER } from '../centralized-error-handler.tokens.js';
+import { ErrorFormatService } from '../error-format.service.js';
+import { ERROR_FORMAT_STRATEGIES } from '../error-format.tokens.js';
+import { ProcessErrorHandlerService } from '../process-error-handler.service.js';
+import { AppErrorFormatStrategy } from '../strategies/app-error.format-strategy.js';
+import { DefaultFormatStrategy } from '../strategies/default.format-strategy.js';
+import { HttpExceptionFormatStrategy } from '../strategies/http-exception.format-strategy.js';
 
-import { GlobalExceptionFilter } from './global-exception.filter';
-import { SerializedRpcErrorFormatStrategy } from './serialized-rpc-error.format-strategy';
+import { GlobalExceptionFilter } from './global-exception.filter.js';
+import { SerializedRpcErrorFormatStrategy } from './serialized-rpc-error.format-strategy.js';
 
 @Module({
   imports: [LoggerModule],

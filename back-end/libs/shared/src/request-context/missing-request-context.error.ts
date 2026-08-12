@@ -1,5 +1,5 @@
-import { ErrorCategory } from '../errors/error-category.enum';
-import { InternalError } from '../errors/internal/internal-error';
+import { ErrorCategory } from '../errors/error-category.enum.js';
+import { InternalError } from '../errors/internal/internal-error.js';
 
 export class MissingRequestContextError extends InternalError {
   public constructor() {

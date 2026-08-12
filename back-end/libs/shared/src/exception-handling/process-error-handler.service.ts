@@ -1,6 +1,8 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 
-import { CentralizedErrorHandlerService } from './centralized-error-handler.service';
+import { FatalError } from '../errors/index.js';
+
+import { CentralizedErrorHandlerService } from './centralized-error-handler.service.js';
 
 /**
  * Registers process-level error handlers per nodejsbestpractices:
@@ -24,7 +26,7 @@ export class ProcessErrorHandlerService implements OnModuleInit {
 
   private registerUncaughtException(): void {
     process.on('uncaughtException', (error: unknown) => {
-      this.centralizedErrorHandler.handleFatalError(error);
+      this.centralizedErrorHandler.handleError(new FatalError(error));
     });
   }
 }

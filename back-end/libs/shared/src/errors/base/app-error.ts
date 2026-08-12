@@ -1,6 +1,6 @@
-import { type ErrorCategory } from '../error-category.enum';
+import { type ErrorCategory } from '../error-category.enum.js';
 
-import { type IErrorDetail } from './error-detail.types';
+import { type IErrorDetail } from './error-detail.types.js';
 
 export interface IAppErrorOptions {
   code: string;

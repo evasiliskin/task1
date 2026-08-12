@@ -1,4 +1,4 @@
-import mongodbConfig from './mongodb.config';
+import mongodbConfig from './mongodb.config.js';
 
 describe('mongodbConfig', () => {
   const originalEnv = { ...process.env };

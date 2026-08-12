@@ -1,4 +1,4 @@
-import { type LogChannel, type LogFields } from './types';
+import { type LogChannel, type LogFields } from './types.js';
 
 export interface IPinoLikeLogger {
   trace(fields: LogFields, message: string): void;

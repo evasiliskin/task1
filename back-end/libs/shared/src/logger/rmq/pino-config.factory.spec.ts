@@ -1,7 +1,7 @@
-import { RequestContextService } from '../../request-context/request-context.service';
-import { REDACT_CENSOR, REDACT_PATHS } from '../redact-paths';
+import { RequestContextService } from '../../request-context/request-context.service.js';
+import { REDACT_CENSOR, REDACT_PATHS } from '../redact-paths.js';
 
-import { pinoConfigFactory } from './pino-config.factory';
+import { pinoConfigFactory } from './pino-config.factory.js';
 
 describe('pinoConfigFactory', () => {
   let requestContextService: RequestContextService;

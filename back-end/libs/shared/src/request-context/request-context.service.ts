@@ -2,8 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { Injectable } from '@nestjs/common';
 
-import { MissingRequestContextError } from './missing-request-context.error';
-import { type IRequestContext } from './request-context.types';
+import { MissingRequestContextError } from './missing-request-context.error.js';
+import { type IRequestContext } from './request-context.types.js';
 
 @Injectable()
 export class RequestContextService {

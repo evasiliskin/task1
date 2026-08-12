@@ -7,9 +7,9 @@ import {
 import { type RmqContext } from '@nestjs/microservices';
 import { Observable, type Subscription } from 'rxjs';
 
-import { resolveId } from '../id-validation.util';
-import { RequestContextService } from '../request-context.service';
-import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context.types';
+import { resolveId } from '../id-validation.util.js';
+import { RequestContextService } from '../request-context.service.js';
+import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context.types.js';
 
 interface IRmqMessage {
   properties: { headers?: Record<string, string | string[] | undefined> };

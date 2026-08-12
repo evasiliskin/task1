@@ -6,7 +6,7 @@ import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
 
-import rabbitmqConfig from '../config/rabbitmq.config';
+import rabbitmqConfig from '../config/rabbitmq.config.js';
 
 @Injectable()
 export class RabbitMqPingHealthIndicator {

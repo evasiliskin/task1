@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { IErrorFormatStrategy, IFormattedError } from './error-format.strategy.interface';
-import { ERROR_FORMAT_STRATEGIES } from './error-format.tokens';
+import { IErrorFormatStrategy, IFormattedError } from './error-format.strategy.interface.js';
+import { ERROR_FORMAT_STRATEGIES } from './error-format.tokens.js';
 
 @Injectable()
 export class ErrorFormatService {

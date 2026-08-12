@@ -8,12 +8,12 @@ import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
-import { GatewayHealthIndicator } from './indicators/gateway.health-indicator';
-import { MongoHealthIndicator } from './indicators/mongo.health-indicator';
-import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator';
-import { RedisHealthIndicator } from './indicators/redis.health-indicator';
-import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens';
-import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
+import { GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
+import { MongoHealthIndicator } from './indicators/mongo.health-indicator.js';
+import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
+import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
+import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens.js';
+import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
 export type ServiceStatus = 'ok' | 'unavailable';
 

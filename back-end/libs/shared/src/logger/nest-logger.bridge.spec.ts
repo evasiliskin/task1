@@ -1,5 +1,5 @@
-import { type AppLogger } from './app-logger';
-import { NestLoggerBridge } from './nest-logger.bridge';
+import { type AppLogger } from './app-logger.js';
+import { NestLoggerBridge } from './nest-logger.bridge.js';
 
 describe('NestLoggerBridge', () => {
   let appLogger: {

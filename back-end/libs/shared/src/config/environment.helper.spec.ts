@@ -1,4 +1,4 @@
-import { getNodeEnv, isProduction } from './environment.helper';
+import { getNodeEnv, isProduction } from './environment.helper.js';
 
 describe('environment.helper', () => {
   const originalEnv = { ...process.env };

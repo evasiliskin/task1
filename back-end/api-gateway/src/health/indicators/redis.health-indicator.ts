@@ -4,8 +4,8 @@ import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/term
 import { type Redis } from 'ioredis';
 import { firstValueFrom, from, timeout } from 'rxjs';
 
-import redisConfig from '../../config/redis.config';
-import { REDIS_CLIENT } from '../infra-clients.tokens';
+import redisConfig from '../../config/redis.config.js';
+import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
 @Injectable()
 export class RedisHealthIndicator {
