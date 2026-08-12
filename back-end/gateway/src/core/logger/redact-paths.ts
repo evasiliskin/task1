@@ -17,5 +17,3 @@ export const REDACT_PATHS = [
   'apiKey',
   'secret',
 ] as const;
-
-export type RedactPath = (typeof REDACT_PATHS)[number];
