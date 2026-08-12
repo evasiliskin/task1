@@ -38,3 +38,6 @@ back-end/*/prisma/*.db
 
 # Misc
 *.tsbuildinfo
+
+# Git worktrees (isolated implementation workspaces)
+.worktrees/

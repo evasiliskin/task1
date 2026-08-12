@@ -9,13 +9,14 @@ skills/*.md
 
 # Tech Stack
 
-- Nest.js
+- Nest.js microservices
 - TypeScript
-- AWS
 - pnpm
 - Vitest
 - RabbitMQ
 - Monorepo
+- Redis
+- MongoDB
 ---
 
 # AI Instructions
@@ -23,8 +24,7 @@ skills/*.md
 Always use Context7 MCP for:
 
 - Nest.js
-- PostgreSQL
-- AWS
+- Vitest
 - any library or framework documentation
 - API reference
 - version-specific behavior
