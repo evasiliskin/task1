@@ -7,6 +7,8 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 
+import { Public } from '../auth/public.decorator.js';
+
 import { type IAggregatedHealth, HealthCheckService } from './health-check.service.js';
 
 const HEALTHY_EXAMPLE = {
@@ -38,6 +40,7 @@ const DEGRADED_EXAMPLE = {
 export class HealthController {
   public constructor(private readonly healthCheckService: HealthCheckService) {}
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Aggregated health of the gateway and all its dependencies' })
   @ApiOkResponse({
@@ -48,6 +51,7 @@ export class HealthController {
     return await this.healthCheckService.getHealth();
   }
 
+  @Public()
   @Get('live')
   @ApiOperation({ summary: 'Liveness probe — is the gateway process running' })
   @ApiOkResponse({ schema: { example: { status: 'ok', service: 'gateway' } } })
@@ -55,6 +59,7 @@ export class HealthController {
     return this.healthCheckService.getLiveness();
   }
 
+  @Public()
   @Get('ready')
   @ApiOperation({
     summary: 'Readiness probe — can the gateway currently serve requests',

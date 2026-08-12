@@ -9,6 +9,7 @@ import appConfig from './config/app.config.js';
 import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
+import { AuthModule } from './auth/auth.module.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
@@ -21,6 +22,7 @@ import { HealthModule } from './health/health.module.js';
     RequestContextModule,
     LoggerModule,
     ExceptionHandlingModule,
+    AuthModule,
     HealthModule,
   ],
 })

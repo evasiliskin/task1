@@ -8,6 +8,7 @@ import { of, throwError } from 'rxjs';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
+import { AuthModule } from '../auth/auth.module.js';
 import mongodbConfig from '../config/mongodb.config.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import redisConfig from '../config/redis.config.js';
@@ -44,6 +45,7 @@ describe('HealthController (HTTP Integration)', () => {
           load: [rabbitmqConfig, loggerConfig, mongodbConfig, redisConfig],
         }),
         RequestContextModule,
+        AuthModule,
         HealthModule,
       ],
     })
