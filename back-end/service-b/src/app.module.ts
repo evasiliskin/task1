@@ -9,6 +9,8 @@ import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
 import { HealthModule } from './health/health.module.js';
+import { MongoModule } from './infra/mongo/mongo.module.js';
+import { RedisModule } from './infra/redis/redis.module.js';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { HealthModule } from './health/health.module.js';
     RequestContextModule,
     LoggerModule,
     ExceptionHandlingModule,
+    MongoModule,
+    RedisModule,
     HealthModule,
   ],
 })
