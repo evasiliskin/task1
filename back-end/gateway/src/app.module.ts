@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import loggerConfig from '@task1/shared/config/logger.config';
+import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { LoggerModule } from '@task1/shared/logger/http/logger.module';
+import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 
 import appConfig from './config/app.config';
-import loggerConfig from './config/logger.config';
+import mongodbConfig from './config/mongodb.config';
 import rabbitmqConfig from './config/rabbitmq.config';
-import { ExceptionHandlingModule } from './core/exception-handling/exception-handling.module';
-import { LoggerModule } from './core/logger/logger.module';
-import { RequestContextModule } from './core/request-context/request-context.module';
+import redisConfig from './config/redis.config';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -14,7 +16,7 @@ import { HealthModule } from './health/health.module';
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,
-      load: [appConfig, loggerConfig, rabbitmqConfig],
+      load: [appConfig, loggerConfig, rabbitmqConfig, mongodbConfig, redisConfig],
     }),
     RequestContextModule,
     LoggerModule,

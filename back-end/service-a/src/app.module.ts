@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import loggerConfig from '@task1/shared/config/logger.config';
+import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/exception-handling.module';
+import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
-import loggerConfig from './config/logger.config';
 import rabbitmqConfig from './config/rabbitmq.config';
-import { ExceptionHandlingModule } from './core/exception-handling/exception-handling.module';
-import { LoggerModule } from './core/logger/logger.module';
-import { RequestContextModule } from './core/request-context/request-context.module';
 import { HealthModule } from './health/health.module';
 
 @Module({

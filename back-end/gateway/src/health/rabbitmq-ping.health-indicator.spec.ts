@@ -1,10 +1,10 @@
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthIndicatorService } from '@nestjs/terminus';
-import { of, throwError } from 'rxjs';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { NEVER, of, throwError } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config';
-import { RequestContextService } from '../core/request-context/request-context.service';
 
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
 
@@ -104,6 +104,37 @@ describe('RabbitMqPingHealthIndicator', () => {
 
     await expect(indicator.isHealthy('service-b', client)).rejects.toThrow(
       'RequestContextService was accessed outside of an active request context',
+    );
+  });
+
+  it('should report the indicator as down, when the target service does not reply within the configured timeout', async () => {
+    const expectedResult = { 'service-b': { status: 'down', message: 'timed out' } };
+    downMock.mockReturnValue(expectedResult);
+
+    const healthIndicatorService = {
+      check: vi.fn().mockReturnValue({ up: upMock, down: downMock }),
+    } as unknown as HealthIndicatorService;
+
+    const shortTimeoutIndicator = new RabbitMqPingHealthIndicator(
+      healthIndicatorService,
+      requestContextService,
+      {
+        pingTimeoutMs: 10,
+      } as ConfigType<typeof rabbitmqConfig>,
+    );
+
+    const client = {
+      send: vi.fn().mockReturnValue(NEVER),
+    } as unknown as ClientProxy;
+
+    const result = await runWithinContext(() =>
+      shortTimeoutIndicator.isHealthy('service-b', client),
+    );
+
+    expect(result).toEqual(expectedResult);
+    expect(downMock).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      expect.objectContaining({ message: expect.any(String) }),
     );
   });
 });

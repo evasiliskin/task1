@@ -1,3 +1,4 @@
 packages:
   - "front-end"
   - "back-end/*"
+  - "back-end/libs/*"

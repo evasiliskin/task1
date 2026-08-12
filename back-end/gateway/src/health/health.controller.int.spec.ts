@@ -1,37 +1,62 @@
-import { type INestApplication } from '@nestjs/common';
+import { type INestApplication, HttpStatus } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
+import loggerConfig from '@task1/shared/config/logger.config';
+import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of, throwError } from 'rxjs';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
+import mongodbConfig from '../config/mongodb.config';
 import rabbitmqConfig from '../config/rabbitmq.config';
-import { RequestContextModule } from '../core/request-context/request-context.module';
+import redisConfig from '../config/redis.config';
 
+import { type IAggregatedHealth } from './health-check.service';
 import { HealthModule } from './health.module';
-import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens';
+import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens';
+import {
+  RABBITMQ_CONNECTION_MANAGER,
+  SERVICE_A_RMQ_CLIENT,
+  SERVICE_B_RMQ_CLIENT,
+} from './rabbitmq-clients.tokens';
 
 describe('HealthController (HTTP Integration)', () => {
   let app: INestApplication;
-  let serviceBClient: { send: ReturnType<typeof vi.fn> };
   let serviceAClient: { send: ReturnType<typeof vi.fn> };
+  let serviceBClient: { send: ReturnType<typeof vi.fn> };
+  let connectionManager: { isConnected: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+  let mongoClient: { db: ReturnType<typeof vi.fn> };
+  let redisClient: { ping: ReturnType<typeof vi.fn> };
 
   beforeAll(async () => {
-    serviceBClient = { send: vi.fn() };
     serviceAClient = { send: vi.fn() };
+    serviceBClient = { send: vi.fn() };
+    connectionManager = { isConnected: vi.fn(), close: vi.fn().mockResolvedValue(undefined) };
+    mongoClient = { db: vi.fn() };
+    redisClient = { ping: vi.fn() };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [rabbitmqConfig] }),
+        ConfigModule.forRoot({
+          isGlobal: true,
+          ignoreEnvFile: true,
+          load: [rabbitmqConfig, loggerConfig, mongodbConfig, redisConfig],
+        }),
         RequestContextModule,
         HealthModule,
       ],
     })
+      .overrideProvider(SERVICE_A_RMQ_CLIENT)
+      .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(SERVICE_B_RMQ_CLIENT)
       .useValue(serviceBClient as unknown as ClientProxy)
-      .overrideProvider(SERVICE_A_RMQ_CLIENT)
-      .useValue(serviceAClient)
+      .overrideProvider(RABBITMQ_CONNECTION_MANAGER)
+      .useValue(connectionManager)
+      .overrideProvider(MONGO_CLIENT)
+      .useValue(mongoClient)
+      .overrideProvider(REDIS_CLIENT)
+      .useValue(redisClient)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -44,91 +69,79 @@ describe('HealthController (HTTP Integration)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
+    serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
+    connectionManager.isConnected.mockReturnValue(true);
+    mongoClient.db.mockReturnValue({ command: vi.fn().mockResolvedValue({ ok: 1 }) });
+    redisClient.ping.mockResolvedValue('PONG');
   });
 
-  describe('GET /health/service-b', () => {
-    it('should return 200 and health check result, when service-b replies', async () => {
-      serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
-
-      const response = await request(app.getHttpServer() as App).get('/health/service-b');
+  describe('GET /health', () => {
+    it('should return 200 and status ok, when every dependency is healthy', async () => {
+      const response = await request(app.getHttpServer() as App).get('/health');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         status: 'ok',
-        info: { 'service-b': { status: 'up' } },
-        error: {},
-        details: { 'service-b': { status: 'up' } },
+        services: {
+          gateway: 'ok',
+          rabbitmq: 'ok',
+          serviceA: 'ok',
+          serviceB: 'ok',
+          mongodb: 'ok',
+          redis: 'ok',
+        },
       });
     });
 
-    it('should return 503 and health check result, when service-b does not reply', async () => {
+    it('should return 200 and status degraded, when service-b is unavailable', async () => {
       serviceBClient.send.mockReturnValue(throwError(() => new Error('connection refused')));
 
-      const response = await request(app.getHttpServer() as App).get('/health/service-b');
-
-      expect(response.status).toBe(503);
-      expect(response.body).toEqual({
-        status: 'error',
-        info: {},
-        error: { 'service-b': { message: 'connection refused', status: 'down' } },
-        details: { 'service-b': { message: 'connection refused', status: 'down' } },
-      });
-    });
-
-    it('should echo the incoming x-correlation-id and generate an x-request-id, when service-b replies', async () => {
-      serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
-
-      const response = await request(app.getHttpServer() as App)
-        .get('/health/service-b')
-        .set('x-correlation-id', '11111111-1111-4111-8111-111111111111');
-
-      expect(response.headers['x-correlation-id']).toBe('11111111-1111-4111-8111-111111111111');
-      expect(response.headers['x-request-id']).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-    });
-  });
-
-  describe('GET /health/service-a', () => {
-    it('should return 200 and health check result, when service-a replies', async () => {
-      serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
-
-      const response = await request(app.getHttpServer() as App).get('/health/service-a');
+      const response = await request(app.getHttpServer() as App).get('/health');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        status: 'ok',
-        info: { 'service-a': { status: 'up' } },
-        error: {},
-        details: { 'service-a': { status: 'up' } },
+        status: 'degraded',
+        services: {
+          gateway: 'ok',
+          rabbitmq: 'ok',
+          serviceA: 'ok',
+          serviceB: 'unavailable',
+          mongodb: 'ok',
+          redis: 'ok',
+        },
       });
     });
+  });
 
-    it('should return 503 and health check result, when service-a does not reply', async () => {
+  describe('GET /health/live', () => {
+    it('should return 200 and status ok, without checking any dependency', async () => {
+      const response = await request(app.getHttpServer() as App).get('/health/live');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ status: 'ok', service: 'gateway' });
+      expect(serviceAClient.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /health/ready', () => {
+    it('should return 200, when all critical dependencies are healthy even if redis is down', async () => {
+      redisClient.ping.mockRejectedValue(new Error('connection refused'));
+
+      const response = await request(app.getHttpServer() as App).get('/health/ready');
+
+      expect(response.status).toBe(200);
+      expect((response.body as IAggregatedHealth).services.redis).toBe('unavailable');
+    });
+
+    it('should return 503, when service-a is unavailable', async () => {
       serviceAClient.send.mockReturnValue(throwError(() => new Error('connection refused')));
 
-      const response = await request(app.getHttpServer() as App).get('/health/service-a');
+      const response = await request(app.getHttpServer() as App).get('/health/ready');
 
-      expect(response.status).toBe(503);
-      expect(response.body).toEqual({
-        status: 'error',
-        info: {},
-        error: { 'service-a': { message: 'connection refused', status: 'down' } },
-        details: { 'service-a': { message: 'connection refused', status: 'down' } },
-      });
-    });
-
-    it('should generate both response headers, when no tracing headers are sent by the client', async () => {
-      serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
-
-      const response = await request(app.getHttpServer() as App).get('/health/service-a');
-
-      expect(response.headers['x-correlation-id']).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-      expect(response.headers['x-request-id']).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
+      expect(response.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+      expect((response.body as IAggregatedHealth).services.serviceA).toBe('unavailable');
     });
   });
 });

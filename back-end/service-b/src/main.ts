@@ -1,11 +1,11 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { NestLoggerBridge } from '@task1/shared/logger/nest-logger.bridge';
+import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 
 import { AppModule } from './app.module';
 import rabbitmqConfig from './config/rabbitmq.config';
-import { LoggerService } from './core/logger/logger.service';
-import { NestLoggerBridge } from './core/logger/nest-logger.bridge';
 
 async function bootstrap(): Promise<void> {
   const { url, queue } = rabbitmqConfig();
@@ -21,20 +21,29 @@ async function bootstrap(): Promise<void> {
   });
 
   const loggerService = app.get(LoggerService);
-  app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'bootstrap')));
+  const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
+  app.useLogger(new NestLoggerBridge(bootstrapLogger));
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  try {
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
 
-  await app.listen();
+    await app.listen();
+  } catch (error) {
+    bootstrapLogger.fatal(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Application bootstrap failed',
+    );
+
+    throw error;
+  }
 }
 
-bootstrap().catch((error: unknown) => {
-  console.error(error);
+bootstrap().catch(() => {
   process.exitCode = 1;
 });

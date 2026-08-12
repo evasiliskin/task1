@@ -1,8 +1,0 @@
-export enum ErrorCategory {
-  AUTH = 'AUTH',
-  VALIDATION = 'VALIDATION',
-  INTERNAL = 'INTERNAL',
-  NOT_FOUND = 'NOT_FOUND',
-  CONFLICT = 'CONFLICT',
-  RATE_LIMIT = 'RATE_LIMIT',
-}

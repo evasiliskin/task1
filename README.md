@@ -48,9 +48,14 @@ pnpm dev:front-end
 ```
 
 - Front-end: http://localhost:4200
-- Gateway REST API: http://localhost:3000 (health checks at `/health/service-a`, `/health/service-b`)
+- Gateway REST API: http://localhost:3000 (aggregated health at `/health`, liveness at
+  `/health/live`, readiness at `/health/ready` — see `back-end/gateway/README.md` for details)
+- Gateway Swagger docs: http://localhost:3000/api-docs
 - RabbitMQ management UI: http://localhost:15672 (guest/guest)
 - `service-a`/`service-b`: internal only, reachable over RabbitMQ (not exposed to the browser)
+- MongoDB/Redis: internal only, used solely as health-check ping targets for the gateway (no
+  persistence or caching is implemented against them); set `MONGODB_URI`/`REDIS_URL` in
+  `back-end/gateway/.env` if running the gateway outside Docker
 
 ## Common tasks
 
@@ -150,7 +155,7 @@ pnpm docker:up
 Send a request with explicit IDs and see them echoed back:
 
 ```bash
-curl -i http://localhost:3000/health/service-a \
+curl -i http://localhost:3000/health/ready \
   -H "X-Correlation-ID: 11111111-1111-4111-8111-111111111111" \
   -H "X-Request-ID: 22222222-2222-4222-8222-222222222222"
 ```
@@ -165,7 +170,7 @@ To see the error path preserve the same IDs, stop `service-b` and repeat the req
 
 ```bash
 docker compose stop service-b
-curl -i http://localhost:3000/health/service-a \
+curl -i http://localhost:3000/health/ready \
   -H "X-Correlation-ID: 11111111-1111-4111-8111-111111111111"
 ```
 

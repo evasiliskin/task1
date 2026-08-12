@@ -62,12 +62,22 @@ today. `RabbitMqPingHealthIndicator` already implements the timeout
 (`rabbitmq-ping.health-indicator.ts:21`, `timeout(this.config.pingTimeoutMs)`)
 but nothing exercises it. No production code changes in this task.
 
+> **Correction (verified against the code on re-check):** the plan below
+> originally assumed a 2-arg `RabbitMqPingHealthIndicator` constructor. The
+> correlation-id/request-id effort (`2026-08-12-correlation-request-id-design.md`)
+> has since landed, and the real constructor is
+> `(healthIndicatorService, requestContextService, config)` — it also calls
+> `this.requestContextService.requireContext()` internally, so any test must
+> run through `RequestContextService.run(...)`. The step below is corrected
+> accordingly; see also Task 8's correction for requirement 13 logging, which
+> was descoped in the design doc for the same now-resolved reason.
+
 **Files:**
 - Modify: `back-end/gateway/src/health/rabbitmq-ping.health-indicator.spec.ts`
 
 **Interfaces:**
 - Consumes: `RabbitMqPingHealthIndicator` (existing, unchanged) — constructor
-  `(healthIndicatorService: HealthIndicatorService, config: ConfigType<typeof rabbitmqConfig>)`,
+  `(healthIndicatorService: HealthIndicatorService, requestContextService: RequestContextService, config: ConfigType<typeof rabbitmqConfig>)`,
   method `isHealthy(key: string, client: ClientProxy): Promise<HealthIndicatorResult>`.
 
 - [ ] **Step 1: Add the failing timeout test**
@@ -76,14 +86,19 @@ Add `NEVER` to the existing `rxjs` import at the top of the file (change
 `import { of, throwError } from 'rxjs';` to
 `import { NEVER, of, throwError } from 'rxjs';`), then add this test inside
 the existing `describe('RabbitMqPingHealthIndicator', ...)` block, after the
-three existing tests:
+existing tests (use the file's own `requestContextService`/`runWithinContext`
+helpers, not a bare constructor call):
 
 ```typescript
   it('should report the indicator as down, when the target service does not reply within the configured timeout', async () => {
     const expectedResult = { 'service-b': { status: 'down', message: 'timed out' } };
     downMock.mockReturnValue(expectedResult);
 
-    const shortTimeoutIndicator = new RabbitMqPingHealthIndicator(healthIndicatorService, {
+    const healthIndicatorService = {
+      check: vi.fn().mockReturnValue({ up: upMock, down: downMock }),
+    } as unknown as HealthIndicatorService;
+
+    const shortTimeoutIndicator = new RabbitMqPingHealthIndicator(healthIndicatorService, requestContextService, {
       pingTimeoutMs: 10,
     } as ConfigType<typeof rabbitmqConfig>);
 
@@ -91,7 +106,7 @@ three existing tests:
       send: vi.fn().mockReturnValue(NEVER),
     } as unknown as ClientProxy;
 
-    const result = await shortTimeoutIndicator.isHealthy('service-b', client);
+    const result = await runWithinContext(() => shortTimeoutIndicator.isHealthy('service-b', client));
 
     expect(result).toEqual(expectedResult);
     expect(downMock).toHaveBeenCalledWith(
@@ -855,6 +870,89 @@ Tasks 2–7. The old `HealthController` (still `/health/service-a`,
 `/health/service-b`) is left untouched and still works after this task —
 it's rewritten in Task 9.
 
+> **Correction — requirement 13 is no longer descoped.** The design doc's
+> "Decisions made during brainstorming" #3 skipped structured logging because
+> at the time no logging/correlation-id module existed. It has since landed
+> (`back-end/gateway/src/core/logger/` — `LoggerService.getLogger(source, channel)`
+> returns an `AppLogger` with `.error(fields, message)`; `back-end/gateway/src/core/request-context/`
+> — `RequestContextService.getCorrelationId()` / `.getRequestId()`, both
+> non-throwing, safe to call outside a request context, returning
+> `undefined` there). Requirement 13 asks for exactly this: log failed health
+> checks with service name, correlationId, requestId, error, and response
+> time. Implement it in `HealthCheckService` (not in each indicator — one
+> place, wrapping every indicator call, keeps this out of the six indicator
+> classes and out of the controller):
+>
+> - Constructor gains one more param: `private readonly loggerService: LoggerService`
+>   (from `../core/logger/logger.service`), and one field set in the
+>   constructor body: `private readonly logger = this.loggerService.getLogger('HealthCheckService')`
+>   (default `channel: 'http'` is correct here — these are HTTP-triggered checks).
+> - Log from `runAllChecks()`, after `executeIndicators()` resolves — not by
+>   wrapping the six functions passed to `this.terminus.check([...])`. Every
+>   existing/planned unit test in this file mocks `terminus.check` itself
+>   (`vi.fn().mockResolvedValue(...)`/`mockRejectedValue(...)`) and never
+>   actually invokes the callbacks passed to it, so per-indicator wrapping
+>   would be untestable dead code under this suite's established mocking
+>   convention. Instead, time the one call to `executeIndicators()` as a
+>   whole (one elapsed value per request — satisfies "response time if
+>   practical" without needing per-indicator instrumentation), then iterate
+>   the resolved `details` and log each one that is down:
+>   ```typescript
+>   private async runAllChecks(): Promise<AggregatedHealth> {
+>     const startedAt = Date.now();
+>     const raw = await this.executeIndicators();
+>     const responseTimeMs = Date.now() - startedAt;
+>
+>     this.logFailures(raw.details, responseTimeMs);
+>
+>     const services: AggregatedHealth['services'] = {
+>       gateway: raw.details.gateway?.status === 'up' ? 'ok' : 'unavailable',
+>       rabbitmq: raw.details.rabbitmq?.status === 'up' ? 'ok' : 'unavailable',
+>       serviceA: raw.details.serviceA?.status === 'up' ? 'ok' : 'unavailable',
+>       serviceB: raw.details.serviceB?.status === 'up' ? 'ok' : 'unavailable',
+>       mongodb: raw.details.mongodb?.status === 'up' ? 'ok' : 'unavailable',
+>       redis: raw.details.redis?.status === 'up' ? 'ok' : 'unavailable',
+>     };
+>
+>     const status: AggregatedHealth['status'] = Object.values(services).every((value) => value === 'ok')
+>       ? 'ok'
+>       : 'degraded';
+>
+>     return { status, services };
+>   }
+>
+>   private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
+>     const correlationId = this.requestContextService.getCorrelationId();
+>     const requestId = this.requestContextService.getRequestId();
+>
+>     Object.entries(details).forEach(([service, detail]) => {
+>       if (detail.status === 'down') {
+>         this.logger.error(
+>           { service, correlationId, requestId, error: detail.message, responseTimeMs },
+>           `health check failed for ${service}`,
+>         );
+>       }
+>     });
+>   }
+>   ```
+>   This needs `RequestContextService` injected too (import from
+>   `../core/request-context/request-context.service`) — add it as another
+>   constructor param. `executeIndicators()` itself is unchanged from the
+>   version below (plain lambdas, no wrapping).
+> - `health.module.ts` (Step 5 below) must import `LoggerModule` (from
+>   `../core/logger/logger.module`) — it is not `@Global()`, so `HealthModule`
+>   needs it explicitly. `RequestContextService` *is* provided by the
+>   `@Global()` `RequestContextModule` already imported at the app root, so no
+>   extra import is needed for it.
+> - Update the Step 1 test's `buildService()` helper to pass a stub
+>   `LoggerService` (`{ getLogger: vi.fn().mockReturnValue({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn(), trace: vi.fn() }) } as unknown as LoggerService`)
+>   and a real `new RequestContextService()` as the two extra constructor
+>   args, and add one new test: "should log the failure with service name,
+>   error, and response time, when a dependency is down" — assert the stub
+>   logger's `error` mock was called with an object containing
+>   `service: 'serviceB'` and `error: 'connection refused'` (build via
+>   `buildRejection(['serviceB'])`).
+
 **Files:**
 - Create: `back-end/gateway/src/health/health-check.service.ts`
 - Test: `back-end/gateway/src/health/health-check.service.spec.ts`
@@ -883,6 +981,9 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthCheckService as TerminusHealthCheckService } from '@nestjs/terminus';
 
+import { type LoggerService } from '../core/logger/logger.service';
+import { RequestContextService } from '../core/request-context/request-context.service';
+
 import { HealthCheckService } from './health-check.service';
 import { type GatewayHealthIndicator } from './indicators/gateway.health-indicator';
 import { type MongoHealthIndicator } from './indicators/mongo.health-indicator';
@@ -894,8 +995,20 @@ const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'mongodb', 'red
 
 const ALL_UP_DETAILS = Object.fromEntries(ALL_KEYS.map((key) => [key, { status: 'up' }]));
 
-function buildService(terminusCheck: ReturnType<typeof vi.fn>): HealthCheckService {
+function buildService(
+  terminusCheck: ReturnType<typeof vi.fn>,
+  loggerErrorMock: ReturnType<typeof vi.fn> = vi.fn(),
+): HealthCheckService {
   const terminus = { check: terminusCheck } as unknown as TerminusHealthCheckService;
+  const loggerService = {
+    getLogger: vi.fn().mockReturnValue({
+      error: loggerErrorMock,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+    }),
+  } as unknown as LoggerService;
 
   return new HealthCheckService(
     terminus,
@@ -906,6 +1019,8 @@ function buildService(terminusCheck: ReturnType<typeof vi.fn>): HealthCheckServi
     {} as RedisHealthIndicator,
     {} as ClientProxy,
     {} as ClientProxy,
+    new RequestContextService(),
+    loggerService,
   );
 }
 
@@ -1027,6 +1142,23 @@ describe('HealthCheckService', () => {
         services: { gateway: 'ok', rabbitmq: 'ok', serviceA: 'ok', serviceB: 'unavailable', mongodb: 'ok', redis: 'unavailable' },
       });
     });
+
+    it('should log the failure with service name and error, and not log for services that are up, when a dependency is down', async () => {
+      const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceB']));
+      const loggerErrorMock = vi.fn();
+
+      await buildService(terminusCheck, loggerErrorMock).getHealth();
+
+      expect(loggerErrorMock).toHaveBeenCalledTimes(1);
+      expect(loggerErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'serviceB',
+          error: 'connection refused',
+          responseTimeMs: expect.any(Number),
+        }),
+        expect.stringContaining('serviceB'),
+      );
+    });
   });
 
   describe('getReadiness', () => {
@@ -1084,6 +1216,10 @@ import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common'
 import { type ClientProxy } from '@nestjs/microservices';
 import { HealthCheckService as TerminusHealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
 
+import { type AppLogger } from '../core/logger/app-logger';
+import { LoggerService } from '../core/logger/logger.service';
+import { RequestContextService } from '../core/request-context/request-context.service';
+
 import { GatewayHealthIndicator } from './indicators/gateway.health-indicator';
 import { MongoHealthIndicator } from './indicators/mongo.health-indicator';
 import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator';
@@ -1107,6 +1243,8 @@ export interface AggregatedHealth {
 
 @Injectable()
 export class HealthCheckService {
+  private readonly logger: AppLogger;
+
   public constructor(
     private readonly terminus: TerminusHealthCheckService,
     private readonly gatewayIndicator: GatewayHealthIndicator,
@@ -1116,7 +1254,11 @@ export class HealthCheckService {
     private readonly redisIndicator: RedisHealthIndicator,
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-  ) {}
+    private readonly requestContextService: RequestContextService,
+    loggerService: LoggerService,
+  ) {
+    this.logger = loggerService.getLogger('HealthCheckService');
+  }
 
   public async getHealth(): Promise<AggregatedHealth> {
     return this.runAllChecks();
@@ -1138,7 +1280,11 @@ export class HealthCheckService {
   }
 
   private async runAllChecks(): Promise<AggregatedHealth> {
+    const startedAt = Date.now();
     const raw = await this.executeIndicators();
+    const responseTimeMs = Date.now() - startedAt;
+
+    this.logFailures(raw.details, responseTimeMs);
 
     const services: AggregatedHealth['services'] = {
       gateway: raw.details.gateway?.status === 'up' ? 'ok' : 'unavailable',
@@ -1179,6 +1325,23 @@ export class HealthCheckService {
       throw error;
     }
   }
+
+  // Requirement 13: structured logging for failed health checks — service
+  // name, correlationId, requestId, error, and the response time of the
+  // overall check cycle. One place, not duplicated across six indicators.
+  private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
+    const correlationId = this.requestContextService.getCorrelationId();
+    const requestId = this.requestContextService.getRequestId();
+
+    Object.entries(details).forEach(([service, detail]) => {
+      if (detail.status === 'down') {
+        this.logger.error(
+          { service, correlationId, requestId, error: detail.message, responseTimeMs },
+          `health check failed for ${service}`,
+        );
+      }
+    });
+  }
 }
 ```
 
@@ -1189,7 +1352,8 @@ Save as `back-end/gateway/src/health/health-check.service.ts`.
 ```bash
 pnpm --filter gateway test -- src/health/health-check.service.spec.ts
 ```
-Expected: PASS (11 tests).
+Expected: PASS (12 tests, including the new logging test from the requirement-13
+correction above).
 
 - [ ] **Step 5: Wire everything into `health.module.ts`**
 
@@ -1208,6 +1372,7 @@ import { MongoClient } from 'mongodb';
 import mongodbConfig from '../config/mongodb.config';
 import rabbitmqConfig from '../config/rabbitmq.config';
 import redisConfig from '../config/redis.config';
+import { LoggerModule } from '../core/logger/logger.module';
 
 import { HealthCheckService } from './health-check.service';
 import { HealthController } from './health.controller';
@@ -1226,6 +1391,7 @@ import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator';
 @Module({
   imports: [
     TerminusModule,
+    LoggerModule,
     ClientsModule.registerAsync([
       {
         name: SERVICE_B_RMQ_CLIENT,

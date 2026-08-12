@@ -25,6 +25,86 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Health Checks
+
+The gateway exposes three endpoints under `/health`:
+
+- `GET /health` — aggregated status of every dependency in one response. Always `200`; check the `status` field.
+- `GET /health/live` — liveness: is the gateway *process* running. Always `200`, no downstream calls.
+- `GET /health/ready` — readiness: can the gateway currently *serve requests*. `200` when ready, `503` when a critical dependency is down.
+
+### Why liveness and readiness are different
+
+Liveness answers "is the process alive" — a process manager (or Docker's own `HEALTHCHECK`) uses this to decide whether to restart the container. It never calls out to anything, because a slow dependency should never cause a healthy process to be killed and restarted.
+
+Readiness answers "can this process currently do its job" — it's what should gate traffic. A gateway with a dead RabbitMQ connection is alive but not ready: restarting it would not help, but it also shouldn't receive requests it cannot fulfill.
+
+### Critical vs informational dependencies
+
+`/health/ready` treats **RabbitMQ, Service A, and Service B** as critical — the gateway's only purpose is routing requests to those services through the broker, so if any of them is unreachable, `/health/ready` returns `503`.
+
+**MongoDB and Redis** are reported for visibility but are informational only — nothing in the gateway's request path uses them today (there is no persistence layer or caching configured), so their failure never causes `/health/ready` to fail.
+
+### Why the gateway never accesses Service A/B's databases directly
+
+The gateway has no visibility into, or dependency on, Service A/B's internal storage. Checking their databases directly would violate the module boundary (each service owns its own persistence) and would report "healthy" even if the service's own RabbitMQ consumer had crashed — the opposite of what a caller needs to know. Instead, the gateway sends a dedicated `health.check` RabbitMQ message to each service and waits (with a timeout) for a reply — the same transport and pattern used for every other inter-service call, exercising the actual path a real request would take.
+
+### Example responses
+
+`GET /health` — everything healthy:
+
+```json
+{
+  "status": "ok",
+  "services": {
+    "gateway": "ok",
+    "rabbitmq": "ok",
+    "serviceA": "ok",
+    "serviceB": "ok",
+    "mongodb": "ok",
+    "redis": "ok"
+  }
+}
+```
+
+`GET /health` — Service B unreachable:
+
+```json
+{
+  "status": "degraded",
+  "services": {
+    "gateway": "ok",
+    "rabbitmq": "ok",
+    "serviceA": "ok",
+    "serviceB": "unavailable",
+    "mongodb": "ok",
+    "redis": "ok"
+  }
+}
+```
+
+`GET /health/live`:
+
+```json
+{ "status": "ok", "service": "gateway" }
+```
+
+`GET /health/ready` — not ready (`503`, Service A down):
+
+```json
+{
+  "status": "degraded",
+  "services": {
+    "gateway": "ok",
+    "rabbitmq": "ok",
+    "serviceA": "unavailable",
+    "serviceB": "ok",
+    "mongodb": "ok",
+    "redis": "ok"
+  }
+}
+```
+
 ## Project setup
 
 ```bash
