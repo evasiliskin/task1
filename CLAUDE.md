@@ -64,24 +64,6 @@ Avoid:
 
 ---
 
-# Architecture
-
-Current architecture:
-
-```
-HTTP
-    │
-Controller
-    │
-Application Service
-    │
-PostgreSQL
-```
-
-Do not introduce additional architectural layers unless explicitly requested.
-
----
-
 # Layer Responsibilities
 
 ## Controllers
