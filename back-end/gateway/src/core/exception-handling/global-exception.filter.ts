@@ -9,7 +9,6 @@ import {
 import type { Request, Response } from 'express';
 
 import { RequestContextService } from '../request-context/request-context.service';
-import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context/request-context.types';
 
 import { ErrorFormatService } from './error-format.service';
 import { IApiErrorResponse } from './error-response.types';
