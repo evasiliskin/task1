@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
+import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 import { Redis } from 'ioredis';
 
 import redisConfig from '../../config/redis.config.js';
@@ -9,6 +10,7 @@ import { RedisConnectionService } from './redis-connection.service.js';
 
 @Global()
 @Module({
+  imports: [LoggerModule],
   providers: [
     RedisConnectionService,
     {
