@@ -1,6 +1,6 @@
 /**
  * Starter default: points at the gateway running locally via
- * `pnpm --filter gateway run start:dev` (see back-end/gateway/.env.example).
+ * `pnpm --filter api-gateway run start:dev` (see back-end/api-gateway/.env.example).
  *
  * For a real deployment, wire this up with Angular's file-replacement
  * environments (`ng generate environments`) or a runtime-config approach -

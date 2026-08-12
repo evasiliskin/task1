@@ -1,5 +1,5 @@
 {
-  "name": "gateway",
+  "name": "api-gateway",
   "version": "0.0.1",
   "description": "HTTP API gateway - public REST entrypoint that talks to internal NestJS microservices",
   "author": "",

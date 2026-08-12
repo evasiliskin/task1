@@ -6,7 +6,7 @@ pnpm workspace monorepo: an Angular front-end and NestJS microservices back-end.
 task1/
 ├── front-end/              Angular app (talks only to the gateway's REST API)
 └── back-end/
-    ├── gateway/             Public HTTP entrypoint - REST API, forwards to microservices over RabbitMQ
+    ├── api-gateway/         Public HTTP entrypoint - REST API, forwards to microservices over RabbitMQ
     ├── service-a/           Internal microservice (RabbitMQ transport only, no HTTP)
     └── service-b/           Internal microservice (RabbitMQ transport only, no HTTP)
 ```
@@ -37,25 +37,25 @@ pnpm install
 pnpm docker:up
 
 # or run services individually against a local RabbitMQ:
-cp back-end/gateway/.env.example back-end/gateway/.env
+cp back-end/api-gateway/.env.example back-end/api-gateway/.env
 cp back-end/service-a/.env.example back-end/service-a/.env
 cp back-end/service-b/.env.example back-end/service-b/.env
 
 pnpm dev:service-b
 pnpm dev:service-a
-pnpm dev:gateway
+pnpm dev:api-gateway
 pnpm dev:front-end
 ```
 
 - Front-end: http://localhost:4200
 - Gateway REST API: http://localhost:3000 (aggregated health at `/health`, liveness at
-  `/health/live`, readiness at `/health/ready` — see `back-end/gateway/README.md` for details)
+  `/health/live`, readiness at `/health/ready` — see `back-end/api-gateway/README.md` for details)
 - Gateway Swagger docs: http://localhost:3000/api-docs
 - RabbitMQ management UI: http://localhost:15672 (guest/guest)
 - `service-a`/`service-b`: internal only, reachable over RabbitMQ (not exposed to the browser)
 - MongoDB/Redis: internal only, used solely as health-check ping targets for the gateway (no
   persistence or caching is implemented against them); set `MONGODB_URI`/`REDIS_URL` in
-  `back-end/gateway/.env` if running the gateway outside Docker
+  `back-end/api-gateway/.env` if running the gateway outside Docker
 
 ## Common tasks
 
@@ -74,7 +74,7 @@ pnpm dev:front-end
 - **Testing**: Vitest for all three NestJS services (`*.spec.ts` unit tests, `*.int.spec.ts`
   HTTP-integration tests for the gateway via `supertest`).
 - **Prettier**: one shared config at the repo root (`.prettierrc.mjs`), applies to every package.
-- **ESLint**: `back-end/gateway`, `back-end/service-a`, and `back-end/service-b` each have their
+- **ESLint**: `back-end/api-gateway`, `back-end/service-a`, and `back-end/service-b` each have their
   own `eslint.config.mjs` (typescript-eslint + import ordering + security/sonarjs/unicorn rules),
   pointed at each app's own `tsconfig.json`. `front-end` doesn't use this config - it's
   Node/NestJS-specific tooling; add `@angular-eslint` separately if you want linting there.

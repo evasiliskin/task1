@@ -65,11 +65,11 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  gateway:
-    container_name: task1-gateway
+  api-gateway:
+    container_name: task1-api-gateway
     build:
       context: .
-      dockerfile: back-end/gateway/Dockerfile
+      dockerfile: back-end/api-gateway/Dockerfile
       target: runtime
     restart: unless-stopped
     ports:
@@ -98,4 +98,4 @@ services:
     ports:
       - "4200:80"
     depends_on:
-      - gateway
+      - api-gateway

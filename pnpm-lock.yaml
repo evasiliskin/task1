@@ -15,7 +15,7 @@ importers:
         specifier: ^3.4.2
         version: 3.9.6
 
-  back-end/gateway:
+  back-end/api-gateway:
     dependencies:
       '@nestjs/common':
         specifier: ^11.0.1
@@ -167,7 +167,7 @@ importers:
         version: 1.5.10(@swc/core@1.15.47)(rollup@4.62.4)
       vite-tsconfig-paths:
         specifier: ^5.0.1
-        version: 5.1.4(typescript@5.7.3)(vite@5.4.21(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2))
+        version: 5.1.4(typescript@5.7.3)(vite@6.4.2(@types/node@24.13.3)(jiti@1.21.7)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)(yaml@2.9.0))
       vitest:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)
@@ -285,7 +285,7 @@ importers:
         version: 1.5.10(@swc/core@1.15.47)(rollup@4.62.4)
       vite-tsconfig-paths:
         specifier: ^5.0.1
-        version: 5.1.4(typescript@5.7.3)(vite@6.4.2(@types/node@24.13.3)(jiti@1.21.7)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)(yaml@2.9.0))
+        version: 5.1.4(typescript@5.7.3)(vite@5.4.21(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2))
       vitest:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@24.13.3)(less@4.2.2)(sass@1.85.0)(terser@5.49.2)
