@@ -44,6 +44,8 @@ COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/back-end/service-a/dist ./dist
 COPY --chown=node:node back-end/service-a/package.json ./package.json
 
+RUN mkdir -p /data/archives && chown node:node /data/archives
+
 USER node
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
