@@ -14,6 +14,4 @@ export interface IApiErrorResponse {
   error: IApiErrorBody;
   correlationId: string;
   requestId: string;
-  timestamp: string;
-  path: string;
 }

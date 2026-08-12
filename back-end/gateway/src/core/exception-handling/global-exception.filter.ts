@@ -42,8 +42,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       error,
       correlationId,
       requestId,
-      timestamp: new Date().toISOString(),
-      path: request.url,
     };
 
     response.status(statusCode).json(body);
