@@ -30,7 +30,12 @@ Every request through this chain carries a `correlationId` (stable for the whole
 
 ## Getting started
 
+Node version is pinned in [`.nvmrc`](.nvmrc) (kept in sync with `engines.node` in
+[`package.json`](package.json) and the Docker images). Switch to it before installing:
+
 ```bash
+nvm use
+
 pnpm install
 
 # start RabbitMQ + service-a + service-b + gateway + front-end

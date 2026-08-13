@@ -10,8 +10,6 @@ export interface IAppErrorOptions {
   cause?: unknown;
 }
 
-type OptionalErrorOptions = Pick<IAppErrorOptions, 'cause' | 'path' | 'params'>;
-
 export abstract class AppError extends Error {
   public override readonly cause?: Error;
   public readonly code: string;
@@ -55,28 +53,5 @@ export abstract class AppError extends Error {
 
   protected static toError(value: unknown): Error {
     return value instanceof Error ? value : new Error(String(value));
-  }
-
-  protected static buildOptions(
-    base: Pick<IAppErrorOptions, 'code' | 'category'> & Partial<OptionalErrorOptions>,
-    optional?: Partial<OptionalErrorOptions>,
-  ): IAppErrorOptions {
-    const result: IAppErrorOptions = { ...base };
-
-    if (optional !== undefined) {
-      if (optional.cause !== undefined) {
-        result.cause = optional.cause;
-      }
-
-      if (optional.path !== undefined) {
-        result.path = optional.path;
-      }
-
-      if (optional.params !== undefined) {
-        result.params = optional.params;
-      }
-    }
-
-    return result;
   }
 }

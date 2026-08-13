@@ -5,10 +5,10 @@ export class MissingRequestContextError extends InternalError {
   public constructor() {
     super(
       'RequestContextService was accessed outside of an active request context',
-      MissingRequestContextError.buildOptions({
+      {
         code: 'MISSING_REQUEST_CONTEXT',
         category: ErrorCategory.INTERNAL,
-      }),
+      },
     );
   }
 }

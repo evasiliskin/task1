@@ -4,11 +4,11 @@ export class InvalidDateHourError extends ValidationError {
   public constructor(dateHour: string) {
     super(
       `Invalid dateHour format: "${dateHour}" (expected YYYY-MM-DD-H, hour 0-23)`,
-      InvalidDateHourError.buildOptions({
+      {
         code: 'INVALID_DATE_HOUR',
         category: ErrorCategory.VALIDATION,
         params: { dateHour },
-      }),
+      },
     );
   }
 }
@@ -20,12 +20,12 @@ export class ArchiveDownloadError extends AppError {
 
     super(
       message,
-      ArchiveDownloadError.buildOptions({
+      {
         code: 'ARCHIVE_DOWNLOAD_FAILED',
         category: ErrorCategory.EXTERNAL,
         params: errorParameters,
         cause,
-      }),
+      },
     );
   }
 }
