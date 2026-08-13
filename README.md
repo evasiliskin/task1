@@ -26,15 +26,16 @@ task1/
 ## Architecture
 
 The gateway is the only HTTP surface. It receives REST requests, validates them, and forwards to
-the internal microservices over NestJS's RabbitMQ transport using `ClientProxy` /
-`@MessagePattern`. `service-a` and `service-b` expose no HTTP at all — they're reachable only as
-RabbitMQ consumers.
+the internal microservices over NestJS's RabbitMQ transport — request/reply RPC (`ClientProxy.send`
+/ `@MessagePattern`) for queries, fire-and-forget commands and lifecycle events (`ClientProxy.emit`
+/ `@EventPattern`) for imports and cross-service notifications. `service-a` and `service-b` expose
+no HTTP at all — they're reachable only as RabbitMQ consumers.
 
 ```
 Client
       │  HTTP (REST)
       ▼
-   gateway  ──RabbitMQ RPC──▶  service-a  ──RabbitMQ RPC──▶  service-b
+   gateway  ──RabbitMQ──▶  service-a  ──RabbitMQ──▶  service-b
 ```
 
 Every request through this chain carries a `correlationId` (stable for the whole flow) and a
@@ -160,7 +161,7 @@ gateway's REST API. Full design: `docs/superpowers/specs/2026-08-12-github-archi
 ### Data flow
 
 ```
-Client --HTTP--> gateway --RabbitMQ RPC--> service-a --gunzip/parse/validate--> MongoDB (events)
+Client --HTTP--> gateway --RabbitMQ emit--> service-a --gunzip/parse/validate--> MongoDB (events)
                                                 |
                                                 +--RabbitMQ emit (lifecycle events)--> service-b
                                                                                           |
@@ -168,6 +169,12 @@ Client --HTTP--> gateway --RabbitMQ RPC--> service-a --gunzip/parse/validate--> 
                                                                                           |
                                                                           RedisTimeSeries (metrics)
 ```
+
+The trigger itself (`POST /imports`, `POST /imports/upload`) is a fire-and-forget RabbitMQ `emit` —
+the gateway returns immediately (`202`/`201`) once service-a has accepted the command, not once the
+import finishes; poll `GET /imports/:importId` (RabbitMQ RPC) for status. `GET /events`, `GET
+/logs`, `GET /stats`, and `GET /reports/pdf` are RabbitMQ RPC (`.send`) — the gateway blocks until
+the downstream service replies.
 
 `service-a` and `service-b` are RMQ-only — no HTTP adapter, reachable only through the gateway.
 Uploaded archives and generated PDF reports move as file bytes over Docker-Compose-managed shared
@@ -225,9 +232,12 @@ ever queries its own collections — cross-service Mongo access never happens.
 lifecycle events — `github.import.started`, `.completed`, `.failed` — carrying metadata only
 (counts, ids, timestamps; never event payloads). `service-b` consumes all three idempotently
 (unique `{importId, status}` index makes redelivery a no-op) into its own `processing-logs`
-collection, manually acking after a successful write and nacking (bounded retry, then
-dead-letter) on failure. Consumer concurrency is bounded via `prefetchCount` — never unbounded
-parallel handling.
+collection. On a write failure it always acks the original message, then manually re-publishes it
+to the same queue with an incremented retry-count header (up to `RABBITMQ_MAX_RETRIES`, default 5)
+or, once that's exhausted, to the dead-letter queue (`service_b_queue.dlq`) — a deliberate
+application-level retry rather than RabbitMQ's own nack/requeue. A message that fails schema
+validation is acked and dropped (logged, never retried) since redelivery can't fix a malformed
+payload. Consumer concurrency is bounded via `prefetchCount` — never unbounded parallel handling.
 
 ### RedisTimeSeries metrics
 
