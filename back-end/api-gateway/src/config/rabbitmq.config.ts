@@ -6,6 +6,7 @@ const rabbitmqConfigSchema = z.object({
   serviceBQueue: z.string().min(1).default('service_b_queue'),
   serviceAQueue: z.string().min(1).default('service_a_queue'),
   pingTimeoutMs: z.coerce.number().int().positive().default(3000),
+  rpcTimeoutMs: z.coerce.number().int().positive().default(10_000),
 });
 
 export type RabbitmqConfiguration = z.infer<typeof rabbitmqConfigSchema>;
@@ -16,5 +17,6 @@ export default registerAs('rabbitmq', (): RabbitmqConfiguration =>
     serviceBQueue: process.env.RABBITMQ_SERVICE_B_QUEUE,
     serviceAQueue: process.env.RABBITMQ_SERVICE_A_QUEUE,
     pingTimeoutMs: process.env.RABBITMQ_PING_TIMEOUT_MS,
+    rpcTimeoutMs: process.env.RABBITMQ_RPC_TIMEOUT_MS,
   }),
 );

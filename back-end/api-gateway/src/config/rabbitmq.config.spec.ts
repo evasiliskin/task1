@@ -13,12 +13,14 @@ describe('rabbitmqConfig', () => {
       delete process.env.RABBITMQ_SERVICE_B_QUEUE;
       delete process.env.RABBITMQ_SERVICE_A_QUEUE;
       delete process.env.RABBITMQ_PING_TIMEOUT_MS;
+      delete process.env.RABBITMQ_RPC_TIMEOUT_MS;
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://guest:guest@localhost:5672',
         serviceBQueue: 'service_b_queue',
         serviceAQueue: 'service_a_queue',
         pingTimeoutMs: 3000,
+        rpcTimeoutMs: 10_000,
       });
     });
   });
@@ -29,12 +31,14 @@ describe('rabbitmqConfig', () => {
       process.env.RABBITMQ_SERVICE_B_QUEUE = 'custom_service_b_queue';
       process.env.RABBITMQ_SERVICE_A_QUEUE = 'custom_service_a_queue';
       process.env.RABBITMQ_PING_TIMEOUT_MS = '5000';
+      process.env.RABBITMQ_RPC_TIMEOUT_MS = '15000';
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://user:pass@rabbit-host:5672',
         serviceBQueue: 'custom_service_b_queue',
         serviceAQueue: 'custom_service_a_queue',
         pingTimeoutMs: 5000,
+        rpcTimeoutMs: 15_000,
       });
     });
   });
@@ -60,6 +64,12 @@ describe('rabbitmqConfig', () => {
 
     it('should throw, when RABBITMQ_PING_TIMEOUT_MS is not a positive number', () => {
       process.env.RABBITMQ_PING_TIMEOUT_MS = '-1';
+
+      expect(() => rabbitmqConfig()).toThrow();
+    });
+
+    it('should throw, when RABBITMQ_RPC_TIMEOUT_MS is not a positive number', () => {
+      process.env.RABBITMQ_RPC_TIMEOUT_MS = '-1';
 
       expect(() => rabbitmqConfig()).toThrow();
     });

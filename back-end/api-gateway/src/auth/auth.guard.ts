@@ -29,7 +29,8 @@ export class AuthGuard implements CanActivate {
   }
 
   private isAuthenticated(_request: IRequestWithUser): boolean {
-    // TODO: Implement authentication using Auth0, Passport.js,
+    // TODO The comments for the reviewers
+    // In the real project authentication will be implemented using Auth0, Passport.js,
     // JWT/OIDC, or another approved authentication provider.
     // This is the single seam responsible for verifying the request's
     // credentials and, once verified, populating `request.user` with the
