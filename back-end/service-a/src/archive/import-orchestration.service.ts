@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 
 import { MetricsService } from '../infra/redis/metrics.service.js';
 
@@ -10,6 +12,8 @@ import { type ImportResult } from './processing/process-archive.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { ArchiveProcessingService } from './upload/archive-processing.service.js';
 
+const EMIT_FAILED_LOG = 'Failed to publish lifecycle event';
+
 @Injectable()
 export class ImportOrchestrationService {
   public constructor(
@@ -18,7 +22,10 @@ export class ImportOrchestrationService {
     private readonly importRunTracker: ImportRunTracker,
     private readonly archiveDownloadService: ArchiveDownloadService,
     private readonly archiveProcessingService: ArchiveProcessingService,
-  ) {}
+    loggerService: LoggerService,
+  ) {
+    this.logger = loggerService.getLogger('ImportOrchestrationService');
+  }
 
   public importDownload(
     dateHour: string,
@@ -46,13 +53,22 @@ export class ImportOrchestrationService {
     );
   }
 
+  private readonly logger: AppLogger;
+
   private buildDependencies(): IImportArchiveDependencies {
     return {
       downloadArchive: (dateHour) => this.archiveDownloadService.download(dateHour),
       processArchive: (filePath, importId) =>
         this.archiveProcessingService.process(filePath, importId),
       emitEvent: (pattern, payload) => {
-        this.serviceBClient.emit(pattern, payload);
+        this.serviceBClient.emit(pattern, payload).subscribe({
+          error: (error: unknown) => {
+            this.logger.warn(
+              { pattern, error: error instanceof Error ? error.message : String(error) },
+              EMIT_FAILED_LOG,
+            );
+          },
+        });
       },
       recordMetric: (key, value) => this.metricsService.recordMetric(key, value),
       recordImportStarted: (importId, source, startedAt) =>

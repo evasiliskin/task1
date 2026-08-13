@@ -111,8 +111,11 @@ describe('ImportEventsController', () => {
       expect(ack).toHaveBeenCalledWith(message);
     });
 
-    it('should dead-letter the message and ack the original, when the repository write fails at maxRetries', async () => {
-      const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
+    it('should dead-letter the message and record a queryable dead-lettered log entry, when the repository write fails at maxRetries', async () => {
+      const upsertLog = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('connection refused'))
+        .mockResolvedValueOnce(undefined);
       const controller = buildController(upsertLog);
       const { context, message, ack, sendToQueue, assertQueue } = buildContext({
         'x-retry-count': 5,
@@ -124,6 +127,25 @@ describe('ImportEventsController', () => {
       expect(sendToQueue).toHaveBeenCalledWith('service_b_queue.dlq', message.content, {
         headers: { 'x-retry-count': 6 },
       });
+      expect(upsertLog).toHaveBeenCalledTimes(2);
+      expect(upsertLog).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          importId,
+          status: 'dead-lettered',
+          errorInfo: { reason: 'connection refused' },
+        }),
+      );
+      expect(ack).toHaveBeenCalledWith(message);
+    });
+
+    it('should still ack the original message without throwing, when both the original write and the dead-letter log write fail', async () => {
+      const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
+      const controller = buildController(upsertLog);
+      const { context, message, ack } = buildContext({ 'x-retry-count': 5 });
+
+      await expect(controller.handleImportStarted(validPayload, context)).resolves.toBeUndefined();
+      expect(upsertLog).toHaveBeenCalledTimes(2);
       expect(ack).toHaveBeenCalledWith(message);
     });
 

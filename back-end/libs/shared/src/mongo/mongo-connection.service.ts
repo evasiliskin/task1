@@ -1,8 +1,8 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type MongoClient } from 'mongodb';
 
-import { MONGO_CLIENT } from '../infra-clients.tokens.js';
+import { MONGO_CLIENT } from '../infra/client-tokens.js';
+import { LoggerService } from '../logger/rmq/logger.service.js';
 
 @Injectable()
 export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {

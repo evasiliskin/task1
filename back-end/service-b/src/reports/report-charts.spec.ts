@@ -31,7 +31,7 @@ describe('drawSummarySection', () => {
       timeSeries: [],
     };
 
-    drawSummarySection(doc as never, stats);
+    drawSummarySection(doc as never, stats, true);
 
     expect(doc.text).toHaveBeenCalledWith('Archives processed: 3');
     expect(doc.text).toHaveBeenCalledWith('Events processed: 300');
@@ -52,9 +52,41 @@ describe('drawSummarySection', () => {
       timeSeries: [],
     };
 
-    drawSummarySection(doc as never, stats);
+    drawSummarySection(doc as never, stats, true);
 
     expect(doc.text).toHaveBeenCalledWith('Processing duration: n/a');
+  });
+
+  it('should write a report-scope line, when called with an aggregate-scope flag', () => {
+    const doc = buildFakeDoc();
+    const stats: IStatsResult = {
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+    };
+
+    drawSummarySection(doc as never, stats, true);
+
+    expect(doc.text).toHaveBeenCalledWith('Report scope: all imports');
+  });
+
+  it('should write a single-import report-scope line, when called with isAggregate false', () => {
+    const doc = buildFakeDoc();
+    const stats: IStatsResult = {
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+    };
+
+    drawSummarySection(doc as never, stats, false);
+
+    expect(doc.text).toHaveBeenCalledWith('Report scope: single import');
   });
 });
 
@@ -62,29 +94,51 @@ describe('drawEventsOverTimeChart', () => {
   it('should write a "no data" message and draw no lines, when the series is empty', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
 
-    drawEventsOverTimeChart(doc as never, []);
+    drawEventsOverTimeChart(doc as never, [], true);
 
     expect(doc.text).toHaveBeenCalledWith('No data available to draw a chart.');
     expect(doc.moveTo).not.toHaveBeenCalled();
   });
 
-  it('should draw the axis line and a single point marker, when only one point is given', () => {
+  it('should title the chart "Events Processed Over Time" and draw axis min/max labels, when isAggregate is true and multiple points are given', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
+    const timeSeries = [
+      { timestamp: '2026-08-11T00:00:00.000Z', value: 10 },
+      { timestamp: '2026-08-11T00:01:00.000Z', value: 20 },
+      { timestamp: '2026-08-11T00:02:00.000Z', value: 5 },
+    ];
+
+    drawEventsOverTimeChart(doc as never, timeSeries, true);
+
+    expect(doc.text).toHaveBeenCalledWith('Events Processed Over Time', { underline: true });
+    expect(doc.text).toHaveBeenCalledWith('20');
+    expect(doc.text).toHaveBeenCalledWith('0');
+  });
+
+  it('should title the chart "Processing Duration (this import)" instead of drawing axis labels, when isAggregate is false and a single point is given', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
-    drawEventsOverTimeChart(doc as never, [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }]);
+    drawEventsOverTimeChart(
+      doc as never,
+      [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }],
+      false,
+    );
 
-    expect(doc.text).not.toHaveBeenCalledWith('No data available to draw a chart.');
-    expect(doc.moveTo).toHaveBeenCalledTimes(1);
-    expect(doc.lineTo).toHaveBeenCalledTimes(1);
-    expect(doc.stroke).toHaveBeenCalledTimes(1);
+    expect(doc.text).toHaveBeenCalledWith('Processing Duration (this import)', {
+      underline: true,
+    });
+    expect(doc.text).not.toHaveBeenCalledWith('10');
     expect(doc.circle).toHaveBeenCalledTimes(1);
-    expect(doc.fill).toHaveBeenCalledWith('black');
   });
 
   it('should advance doc.y below the fixed-height chart area, when only one point is given', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
-    drawEventsOverTimeChart(doc as never, [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }]);
+    drawEventsOverTimeChart(
+      doc as never,
+      [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }],
+      true,
+    );
 
     expect(doc.y).toBe(100 + 120 + 20);
   });
@@ -97,7 +151,7 @@ describe('drawEventsOverTimeChart', () => {
       { timestamp: '2026-08-11T00:02:00.000Z', value: 5 },
     ];
 
-    drawEventsOverTimeChart(doc as never, timeSeries);
+    drawEventsOverTimeChart(doc as never, timeSeries, true);
 
     expect(doc.moveTo).toHaveBeenCalledTimes(2);
     expect(doc.lineTo).toHaveBeenCalledTimes(3);
@@ -107,10 +161,14 @@ describe('drawEventsOverTimeChart', () => {
   it('should advance doc.y below the fixed-height chart area, when points are drawn', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
 
-    drawEventsOverTimeChart(doc as never, [
-      { timestamp: '2026-08-11T00:00:00.000Z', value: 10 },
-      { timestamp: '2026-08-11T00:01:00.000Z', value: 20 },
-    ]);
+    drawEventsOverTimeChart(
+      doc as never,
+      [
+        { timestamp: '2026-08-11T00:00:00.000Z', value: 10 },
+        { timestamp: '2026-08-11T00:01:00.000Z', value: 20 },
+      ],
+      true,
+    );
 
     expect(doc.y).toBe(100 + 120 + 20);
   });

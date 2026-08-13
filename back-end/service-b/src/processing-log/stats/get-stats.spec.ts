@@ -176,4 +176,50 @@ describe('getStats', () => {
     expect(result.processingDurationMs).toBeUndefined();
     expect(result.timeSeries).toEqual([]);
   });
+
+  it('should still read Redis metrics and resolve with zeroed Mongo stats instead of throwing, when the Mongo aggregation fails and no importId is given', async () => {
+    const aggregate = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockRejectedValue(new Error('connection refused')),
+    });
+    const collection = { aggregate } as unknown as Collection<IProcessingLogDocument>;
+    const timeSeries = [{ timestamp: '2026-08-11T00:00:00.000Z', value: 100 }];
+    const { reader, readAverageProcessingDuration, readEventsTimeSeries } = buildMetricsReader(
+      15_000,
+      timeSeries,
+    );
+
+    const result = await getStats(collection, reader);
+
+    expect(result).toEqual({
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      processingDurationMs: 15_000,
+      timeSeries,
+    });
+    expect(readAverageProcessingDuration).toHaveBeenCalled();
+    expect(readEventsTimeSeries).toHaveBeenCalled();
+  });
+
+  it('should resolve with zeroed stats instead of throwing, when the Mongo aggregation fails for a specific importId', async () => {
+    const aggregate = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockRejectedValue(new Error('connection refused')),
+    });
+    const find = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    const collection = { aggregate, find } as unknown as Collection<IProcessingLogDocument>;
+    const { reader } = buildMetricsReader(undefined, []);
+
+    const result = await getStats(collection, reader, importId);
+
+    expect(result).toEqual({
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+    });
+  });
 });

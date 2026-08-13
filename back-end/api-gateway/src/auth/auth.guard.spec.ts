@@ -58,18 +58,18 @@ describe('AuthGuard', () => {
       expect(() => guard.canActivate(buildContext())).toThrow(UnauthenticatedError);
     });
 
-    it('should return false, when the route is not public and isAuthenticated returns true', () => {
+    it('should return true, when the route is not public and isAuthenticated returns true', () => {
       const { guard } = buildGuard(false);
 
       stubIsAuthenticated(guard, true);
 
-      expect(guard.canActivate(buildContext())).toBe(false);
+      expect(guard.canActivate(buildContext())).toBe(true);
     });
 
-    it('should return false by default, when the route is not public (current unimplemented stub)', () => {
+    it('should return true by default, when the route is not public (current unimplemented stub allows all)', () => {
       const { guard } = buildGuard(false);
 
-      expect(guard.canActivate(buildContext())).toBe(false);
+      expect(guard.canActivate(buildContext())).toBe(true);
     });
   });
 

@@ -1,12 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { MongoConnectionService } from '@task1/shared/mongo/mongo-connection.service';
 import { MongoClient } from 'mongodb';
 
 import mongodbConfig from '../../config/mongodb.config.js';
 import { MONGO_CLIENT } from '../infra-clients.tokens.js';
-
-import { MongoConnectionService } from './mongo-connection.service.js';
 
 @Global()
 @Module({

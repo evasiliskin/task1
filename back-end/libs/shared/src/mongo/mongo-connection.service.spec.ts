@@ -1,9 +1,10 @@
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
-import { type Redis } from 'ioredis';
+import { type MongoClient } from 'mongodb';
 
-import { RedisConnectionService } from './redis-connection.service.js';
+import { type LoggerService } from '../logger/rmq/logger.service.js';
 
-describe('RedisConnectionService', () => {
+import { MongoConnectionService } from './mongo-connection.service.js';
+
+describe('MongoConnectionService', () => {
   let infoMock: ReturnType<typeof vi.fn>;
   let loggerService: LoggerService;
 
@@ -15,43 +16,43 @@ describe('RedisConnectionService', () => {
   });
 
   describe('onModuleInit', () => {
-    it('should connect the Redis client and log success, when initialization succeeds', async () => {
+    it('should connect the Mongo client and log success, when initialization succeeds', async () => {
       const client = {
         connect: vi.fn().mockResolvedValue(undefined),
-        quit: vi.fn(),
-      } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+        close: vi.fn(),
+      } as unknown as MongoClient;
+      const service = new MongoConnectionService(client, loggerService);
 
       await service.onModuleInit();
 
       // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
       expect(client.connect).toHaveBeenCalledTimes(1);
-      expect(infoMock).toHaveBeenCalledWith({}, 'Connected to Redis');
+      expect(infoMock).toHaveBeenCalledWith({}, 'Connected to MongoDB');
     });
 
-    it('should propagate the error, when the Redis client fails to connect', async () => {
+    it('should propagate the error, when the Mongo client fails to connect', async () => {
       const client = {
         connect: vi.fn().mockRejectedValue(new Error('connection refused')),
-        quit: vi.fn(),
-      } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+        close: vi.fn(),
+      } as unknown as MongoClient;
+      const service = new MongoConnectionService(client, loggerService);
 
       await expect(service.onModuleInit()).rejects.toThrow('connection refused');
     });
   });
 
   describe('onModuleDestroy', () => {
-    it('should gracefully close the Redis client, when destroyed', async () => {
+    it('should close the Mongo client, when destroyed', async () => {
       const client = {
         connect: vi.fn(),
-        quit: vi.fn().mockResolvedValue('OK'),
-      } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MongoClient;
+      const service = new MongoConnectionService(client, loggerService);
 
       await service.onModuleDestroy();
 
       // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
-      expect(client.quit).toHaveBeenCalledTimes(1);
+      expect(client.close).toHaveBeenCalledTimes(1);
     });
   });
 });

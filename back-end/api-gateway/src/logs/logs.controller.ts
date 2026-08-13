@@ -32,7 +32,11 @@ export class LogsController {
   @Get()
   @ApiOperation({ summary: 'Search processing logs with filters and cursor pagination' })
   @ApiQuery({ name: 'importId', required: false, description: 'Import run UUID' })
-  @ApiQuery({ name: 'status', required: false, description: 'started | completed | failed' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'started | completed | failed | dead-lettered',
+  })
   @ApiQuery({ name: 'from', required: false, description: 'ISO-8601 lower bound for timestamp' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO-8601 upper bound for timestamp' })
   @ApiQuery({

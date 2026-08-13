@@ -1,4 +1,5 @@
 import { type ClientProxy } from '@nestjs/microservices';
+import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
 
 import { type MetricsService } from '../infra/redis/metrics.service.js';
 
@@ -27,14 +28,16 @@ describe('ImportOrchestrationService', () => {
     recordMetric: ReturnType<typeof vi.fn>;
     recordImportStarted: ReturnType<typeof vi.fn>;
     recordImportCompleted: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
   } {
-    const emit = vi.fn();
+    const emit = vi.fn().mockReturnValue({ subscribe: vi.fn() });
     const download = vi.fn().mockResolvedValue({ filePath: '/data/archives/2026-08-11-0.json.gz' });
     const process = vi.fn().mockResolvedValue(successfulResult);
     const recordMetric = vi.fn().mockResolvedValue(undefined);
     const recordImportStarted = vi.fn().mockResolvedValue(undefined);
     const recordImportCompleted = vi.fn().mockResolvedValue(undefined);
     const recordImportFailed = vi.fn().mockResolvedValue(undefined);
+    const warn = vi.fn();
 
     const serviceBClient = { emit } as unknown as ClientProxy;
     const metricsService = { recordMetric } as unknown as MetricsService;
@@ -45,6 +48,9 @@ describe('ImportOrchestrationService', () => {
     } as unknown as ImportRunTracker;
     const archiveDownloadService = { download } as unknown as ArchiveDownloadService;
     const archiveProcessingService = { process } as unknown as ArchiveProcessingService;
+    const loggerService = {
+      getLogger: vi.fn().mockReturnValue({ warn }),
+    } as unknown as LoggerService;
 
     const service = new ImportOrchestrationService(
       serviceBClient,
@@ -52,6 +58,7 @@ describe('ImportOrchestrationService', () => {
       importRunTracker,
       archiveDownloadService,
       archiveProcessingService,
+      loggerService,
     );
 
     return {
@@ -62,6 +69,7 @@ describe('ImportOrchestrationService', () => {
       recordMetric,
       recordImportStarted,
       recordImportCompleted,
+      warn,
     };
   }
 
@@ -77,6 +85,24 @@ describe('ImportOrchestrationService', () => {
       expect(emit).toHaveBeenCalledTimes(2);
       expect(emit.mock.calls[0]?.[0]).toBe('github.import.started');
       expect(emit.mock.calls[1]?.[0]).toBe('github.import.completed');
+    });
+
+    it('should log a warning and not throw, when the outbound client reports a publish error', async () => {
+      const { service, emit, warn } = buildService();
+
+      emit.mockReturnValue({
+        subscribe: ({ error }: { error: (error: unknown) => void }) => {
+          error(new Error('channel closed'));
+        },
+      });
+
+      await expect(
+        service.importDownload('2026-08-11-0', importId, correlationId),
+      ).resolves.toEqual(successfulResult);
+      expect(warn).toHaveBeenCalledWith(
+        { pattern: 'github.import.started', error: 'channel closed' },
+        'Failed to publish lifecycle event',
+      );
     });
   });
 

@@ -1,8 +1,8 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type Redis } from 'ioredis';
 
-import { REDIS_CLIENT } from '../infra-clients.tokens.js';
+import { REDIS_CLIENT } from '../infra/client-tokens.js';
+import { LoggerService } from '../logger/rmq/logger.service.js';
 
 @Injectable()
 export class RedisConnectionService implements OnModuleInit, OnModuleDestroy {

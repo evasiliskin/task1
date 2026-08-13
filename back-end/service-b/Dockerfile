@@ -46,6 +46,8 @@ WORKDIR /app
 
 COPY --chown=node:node --from=build /prod/service-b ./
 
+RUN mkdir -p /data/reports && chown node:node /data/reports
+
 USER node
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

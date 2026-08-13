@@ -11,6 +11,7 @@ import { ProcessErrorHandlerService } from '../process-error-handler.service.js'
 import { AppErrorFormatStrategy } from '../strategies/app-error.format-strategy.js';
 import { DefaultFormatStrategy } from '../strategies/default.format-strategy.js';
 import { HttpExceptionFormatStrategy } from '../strategies/http-exception.format-strategy.js';
+import { TimeoutErrorFormatStrategy } from '../strategies/timeout-error.format-strategy.js';
 
 import { GlobalExceptionFilter } from './global-exception.filter.js';
 import { SerializedRpcErrorFormatStrategy } from './serialized-rpc-error.format-strategy.js';
@@ -21,6 +22,7 @@ import { SerializedRpcErrorFormatStrategy } from './serialized-rpc-error.format-
     SerializedRpcErrorFormatStrategy,
     AppErrorFormatStrategy,
     HttpExceptionFormatStrategy,
+    TimeoutErrorFormatStrategy,
     DefaultFormatStrategy,
     {
       provide: ERROR_FORMAT_STRATEGIES,
@@ -28,12 +30,14 @@ import { SerializedRpcErrorFormatStrategy } from './serialized-rpc-error.format-
         serializedRpc: SerializedRpcErrorFormatStrategy,
         appError: AppErrorFormatStrategy,
         httpException: HttpExceptionFormatStrategy,
+        timeoutError: TimeoutErrorFormatStrategy,
         defaultStrategy: DefaultFormatStrategy,
-      ) => [serializedRpc, appError, httpException, defaultStrategy],
+      ) => [serializedRpc, appError, httpException, timeoutError, defaultStrategy],
       inject: [
         SerializedRpcErrorFormatStrategy,
         AppErrorFormatStrategy,
         HttpExceptionFormatStrategy,
+        TimeoutErrorFormatStrategy,
         DefaultFormatStrategy,
       ],
     },

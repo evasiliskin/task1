@@ -1,5 +1,6 @@
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type Redis } from 'ioredis';
+
+import { type LoggerService } from '../logger/rmq/logger.service.js';
 
 import { RedisConnectionService } from './redis-connection.service.js';
 

@@ -3,7 +3,7 @@ import { IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from '
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
-const LOG_STATUSES = ['started', 'completed', 'failed'] as const;
+const LOG_STATUSES = ['started', 'completed', 'failed', 'dead-lettered'] as const;
 
 export class SearchLogsQueryDto {
   @IsOptional()

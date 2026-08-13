@@ -20,7 +20,8 @@
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
     "test:cov": "cross-env NODE_ENV=test vitest run --coverage",
-    "bench:memory": "tsx scripts/bench-memory.ts"
+    "bench:memory": "tsx scripts/bench-memory.ts",
+    "smoke:report": "tsx scripts/docker-smoke-test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

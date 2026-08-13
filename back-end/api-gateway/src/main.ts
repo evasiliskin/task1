@@ -37,6 +37,8 @@ async function bootstrap(): Promise<void> {
       }),
     );
 
+    app.enableShutdownHooks();
+
     const swaggerConfig = new DocumentBuilder().setTitle('Gateway API').setVersion('1.0').build();
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api-docs', app, swaggerDocument);

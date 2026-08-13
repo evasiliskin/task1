@@ -1,4 +1,4 @@
-export type ProcessingLogStatus = 'started' | 'completed' | 'failed';
+export type ProcessingLogStatus = 'started' | 'completed' | 'failed' | 'dead-lettered';
 
 export interface IProcessingLogErrorInfo {
   reason: string;

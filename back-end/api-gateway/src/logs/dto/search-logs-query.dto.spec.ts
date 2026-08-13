@@ -65,6 +65,14 @@ describe('SearchLogsQueryDto', () => {
     expect(errors).toHaveLength(1);
   });
 
+  it('should produce no validation errors, when status is "dead-lettered"', async () => {
+    const dto = plainToInstance(SearchLogsQueryDto, { status: 'dead-lettered' });
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+  });
+
   it('should produce a validation error, when from is not a valid ISO-8601 string', async () => {
     const dto = plainToInstance(SearchLogsQueryDto, { from: 'not-a-date' });
 

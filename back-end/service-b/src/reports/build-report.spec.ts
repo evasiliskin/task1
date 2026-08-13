@@ -32,7 +32,7 @@ describe('buildReport', () => {
       ],
     };
 
-    await buildReport(stats, reportPath);
+    await buildReport(stats, reportPath, true);
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- test-generated paths are safe
     const bytes = readFileSync(reportPath);
@@ -52,7 +52,7 @@ describe('buildReport', () => {
       timeSeries: [],
     };
 
-    await buildReport(stats, reportPath);
+    await buildReport(stats, reportPath, true);
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- test-generated paths are safe
     const bytes = readFileSync(reportPath);
@@ -72,7 +72,7 @@ describe('buildReport', () => {
       timeSeries: [],
     };
 
-    await buildReport(stats, reportPath);
+    await buildReport(stats, reportPath, true);
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- test-generated paths are safe
     const bytes = readFileSync(reportPath);

@@ -1,2 +1,1 @@
-export const MONGO_CLIENT = 'MONGO_CLIENT';
-export const REDIS_CLIENT = 'REDIS_CLIENT';
+export { MONGO_CLIENT, REDIS_CLIENT } from '@task1/shared/infra/client-tokens';

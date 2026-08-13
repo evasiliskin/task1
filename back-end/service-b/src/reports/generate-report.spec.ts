@@ -26,7 +26,7 @@ describe('generateReport', () => {
     );
 
     expect(getStats).toHaveBeenCalledWith(importId);
-    expect(buildReportMock).toHaveBeenCalledWith(stats, result.reportPath);
+    expect(buildReportMock).toHaveBeenCalledWith(stats, result.reportPath, false);
     expect(result.reportPath.startsWith(join('/data/reports', importId))).toBe(true);
     expect(result.reportPath.endsWith('.pdf')).toBe(true);
   });
@@ -59,6 +59,7 @@ describe('generateReport', () => {
     });
 
     expect(getStats).toHaveBeenCalledWith(undefined);
+    expect(buildReportMock).toHaveBeenCalledWith(stats, result.reportPath, true);
     expect(result.reportPath.startsWith(join('/data/reports'))).toBe(true);
     expect(result.reportPath.endsWith('.pdf')).toBe(true);
   });

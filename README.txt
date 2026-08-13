@@ -73,19 +73,22 @@ Enforcement is one global guard, `AuthGuard`
 (`back-end/api-gateway/src/auth/auth.guard.ts`), wired in via `APP_GUARD` in
 `AuthModule`.
 
-**Current state — intentional stub.** `AuthGuard` has no real credential-verification logic yet,
-and it's written to fail closed rather than default-allow: every non-public request is currently
-denied. This is deliberate — see the code comment in `auth.guard.ts` and
-`auth.guard.spec.ts`, which documents it as "current unimplemented stub" — the seam is in place so
-a real provider (Auth0, Passport.js, JWT/OIDC, etc.) can be dropped in behind it later, populating
-`request.user` (`authenticated-user.interface.ts`). Until then:
+**Current state — intentional placeholder.** `AuthGuard` has no real credential-verification logic
+yet; its `isAuthenticated()` unconditionally returns `true`, so every request that reaches it is
+currently allowed through. This is deliberate — see the code comment in `auth.guard.ts`, which
+documents it as a temporary placeholder — the seam (`canActivate`, the `@Public()` override, the
+`isAuthenticated` method) is in place so a real provider (Auth0, Passport.js, JWT/OIDC, etc.) can
+be dropped in behind it later, populating `request.user` (`authenticated-user.interface.ts`).
+Until then:
 
-- Every endpoint besides `GET /health`, `/health/live`, `/health/ready` returns `403 Forbidden`.
-- Integration tests override the guard (`.overrideProvider(AuthGuard).useValue({ canActivate: ()
-  => true })`) to exercise the endpoints they target — follow the same pattern in new
-  `*.controller.int.spec.ts` files.
+- Every endpoint, including the ones documented as "Required" above, currently responds normally
+  (its usual 2xx status) with no credentials supplied — authentication is not yet enforced.
+- Integration tests still override the guard (`.overrideProvider(AuthGuard).useValue({
+  canActivate: () => true })`) to exercise the endpoints they target, independent of this
+  placeholder behavior — follow the same pattern in new `*.controller.int.spec.ts` files.
 - The curl examples in this README (below) describe the intended request/response shape once real
-  auth is wired in; running them as-is against an unmodified checkout currently returns `403`.
+  auth is wired in; running them as-is against an unmodified checkout currently succeeds without
+  credentials rather than returning `401`/`403`.
 
 ## Health checks
 
@@ -445,25 +448,16 @@ See `docs/superpowers/specs/2026-08-12-correlation-request-id-design.md` for the
 These are current, verifiable gaps in the implementation — not roadmap items, and not exhaustive.
 For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`.
 
-- **PDF report generation fails in the shipped `docker-compose.yml` stack.**
-  `back-end/service-b/Dockerfile` never creates or `chown`s `/data/reports` before switching to the
-  non-root `node` user, unlike `back-end/service-a/Dockerfile`, which does this for its own
-  `/data/archives` mount. The named volume `report-storage` is therefore created `root`-owned, and
-  `GET /reports/pdf` fails every time with `EACCES: permission denied` inside an unmodified
-  `pnpm docker:up` stack. The report-generation logic itself is unaffected by this — only the
-  Docker packaging of `service-b`.
-- **RabbitMQ lifecycle-event publishing from service-a is fire-and-forget.**
-  `ImportOrchestrationService`'s `emitEvent` (`back-end/service-a/src/archive/import-orchestration.service.ts`)
-  calls `this.serviceBClient.emit(pattern, payload)` without awaiting or subscribing to the
-  returned observable, and callers don't await it either. If the broker is unreachable at the
-  moment of publish, the failure is silently dropped — no log, no retry — so service-b's
-  processing-log history can diverge from what service-a actually did, with nothing surfacing that
-  divergence.
-- **The gateway never calls `app.enableShutdownHooks()`** (`back-end/api-gateway/src/main.ts`),
-  unlike service-a/service-b, which both call it. Its RabbitMQ `ClientProxy` connections and
-  health-indicator clients are not explicitly closed on `SIGTERM`.
 - **No integration tests exercise the real RabbitMQ broker, MongoDB, or the Docker filesystem.**
-  `service-a`/`service-b` have unit tests only (mocked collections/channels); nothing in `pnpm test`
-  would catch a container-filesystem-permissions bug like the PDF one above.
+  `service-a`/`service-b` have unit tests only (mocked collections/channels), so `pnpm test` alone
+  would not catch a container-filesystem-permissions bug (e.g. a missing `chown` on a Docker
+  volume). There is now a manual smoke test that does exercise the real Docker stack —
+  `back-end/service-a/scripts/docker-smoke-test.ts`, run via `pnpm --filter service-a run
+  smoke:report <dateHour>` — but it isn't wired into any CI, since this repo has no CI config, so
+  it must still be run manually rather than catching regressions automatically.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
-  `RABBITMQ_MAX_RETRIES` land there and are never processed further.
+  `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
+  visible: each dead-lettered message is recorded as a `processing-logs` document with `status:
+  'dead-lettered'` (`back-end/service-b/src/processing-log/import-events.controller.ts`'s
+  `recordDeadLetter`), so the backlog can be queried and monitored even though nothing yet
+  reprocesses it.

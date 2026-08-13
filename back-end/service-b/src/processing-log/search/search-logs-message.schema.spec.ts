@@ -40,6 +40,10 @@ describe('searchLogsMessageSchema', () => {
     expect(() => searchLogsMessageSchema.parse({ status: 'unknown' })).toThrow();
   });
 
+  it('should accept "dead-lettered" as a valid status', () => {
+    expect(searchLogsMessageSchema.parse({ status: 'dead-lettered' }).status).toBe('dead-lettered');
+  });
+
   it('should throw, when from is not an ISO datetime string', () => {
     expect(() => searchLogsMessageSchema.parse({ from: 'not-a-date' })).toThrow();
   });

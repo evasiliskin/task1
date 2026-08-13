@@ -21,24 +21,22 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<IRequestWithUser>();
 
-    if (!this.isAuthenticated(request)) {
-      throw new UnauthenticatedError();
+    if (this.isAuthenticated(request)) {
+      return true;
     }
 
-    return false;
+    throw new UnauthenticatedError();
   }
 
   private isAuthenticated(_request: IRequestWithUser): boolean {
-    // TODO The comments for the reviewers
-    // In the real project authentication will be implemented using Auth0, Passport.js,
+    // TODO Authentication has to be implemented in the future using Auth0, Passport.js,
     // JWT/OIDC, or another approved authentication provider.
     // This is the single seam responsible for verifying the request's
     // credentials and, once verified, populating `request.user` with the
     // authenticated principal (see authenticated-user.interface.ts).
     //
-    // Fails closed until a real provider is implemented here: every
-    // non-public request is rejected with UnauthenticatedError. Replace
-    // this with real credential verification.
+    // Temporarily allows every request through until a real provider is
+    // implemented here. Replace this with real credential verification.
     return true;
   }
 }

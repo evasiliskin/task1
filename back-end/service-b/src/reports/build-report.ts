@@ -12,7 +12,11 @@ import {
   drawSummarySection,
 } from './report-charts.js';
 
-export async function buildReport(stats: IStatsResult, reportPath: string): Promise<void> {
+export async function buildReport(
+  stats: IStatsResult,
+  reportPath: string,
+  isAggregate: boolean,
+): Promise<void> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- reportPath is built from the configured report directory and a server-generated id, never raw external input.
   await mkdir(dirname(reportPath), { recursive: true });
 
@@ -31,9 +35,9 @@ export async function buildReport(stats: IStatsResult, reportPath: string): Prom
     document.fontSize(20).text('GitHub Archive Processing Report', { align: 'center' });
     document.moveDown();
 
-    drawSummarySection(document, stats);
+    drawSummarySection(document, stats, isAggregate);
     document.moveDown();
-    drawEventsOverTimeChart(document, stats.timeSeries);
+    drawEventsOverTimeChart(document, stats.timeSeries, isAggregate);
     document.moveDown();
     drawStatusBreakdownChart(document, stats);
 

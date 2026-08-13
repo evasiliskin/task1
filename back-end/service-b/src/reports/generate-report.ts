@@ -10,7 +10,7 @@ export interface IGenerateReportResult {
 
 export interface IGenerateReportDependencies {
   getStats: (importId?: string) => Promise<IStatsResult>;
-  buildReport: (stats: IStatsResult, reportPath: string) => Promise<void>;
+  buildReport: (stats: IStatsResult, reportPath: string, isAggregate: boolean) => Promise<void>;
 }
 
 export async function generateReport(
@@ -21,7 +21,7 @@ export async function generateReport(
   const stats = await dependencies.getStats(importId);
   const reportPath = join(reportDirectory, buildReportFilename(importId));
 
-  await dependencies.buildReport(stats, reportPath);
+  await dependencies.buildReport(stats, reportPath, importId === undefined);
 
   return { reportPath };
 }

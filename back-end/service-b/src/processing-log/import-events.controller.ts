@@ -39,8 +39,11 @@ const RETRY_SCHEDULED_LOG =
   'Processing-log write failed, republishing with an incremented retry count';
 const DEAD_LETTERED_LOG =
   'Processing-log write failed at maxRetries, moving message to the dead-letter queue';
+const DEAD_LETTER_RECORD_FAILED_LOG =
+  'Failed to record the dead-lettered event as a processing-log entry';
 const REPUBLISH_FAILED_LOG =
   'Retry/dead-letter republish failed, acking the original message to release the prefetch slot';
+const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
 @Controller()
 export class ImportEventsController {
@@ -117,11 +120,13 @@ export class ImportEventsController {
       return;
     }
 
+    const entry = toEntry(parseResult.data, eventType);
+
     try {
-      await this.tracker.upsertLog(toEntry(parseResult.data, eventType));
+      await this.tracker.upsertLog(entry);
       channel.ack(message);
     } catch (error) {
-      await this.retryOrDeadLetter(channel, message, eventType, error);
+      await this.retryOrDeadLetter(channel, message, eventType, entry, error);
     }
   }
 
@@ -129,6 +134,7 @@ export class ImportEventsController {
     channel: IRmqChannel,
     message: IRmqMessage,
     eventType: string,
+    entry: IProcessingLogDocument,
     error: unknown,
   ): Promise<void> {
     const retryCount = getRetryCount(message) + 1;
@@ -142,6 +148,7 @@ export class ImportEventsController {
           headers,
         });
         this.logger.error({ eventType, retryCount, error: errorMessage }, DEAD_LETTERED_LOG);
+        await this.recordDeadLetter(entry, eventType, errorMessage);
       } else {
         channel.sendToQueue(this.rabbitmqConfiguration.queue, message.content, { headers });
         this.logger.warn({ eventType, retryCount, error: errorMessage }, RETRY_SCHEDULED_LOG);
@@ -155,6 +162,28 @@ export class ImportEventsController {
       );
     } finally {
       channel.ack(message);
+    }
+  }
+
+  private async recordDeadLetter(
+    entry: IProcessingLogDocument,
+    eventType: string,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await this.tracker.upsertLog({
+        ...entry,
+        status: 'dead-lettered',
+        errorInfo: { reason: reason.slice(0, DEAD_LETTER_REASON_MAX_LENGTH) },
+      });
+    } catch (writeError) {
+      this.logger.error(
+        {
+          eventType,
+          error: writeError instanceof Error ? writeError.message : String(writeError),
+        },
+        DEAD_LETTER_RECORD_FAILED_LOG,
+      );
     }
   }
 }

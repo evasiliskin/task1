@@ -9,6 +9,7 @@ const TIME_CHART_WIDTH = 400;
 const TIME_CHART_HEIGHT = 120;
 const TIME_CHART_BOTTOM_MARGIN = 20;
 const SINGLE_POINT_MARKER_RADIUS = 3;
+const AXIS_LABEL_OFFSET_X = 25;
 
 const BAR_CHART_HEIGHT = 120;
 const BAR_WIDTH = 60;
@@ -18,16 +19,24 @@ const SUCCESSFUL_BAR_COLOR = '#2E7D32';
 const INVALID_BAR_COLOR = '#F9A825';
 const ERROR_BAR_COLOR = '#C62828';
 
+const AGGREGATE_CHART_TITLE = 'Events Processed Over Time';
+const SINGLE_IMPORT_CHART_TITLE = 'Processing Duration (this import)';
+
 interface IBreakdownBar {
   label: string;
   value: number;
   color: string;
 }
 
-export function drawSummarySection(document_: PdfDocument, stats: IStatsResult): void {
+export function drawSummarySection(
+  document_: PdfDocument,
+  stats: IStatsResult,
+  isAggregate: boolean,
+): void {
   document_.fontSize(14).text('Summary', { underline: true });
   document_.moveDown(0.5);
   document_.fontSize(11);
+  document_.text(`Report scope: ${isAggregate ? 'all imports' : 'single import'}`);
   document_.text(`Archives processed: ${stats.archivesProcessed}`);
   document_.text(`Events processed: ${stats.eventsProcessed}`);
   document_.text(`Successful events: ${stats.successfulEvents}`);
@@ -43,8 +52,11 @@ export function drawSummarySection(document_: PdfDocument, stats: IStatsResult):
 export function drawEventsOverTimeChart(
   document_: PdfDocument,
   timeSeries: IImportTimeSeriesPoint[],
+  isAggregate: boolean,
 ): void {
-  document_.fontSize(14).text('Events Processed Over Time', { underline: true });
+  document_
+    .fontSize(14)
+    .text(isAggregate ? AGGREGATE_CHART_TITLE : SINGLE_IMPORT_CHART_TITLE, { underline: true });
   document_.moveDown(0.5);
 
   if (timeSeries.length === 0) {
@@ -84,6 +96,16 @@ export function drawEventsOverTimeChart(
     });
 
     document_.stroke();
+
+    document_.x = originX - AXIS_LABEL_OFFSET_X;
+    document_.y = originY;
+    document_.fontSize(8).text(String(maxValue));
+
+    document_.x = originX - AXIS_LABEL_OFFSET_X;
+    document_.y = originY + TIME_CHART_HEIGHT - 4;
+    document_.fontSize(8).text('0');
+
+    document_.x = originX;
   }
 
   document_.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
