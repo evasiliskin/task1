@@ -1,6 +1,12 @@
 import { HttpStatus } from '@nestjs/common';
 
-import { AppError, AuthError, ErrorCategory, NotFoundError, ValidationError } from '../errors/index.js';
+import {
+  AppError,
+  AuthError,
+  ErrorCategory,
+  NotFoundError,
+  ValidationError,
+} from '../errors/index.js';
 
 import { statusFromAppError } from './status-from-app-error.utility.js';
 

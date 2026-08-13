@@ -1,9 +1,9 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 
-import { importStatusMessageSchema } from './import-status-message.schema.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { type IImportRunDocument } from './import-run.types.js';
+import { importStatusMessageSchema } from './import-status-message.schema.js';
 
 @Controller()
 export class ImportStatusController {
