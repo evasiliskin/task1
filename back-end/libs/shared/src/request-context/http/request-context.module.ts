@@ -17,6 +17,8 @@ import { RequestContextMiddleware } from './request-context.middleware.js';
 })
 export class RequestContextModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestContextMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer
+      .apply(RequestContextMiddleware)
+      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
   }
 }

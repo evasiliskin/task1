@@ -64,9 +64,18 @@ describe('GlobalExceptionFilter', () => {
     );
   });
 
-  it('should throw MissingRequestContextError, when called outside of any request context', () => {
-    expect(() => filter.catch(new Error('boom'), host)).toThrow(
-      'RequestContextService was accessed outside of an active request context',
+  it('should fall back to generated ids instead of throwing, when called outside of any request context', () => {
+    expect(() => {
+      filter.catch(new Error('boom'), host);
+    }).not.toThrow();
+
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        correlationId: expect.any(String),
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        requestId: expect.any(String),
+      }),
     );
   });
 });

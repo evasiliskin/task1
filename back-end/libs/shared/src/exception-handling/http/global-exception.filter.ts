@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+import { resolveId } from '../../request-context/id-validation.util.js';
 import { RequestContextService } from '../../request-context/request-context.service.js';
 import { ErrorFormatService } from '../error-format.service.js';
 
@@ -26,7 +27,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = context.getRequest<Request>();
     const response = context.getResponse<Response>();
 
-    const { correlationId, requestId } = this.requestContextService.requireContext();
+    // Requests outside the global prefix (e.g. a misconfigured health probe) never
+    // reach RequestContextMiddleware, so context can legitimately be absent here.
+    const attributes = this.requestContextService.getAttributes();
+    const correlationId = attributes.correlationId ?? resolveId(undefined);
+    const requestId = attributes.requestId ?? resolveId(undefined);
     const { statusCode, error } = this.errorFormatService.format(exception);
 
     if (statusCode >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
