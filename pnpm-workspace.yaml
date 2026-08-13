@@ -3,4 +3,16 @@ packages:
   - "back-end/*"
   - "back-end/libs/*"
 
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  '@swc/core': true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+  prisma: true
+  unrs-resolver: true
+
 injectWorkspacePackages: true
