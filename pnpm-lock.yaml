@@ -5,8 +5,7 @@ settings:
   excludeLinksFromLockfile: false
   injectWorkspacePackages: true
 
-overrides:
-  '@nestjs/terminus@11.1.1>@prisma/client': '-'
+packageExtensionsChecksum: sha256-2InQV2LNyN2YObnCabX7UDAHOzqfLAUk7s6SnTBAqN8=
 
 importers:
 
