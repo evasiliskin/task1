@@ -1,5 +1,5 @@
 # Build context is the repo root (pnpm workspace) - see docker-compose.yml.
-ARG NODE_VERSION=24.11.0-bookworm-slim
+ARG NODE_VERSION=26.5.0-bookworm-slim
 
 FROM node:${NODE_VERSION} AS base
 
