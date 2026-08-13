@@ -15,10 +15,9 @@ describe('generateReport', () => {
     timeSeries: [],
   };
 
-  it('should build the report at a path derived from the report directory and importId, when importId is given', async () => {
+  it('should build the report at a unique path inside the report directory prefixed with importId, when importId is given', async () => {
     const getStats = vi.fn().mockResolvedValue(stats);
     const buildReportMock = vi.fn().mockResolvedValue(undefined);
-    const expectedPath = join('/data/reports', `${importId}.pdf`);
 
     const result = await generateReport(
       '/data/reports',
@@ -27,8 +26,27 @@ describe('generateReport', () => {
     );
 
     expect(getStats).toHaveBeenCalledWith(importId);
-    expect(buildReportMock).toHaveBeenCalledWith(stats, expectedPath);
-    expect(result).toEqual({ reportPath: expectedPath });
+    expect(buildReportMock).toHaveBeenCalledWith(stats, result.reportPath);
+    expect(result.reportPath.startsWith(join('/data/reports', importId))).toBe(true);
+    expect(result.reportPath.endsWith('.pdf')).toBe(true);
+  });
+
+  it('should build the report at a different path on each call, when importId is given', async () => {
+    const getStats = vi.fn().mockResolvedValue(stats);
+    const buildReportMock = vi.fn().mockResolvedValue(undefined);
+
+    const first = await generateReport(
+      '/data/reports',
+      { getStats, buildReport: buildReportMock },
+      importId,
+    );
+    const second = await generateReport(
+      '/data/reports',
+      { getStats, buildReport: buildReportMock },
+      importId,
+    );
+
+    expect(first.reportPath).not.toBe(second.reportPath);
   });
 
   it('should derive a random .pdf filename inside the report directory, when importId is omitted', async () => {

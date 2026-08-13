@@ -35,7 +35,8 @@ describe('ReportsService', () => {
     const result = await service.generateReport(importId);
 
     expect(getStats).toHaveBeenCalledWith(importId);
-    expect(result.reportPath).toBe(join(reportDirectory, `${importId}.pdf`));
+    expect(result.reportPath.startsWith(join(reportDirectory, importId))).toBe(true);
+    expect(result.reportPath.endsWith('.pdf')).toBe(true);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- test-generated paths are safe
     expect(existsSync(result.reportPath)).toBe(true);
   });
