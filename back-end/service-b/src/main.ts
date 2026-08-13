@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   let app: INestMicroservice | undefined;
 
   try {
-    const { url, queue } = rabbitmqConfig();
+    const { url, queue, prefetchCount } = rabbitmqConfig();
 
     app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
       transport: Transport.RMQ,
@@ -21,6 +21,8 @@ async function bootstrap(): Promise<void> {
         urls: [url],
         queue,
         queueOptions: { durable: true },
+        noAck: false,
+        prefetchCount,
       },
       bufferLogs: true,
     });

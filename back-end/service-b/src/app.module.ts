@@ -11,6 +11,7 @@ import redisConfig from './config/redis.config.js';
 import { HealthModule } from './health/health.module.js';
 import { MongoModule } from './infra/mongo/mongo.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
+import { ProcessingLogModule } from './processing-log/processing-log.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { RedisModule } from './infra/redis/redis.module.js';
     MongoModule,
     RedisModule,
     HealthModule,
+    ProcessingLogModule,
   ],
 })
 export class AppModule {}
