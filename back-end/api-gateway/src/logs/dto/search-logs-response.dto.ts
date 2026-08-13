@@ -10,7 +10,7 @@ export class SearchLogsResponseDto {
     description: 'Opaque cursor for the next page; absent when no more results exist',
 
     example:
-      'eyJ0aW1lc3RhbXAiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJpZCI6IjY0YjdmMGMyZjFhMmIzYzRkNWU2ZjdhMSJ9',
+      'eyJ0aW1lc3RhbXAiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJpZCI6IjY0YjdmMGMyZjFhMmIzYzRkNWU2ZjdhMSJ9', // eslint-disable-line no-secrets/no-secrets -- Swagger example value, not a secret.
   })
   public readonly nextCursor?: string;
 

@@ -11,7 +11,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable
+RUN npm install -g corepack@latest \
+    && corepack enable
 
 WORKDIR /app
 
