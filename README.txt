@@ -14,14 +14,16 @@ task1/
 
 ## Contents
 
-- [Architecture](#architecture)
-- [API reference](#api-reference)
-- [Authentication](#authentication)
-- [Getting started](#getting-started)
-- [Common tasks](#common-tasks)
-- [Tooling notes](#tooling-notes)
-- [GitHub Archive Import & Analytics](#github-archive-import--analytics)
-- [Correlation ID & Request ID](#correlation-id--request-id)
+- Architecture
+- API reference
+- Authentication
+- Health checks
+- Getting started
+- Common tasks
+- Tooling notes
+- GitHub Archive Import & Analytics
+- Correlation ID & Request ID
+- Known limitations
 
 ## Architecture
 
@@ -44,7 +46,7 @@ Every request through this chain carries a `correlationId` (stable for the whole
 ## API reference
 
 All routes are served under a global `/api/v1` prefix (set in
-[`main.ts`](back-end/api-gateway/src/main.ts)) with interactive Swagger docs at `/api-docs`. Full
+`back-end/api-gateway/src/main.ts`) with interactive Swagger docs at `/api-docs`. Full
 request/response DTOs live under each module's `dto/` folder; this table is the map, not the spec.
 
 | Method | Path | Purpose | Auth | RabbitMQ pattern → service |
@@ -66,9 +68,9 @@ stats/reports endpoints, and "Authentication" for what "Required" currently mean
 ## Authentication
 
 Every endpoint above requires authentication except the three `/health*` routes, which are marked
-`@Public()` ([`health.controller.ts`](back-end/api-gateway/src/health/health.controller.ts)).
+`@Public()` (`back-end/api-gateway/src/health/health.controller.ts`).
 Enforcement is one global guard, `AuthGuard`
-([`auth.guard.ts`](back-end/api-gateway/src/auth/auth.guard.ts)), wired in via `APP_GUARD` in
+(`back-end/api-gateway/src/auth/auth.guard.ts`), wired in via `APP_GUARD` in
 `AuthModule`.
 
 **Current state — intentional stub.** `AuthGuard` has no real credential-verification logic yet,
@@ -85,10 +87,53 @@ a real provider (Auth0, Passport.js, JWT/OIDC, etc.) can be dropped in behind it
 - The curl examples in this README (below) describe the intended request/response shape once real
   auth is wired in; running them as-is against an unmodified checkout currently returns `403`.
 
+## Health checks
+
+The gateway exposes three endpoints under `/health` (`GET /health`, `/health/live`, `/health/ready`
+— see the API reference above for the exact paths).
+
+**Liveness vs readiness.** Liveness answers "is the process alive" — a process manager (or
+Docker's own `HEALTHCHECK`) uses this to decide whether to restart the container. It never calls
+out to anything, because a slow dependency should never cause a healthy process to be killed and
+restarted. Readiness answers "can this process currently do its job" — it's what should gate
+traffic. A gateway with a dead RabbitMQ connection is alive but not ready: restarting it would not
+help, but it also shouldn't receive requests it cannot fulfill.
+
+**Critical vs informational dependencies.** `/health/ready` treats RabbitMQ, service-a, and
+service-b as critical — the gateway's only purpose is routing requests to those services through
+the broker, so if any of them is unreachable, `/health/ready` returns `503`. MongoDB and Redis are
+reported for visibility but are informational only — nothing in the gateway's request path uses
+them today (there is no persistence layer or caching configured), so their failure never causes
+`/health/ready` to fail.
+
+**Why the gateway never accesses service-a/b's databases directly.** The gateway has no visibility
+into, or dependency on, service-a/b's internal storage. Checking their databases directly would
+violate the module boundary (each service owns its own persistence) and would report "healthy"
+even if the service's own RabbitMQ consumer had crashed — the opposite of what a caller needs to
+know. Instead, the gateway sends a dedicated `health.check` RabbitMQ message to each service and
+waits (with a timeout) for a reply — the same transport and pattern used for every other
+inter-service call, exercising the actual path a real request would take.
+
+Example — `GET /health`, everything healthy:
+
+```json
+{
+  "status": "ok",
+  "services": {
+    "gateway": "ok",
+    "rabbitmq": "ok",
+    "serviceA": "ok",
+    "serviceB": "ok",
+    "mongodb": "ok",
+    "redis": "ok"
+  }
+}
+```
+
 ## Getting started
 
-Node version is pinned in [`.nvmrc`](.nvmrc) (kept in sync with `engines.node` in
-[`package.json`](package.json) and the Docker images). Switch to it before installing:
+Node version is pinned in `.nvmrc` (kept in sync with `engines.node` in
+`package.json` and the Docker images). Switch to it before installing:
 
 ```bash
 nvm use
@@ -98,7 +143,7 @@ pnpm install
 # start RabbitMQ + service-a + service-b + gateway
 pnpm docker:up
 
-# or run services individually against a local RabbitMQ:
+# or run services individually against a local RabbitMQ/MongoDB/Redis:
 cp back-end/api-gateway/.env.example back-end/api-gateway/.env
 cp back-end/service-a/.env.example back-end/service-a/.env
 cp back-end/service-b/.env.example back-end/service-b/.env
@@ -107,6 +152,12 @@ pnpm dev:service-b
 pnpm dev:service-a
 pnpm dev:api-gateway
 ```
+
+**`.env` files are not auto-loaded.** Each service's `ConfigModule.forRoot({ ignoreEnvFile: true,
+... })` deliberately does *not* read `.env` — copying `.env.example` to `.env` is a reference/template
+step only. To change a value from its built-in default (see each service's `config/*.config.ts`),
+export it into the shell's actual environment before running `pnpm dev:*` (or use a tool like
+`dotenv-cli`), rather than editing `.env` and expecting it to take effect.
 
 - Gateway REST API: http://localhost:3000/api/v1 — see "API reference" above for the full
   endpoint list (health checks at `/api/v1/health`, `/health/live`, `/health/ready`)
@@ -119,25 +170,29 @@ pnpm dev:api-gateway
   check, it has no collections of its own
 - Redis: service-a records pipeline metrics via RedisTimeSeries (see "RedisTimeSeries metrics"
   below); the gateway only pings it for health checks, no caching is implemented against it
-- set `MONGODB_URI`/`REDIS_URL` in `back-end/api-gateway/.env` if running the gateway outside
-  Docker
+- to point the gateway at a non-default `MONGODB_URI`/`REDIS_URL` when running outside Docker,
+  export them into the shell environment before `pnpm dev:api-gateway` (see the `.env` note above)
 
 ## Common tasks
 
 | Command | What it does |
 | --- | --- |
 | `pnpm build` | Build every workspace package |
-| `pnpm test` | Run every package's tests (Vitest for all three back-end services) |
-| `pnpm lint` | Lint the back-end services (ESLint) |
+| `pnpm test` | Run every workspace package's tests (Vitest — `api-gateway`, `service-a`, `service-b`, `libs/shared`) |
+| `pnpm lint` | Lint every workspace package (ESLint) |
 | `pnpm format` / `pnpm format:check` | Prettier across the whole workspace |
 | `pnpm check` | `lint` + `test` - also runs automatically on `git push` (Husky) |
-| `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ and all three back-end services |
+| `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ, MongoDB, Redis, and all three back-end services |
+| `pnpm --filter <package> run <script>` | Run one package's script directly, e.g. `pnpm --filter api-gateway run test:cov` |
+| `pnpm --filter service-a run bench:memory <dateHour>` | Manual memory-safety diagnostic against a running Docker stack — see "Memory safety" below |
 
 ## Tooling notes
 
 - **Package manager**: pnpm workspaces (`pnpm-workspace.yaml`: `back-end/*`, `back-end/libs/*`).
-- **Testing**: Vitest for all three NestJS services (`*.spec.ts` unit tests, `*.int.spec.ts`
-  HTTP-integration tests for the gateway via `supertest`).
+- **Testing**: Vitest for all four packages (`*.spec.ts` unit tests everywhere, `*.controller.int.spec.ts`
+  HTTP-integration tests for the gateway's 8 controllers via `supertest`; `service-a`/`service-b`
+  have no HTTP layer so are unit-tested only). Each package's `vitest.config.mts` enforces 90%
+  line/branch coverage thresholds.
 - **Prettier**: one shared config at the repo root (`.prettierrc.mjs`), applies to every package.
 - **ESLint**: `back-end/api-gateway`, `back-end/service-a`, and `back-end/service-b` each have their
   own `eslint.config.mjs` (typescript-eslint + import ordering + security/sonarjs/unicorn rules),
@@ -220,8 +275,9 @@ Every list endpoint (`GET /events`, `GET /logs`) uses keyset (cursor) pagination
 `events` (owned by `service-a`): `{eventId:1}` unique (idempotency + dedup),
 `{createdAt:-1, eventId:-1}` (default pagination), plus one compound index per common
 single-filter access pattern — `{eventType:1, createdAt:-1}`, `{'repo.name':1, createdAt:-1}`,
-`{'actor.login':1, createdAt:-1}`. `imports` (owned by `service-a`): one document per import run,
-tracking status/counters/error samples. `processing-logs` (owned by `service-b`):
+`{'actor.login':1, createdAt:-1}`. `imports` (owned by `service-a`): `{importId:1}` unique — one
+document per import run, tracking status/counters/error samples. `processing-logs` (owned by
+`service-b`):
 `{importId:1, status:1}` unique (makes RabbitMQ redelivery a no-op), `{timestamp:-1, _id:-1}`
 (default pagination), `{importId:1, timestamp:-1}`, `{status:1, timestamp:-1}`. Each service only
 ever queries its own collections — cross-service Mongo access never happens.
@@ -278,6 +334,9 @@ curl -s http://localhost:3000/api/v1/stats
 curl -s http://localhost:3000/api/v1/reports/pdf?importId=<importId> -o report.pdf
 ```
 
+**The PDF report call above currently fails against an unmodified `pnpm docker:up` stack** — see
+"Known limitations" below.
+
 ### Trade-offs
 
 No gRPC, no cross-batch transaction spanning a whole import, no unlimited filter-combination
@@ -325,12 +384,13 @@ payload/DTO: HTTP request/response headers (`X-Correlation-ID`, `X-Request-ID`) 
 and the gateway, and RabbitMQ message headers (via `RmqRecordBuilder`) between the gateway,
 service-a, and service-b. Each service reads the incoming IDs (via HTTP middleware in the gateway,
 via a global RabbitMQ interceptor in service-a/service-b), stores them in an `AsyncLocalStorage`-based
-request context (`core/request-context/` in each service — see the design doc referenced below),
-and makes them available to every controller, service, and log line for the duration of that
-request with no manual parameter threading.
+request context (`back-end/libs/shared/src/request-context/`, shared by all three services via
+`@task1/shared` — see the design doc referenced below), and makes them available to every
+controller, service, and log line for the duration of that request with no manual parameter
+threading.
 
 **In logs.** Every service logs through a small `LoggerService`/`AppLogger` wrapper over
-`pino` (`core/logger/` in each service). Both `correlationId` and `requestId` are merged into
+`pino` (`back-end/libs/shared/src/logger/`, shared by all three services). Both `correlationId` and `requestId` are merged into
 every log line automatically via pino's `mixin` option, which reads the active request context —
 nothing needs to explicitly pass either ID to a log call. A single request produces log lines like:
 
@@ -379,3 +439,31 @@ curl -i http://localhost:3000/api/v1/health/ready \
 Expected: `503`, with the same `x-correlation-id` you sent still present on the error response.
 
 See `docs/superpowers/specs/2026-08-12-correlation-request-id-design.md` for the full design.
+
+## Known limitations
+
+These are current, verifiable gaps in the implementation — not roadmap items, and not exhaustive.
+For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`.
+
+- **PDF report generation fails in the shipped `docker-compose.yml` stack.**
+  `back-end/service-b/Dockerfile` never creates or `chown`s `/data/reports` before switching to the
+  non-root `node` user, unlike `back-end/service-a/Dockerfile`, which does this for its own
+  `/data/archives` mount. The named volume `report-storage` is therefore created `root`-owned, and
+  `GET /reports/pdf` fails every time with `EACCES: permission denied` inside an unmodified
+  `pnpm docker:up` stack. The report-generation logic itself is unaffected by this — only the
+  Docker packaging of `service-b`.
+- **RabbitMQ lifecycle-event publishing from service-a is fire-and-forget.**
+  `ImportOrchestrationService`'s `emitEvent` (`back-end/service-a/src/archive/import-orchestration.service.ts`)
+  calls `this.serviceBClient.emit(pattern, payload)` without awaiting or subscribing to the
+  returned observable, and callers don't await it either. If the broker is unreachable at the
+  moment of publish, the failure is silently dropped — no log, no retry — so service-b's
+  processing-log history can diverge from what service-a actually did, with nothing surfacing that
+  divergence.
+- **The gateway never calls `app.enableShutdownHooks()`** (`back-end/api-gateway/src/main.ts`),
+  unlike service-a/service-b, which both call it. Its RabbitMQ `ClientProxy` connections and
+  health-indicator clients are not explicitly closed on `SIGTERM`.
+- **No integration tests exercise the real RabbitMQ broker, MongoDB, or the Docker filesystem.**
+  `service-a`/`service-b` have unit tests only (mocked collections/channels); nothing in `pnpm test`
+  would catch a container-filesystem-permissions bug like the PDF one above.
+- **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
+  `RABBITMQ_MAX_RETRIES` land there and are never processed further.

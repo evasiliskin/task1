@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Instructions for Claude Code working in this repository. See [AGENTS.md](AGENTS.md) for the
-tool-agnostic version (setup/build/test commands) and [README.md](README.md) for the human-facing
+tool-agnostic version (setup/build/test commands) and [README.txt](README.txt) for the human-facing
 architecture and API reference.
 
 ---
@@ -29,7 +29,7 @@ Ground truth before applying the policies below — keep this section in sync wi
   verification (Auth0/Passport.js/JWT/OIDC or similar) is implemented. Do not "fix" this by making
   it default-allow; extend it with a real provider only when explicitly asked to.
 - Full endpoint list, RabbitMQ message-pattern names, and the correlation-ID/request-ID system:
-  see [README.md](README.md).
+  see [README.txt](README.txt).
 
 ---
 
@@ -306,7 +306,7 @@ Avoid:
 ```
 
 This project's actual endpoints follow the same resource-oriented shape — see
-[README.md's API reference](README.md#api-reference) for the real routes (`/imports`, `/events`,
+[README.txt](README.txt)'s "API reference" section for the real routes (`/imports`, `/events`,
 `/logs`, `/stats`, `/reports`); `/badges` above is a generic illustrative example, not a route that
 exists in this repo.
 
@@ -326,6 +326,10 @@ AppError
 Concrete error types live under `errors/{auth,internal,not-found,validation}/` in the same package
 — reuse or extend one of those before adding a new category. `status-from-app-error.utility.ts`
 maps each category to an HTTP status; add new mappings there if you add a new error category.
+
+**Current state:** `ErrorCategory` (`errors/error-category.enum.ts`) also defines `CONFLICT`,
+`RATE_LIMIT`, and `EXTERNAL`, but no concrete subclass or `status-from-app-error.utility.ts`
+mapping exists for them yet — don't assume they're usable until both are added.
 
 Error responses must follow a consistent contract.
 

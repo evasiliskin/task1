@@ -20,7 +20,7 @@ npm-debug.log*
 .env.*.local
 
 # Docs
-README.md
+README.txt
 
 # AI skill docs
 skills/

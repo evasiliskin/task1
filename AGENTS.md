@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Instructions for AI coding agents (Claude Code, Codex, Cursor, Copilot, etc.) working in this
-repository. Human contributors should read [README.md](README.md) instead.
+repository. Human contributors should read [README.txt](README.txt) instead.
 
 ## Project overview
 
@@ -17,8 +17,8 @@ repository. Human contributors should read [README.md](README.md) instead.
 
 The gateway talks to `service-a`/`service-b` exclusively over RabbitMQ RPC (`ClientProxy.send`) and
 fire-and-forget events (`ClientProxy.emit` / `@EventPattern`) — never HTTP, never direct database
-access. See [README.md](README.md#architecture) for the request-flow diagram, the full API
-reference, and the GH Archive pipeline design.
+access. See [README.txt](README.txt)'s "Architecture" section for the request-flow diagram, the
+full API reference, and the GH Archive pipeline design.
 
 ## Setup
 
@@ -28,7 +28,10 @@ pnpm install      # also installs Husky git hooks, via the root "prepare" script
 ```
 
 Per-service env files: copy `back-end/<service>/.env.example` to `.env` before running a service
-outside Docker (`pnpm docker:up` supplies its own environment and needs no `.env` files).
+outside Docker (`pnpm docker:up` supplies its own environment and needs no `.env` files). Note that
+`ConfigModule.forRoot({ ignoreEnvFile: true })` in every `app.module.ts` means `.env` is a
+reference/template only, never auto-loaded — to override a default, export the variable into the
+shell environment (or use `dotenv-cli`) before running `pnpm dev:*`.
 
 ## Build, lint, test
 
@@ -55,10 +58,13 @@ package you touched.**
 
 - Unit tests: `*.spec.ts`, colocated with the source file.
 - HTTP integration tests: `*.controller.int.spec.ts`, using Supertest — required for every
-  controller with an HTTP endpoint.
+  controller with an HTTP endpoint (currently all 8 `api-gateway` controllers).
 - RabbitMQ-only controllers (`@MessagePattern`/`@EventPattern`, no HTTP) are covered by
   `*.spec.ts` instead — call the handler directly through `Test.createTestingModule()`, no
-  Supertest.
+  Supertest. `service-a` and `service-b` have no HTTP layer, so every one of their tests is a
+  unit spec.
+- Coverage: each package's `vitest.config.mts` enforces a 90% line/branch threshold
+  (`coverage.thresholds`) — a package with insufficient coverage fails `pnpm test`.
 - Full conventions (naming `should <behavior>, when <condition>`, AAA structure, coverage
   targets, fixture/UUID rules): [skills/testing-development.md](skills/testing-development.md).
 
@@ -92,8 +98,8 @@ stack-specific examples.
   collections (`events`, `imports` in service-a; `processing-logs` in service-b), accessed directly
   via the `mongodb` driver — no ORM, no Repository pattern. Don't introduce one without an explicit
   ask (see CLAUDE.md's forbidden-without-approval list).
-- Full endpoint list and RabbitMQ message-pattern names: see
-  [README.md's API reference](README.md#api-reference).
+- Full endpoint list and RabbitMQ message-pattern names: see [README.txt](README.txt)'s
+  "API reference" section.
 
 ## Commits
 
