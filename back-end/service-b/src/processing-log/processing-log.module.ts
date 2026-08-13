@@ -5,14 +5,17 @@ import { EnsureProcessingLogIndexesInitializer } from './ensure-processing-log-i
 import { ImportEventsController } from './import-events.controller.js';
 import { processingLogCollectionProvider } from './processing-log-collection.provider.js';
 import { ProcessingLogTracker } from './processing-log-tracker.service.js';
+import { LogsSearchController } from './search/logs-search.controller.js';
+import { LogsSearchService } from './search/logs-search.service.js';
 
 @Module({
   imports: [LoggerModule],
-  controllers: [ImportEventsController],
+  controllers: [ImportEventsController, LogsSearchController],
   providers: [
     processingLogCollectionProvider,
     EnsureProcessingLogIndexesInitializer,
     ProcessingLogTracker,
+    LogsSearchService,
   ],
 })
 export class ProcessingLogModule {}
