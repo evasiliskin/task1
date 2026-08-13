@@ -15,6 +15,7 @@ import uploadConfig from './config/upload.config.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ImportsModule } from './imports/imports.module.js';
+import { StatsModule } from './stats/stats.module.js';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ImportsModule } from './imports/imports.module.js';
     HealthModule,
     ImportsModule,
     EventsModule,
+    StatsModule,
   ],
 })
 export class AppModule {}
