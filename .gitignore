@@ -26,6 +26,7 @@ coverage/
 
 # AI skill docs (kept local, not committed)
 skills/
+docs/
 
 # OS
 .DS_Store
