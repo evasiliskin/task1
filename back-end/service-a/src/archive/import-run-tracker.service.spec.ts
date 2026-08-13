@@ -39,7 +39,7 @@ describe('ImportRunTracker', () => {
       const result = await tracker.findByImportId(importId);
 
       expect(result).toBe(document);
-      expect(findOne).toHaveBeenCalledWith({ importId });
+      expect(findOne).toHaveBeenCalledWith({ importId }, { projection: { _id: 0 } });
     });
 
     it('should return null, when no document matches', async () => {

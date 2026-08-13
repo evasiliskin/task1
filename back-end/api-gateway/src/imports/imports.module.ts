@@ -10,6 +10,7 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 
+import { GetImportStatusController } from './get-import-status.controller.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { TriggerImportController } from './trigger-import.controller.js';
 import { UploadImportController } from './upload-import.controller.js';
@@ -49,6 +50,6 @@ import { buildTemporaryUploadFilename } from './upload-storage.util.js';
       }),
     }),
   ],
-  controllers: [UploadImportController, TriggerImportController],
+  controllers: [UploadImportController, TriggerImportController, GetImportStatusController],
 })
 export class ImportsModule {}

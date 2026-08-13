@@ -15,7 +15,7 @@ export class ImportRunTracker {
   ) {}
 
   public async findByImportId(importId: string): Promise<IImportRunDocument | null> {
-    return await this.collection.findOne({ importId });
+    return await this.collection.findOne({ importId }, { projection: { _id: 0 } });
   }
 
   public async recordStarted(

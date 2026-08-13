@@ -19,7 +19,8 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
-    "test:cov": "cross-env NODE_ENV=test vitest run --coverage"
+    "test:cov": "cross-env NODE_ENV=test vitest run --coverage",
+    "bench:memory": "tsx scripts/bench-memory.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -69,6 +70,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "unplugin-swc": "^1.5.1",
     "vite": "^6.4.2",

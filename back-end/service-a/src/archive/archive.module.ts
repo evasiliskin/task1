@@ -12,6 +12,7 @@ import { EnsureImportIndexesInitializer } from './ensure-import-indexes-initiali
 import { eventsCollectionProvider } from './events-collection.provider.js';
 import { ImportOrchestrationService } from './import-orchestration.service.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
+import { ImportStatusController } from './import-status.controller.js';
 import { importsCollectionProvider } from './imports-collection.provider.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { EventsSearchController } from './search/events-search.controller.js';
@@ -37,7 +38,12 @@ import { UploadImportController } from './upload/upload-import.controller.js';
       },
     ]),
   ],
-  controllers: [UploadImportController, DownloadImportController, EventsSearchController],
+  controllers: [
+    UploadImportController,
+    DownloadImportController,
+    EventsSearchController,
+    ImportStatusController,
+  ],
   providers: [
     eventsCollectionProvider,
     importsCollectionProvider,

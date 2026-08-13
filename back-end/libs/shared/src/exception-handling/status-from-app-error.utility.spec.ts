@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 
-import { AppError, AuthError, ErrorCategory, ValidationError } from '../errors/index.js';
+import { AppError, AuthError, ErrorCategory, NotFoundError, ValidationError } from '../errors/index.js';
 
 import { statusFromAppError } from './status-from-app-error.utility.js';
 
@@ -13,6 +13,12 @@ class TestAuthError extends AuthError {
 class TestValidationError extends ValidationError {
   public constructor() {
     super('test validation error', { code: 'TEST_VALIDATION', category: ErrorCategory.VALIDATION });
+  }
+}
+
+class TestNotFoundError extends NotFoundError {
+  public constructor() {
+    super('test not found error', { code: 'TEST_NOT_FOUND', category: ErrorCategory.NOT_FOUND });
   }
 }
 
@@ -45,6 +51,16 @@ describe('statusFromAppError', () => {
 
   it('should return 500, when the error category is INTERNAL', () => {
     expect(statusFromAppError(new TestAppError(ErrorCategory.INTERNAL))).toBe(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  });
+
+  it('should return 404, when the error is a NotFoundError', () => {
+    expect(statusFromAppError(new TestNotFoundError())).toBe(HttpStatus.NOT_FOUND);
+  });
+
+  it('should return 500, when the error has category NOT_FOUND but is not a NotFoundError instance', () => {
+    expect(statusFromAppError(new TestAppError(ErrorCategory.NOT_FOUND))).toBe(
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   });

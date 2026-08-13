@@ -1,4 +1,9 @@
-import { AppError, ErrorCategory, ValidationError } from '@task1/shared/errors/index';
+import {
+  AppError,
+  ErrorCategory,
+  NotFoundError,
+  ValidationError,
+} from '@task1/shared/errors/index';
 
 export class MissingUploadFileError extends ValidationError {
   public constructor() {
@@ -36,6 +41,16 @@ export class InvalidIdempotencyKeyError extends ValidationError {
       code: 'INVALID_IDEMPOTENCY_KEY',
       category: ErrorCategory.VALIDATION,
       params: { idempotencyKey },
+    });
+  }
+}
+
+export class ImportNotFoundError extends NotFoundError {
+  public constructor(importId: string) {
+    super(`Import run not found: "${importId}"`, {
+      code: 'IMPORT_NOT_FOUND',
+      category: ErrorCategory.NOT_FOUND,
+      params: { importId },
     });
   }
 }
