@@ -22,11 +22,11 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "cross-env NODE_ENV=production tsc -p tsconfig.build.json",
     "lint": "eslint \"src/**/*.ts\" --fix",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:cov": "vitest run --coverage"
+    "test": "cross-env NODE_ENV=test vitest run",
+    "test:watch": "cross-env NODE_ENV=test vitest",
+    "test:cov": "cross-env NODE_ENV=test vitest run --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
