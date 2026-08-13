@@ -5,10 +5,10 @@
 .vscode
 
 # Dependencies & build output
-node_modules
-dist
-coverage
-.angular
+**/node_modules
+**/dist
+**/coverage
+**/.angular
 
 # Logs
 pnpm-debug.log*
@@ -22,6 +22,9 @@ npm-debug.log*
 
 # Docs
 README.md
+
+# AI skill docs
+skills/
 
 # Keep these (needed for the build)
 !pnpm-lock.yaml

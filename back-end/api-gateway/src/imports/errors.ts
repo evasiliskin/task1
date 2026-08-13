@@ -38,3 +38,16 @@ export class ArchiveUploadError extends AppError {
     );
   }
 }
+
+export class InvalidIdempotencyKeyError extends ValidationError {
+  public constructor(idempotencyKey: string) {
+    super(
+      `Idempotency-Key header must be a UUID; received "${idempotencyKey}"`,
+      InvalidIdempotencyKeyError.buildOptions({
+        code: 'INVALID_IDEMPOTENCY_KEY',
+        category: ErrorCategory.VALIDATION,
+        params: { idempotencyKey },
+      }),
+    );
+  }
+}

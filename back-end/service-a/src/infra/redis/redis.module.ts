@@ -6,6 +6,7 @@ import { Redis } from 'ioredis';
 import redisConfig from '../../config/redis.config.js';
 import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
+import { MetricsService } from './metrics.service.js';
 import { RedisConnectionService } from './redis-connection.service.js';
 
 @Global()
@@ -13,6 +14,7 @@ import { RedisConnectionService } from './redis-connection.service.js';
   imports: [LoggerModule],
   providers: [
     RedisConnectionService,
+    MetricsService,
     {
       provide: REDIS_CLIENT,
       inject: [redisConfig.KEY],
@@ -31,6 +33,6 @@ import { RedisConnectionService } from './redis-connection.service.js';
       },
     },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, MetricsService],
 })
 export class RedisModule {}

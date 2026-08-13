@@ -11,6 +11,7 @@ import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
+import { TriggerImportController } from './trigger-import.controller.js';
 import { UploadImportController } from './upload-import.controller.js';
 import { buildTemporaryUploadFilename } from './upload-storage.util.js';
 
@@ -48,6 +49,6 @@ import { buildTemporaryUploadFilename } from './upload-storage.util.js';
       }),
     }),
   ],
-  controllers: [UploadImportController],
+  controllers: [UploadImportController, TriggerImportController],
 })
 export class ImportsModule {}
