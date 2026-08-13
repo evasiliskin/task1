@@ -2,12 +2,11 @@
   "name": "task1",
   "private": true,
   "version": "0.0.0",
-  "description": "Multi-service workspace: Angular front-end + NestJS microservices back-end",
+  "description": "Multi-service workspace: NestJS microservices back-end",
   "scripts": {
     "dev:api-gateway": "pnpm --filter api-gateway run start:dev",
     "dev:service-b": "pnpm --filter service-b run start:dev",
     "dev:service-a": "pnpm --filter service-a run start:dev",
-    "dev:front-end": "pnpm --filter front-end run start",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",

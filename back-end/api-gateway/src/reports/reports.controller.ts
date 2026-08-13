@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 
 import { Controller, Get, Inject, Query, Res, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
@@ -13,8 +14,10 @@ import { type Response } from 'express';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
 
 import { GetReportQueryDto } from './dto/get-report-query.dto.js';
+import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 
 const REPORTS_PDF_GENERATE_PATTERN = 'reports.pdf.generate';
@@ -30,6 +33,7 @@ export class ReportsController {
     private readonly requestContextService: RequestContextService,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
+    @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger('ReportsController');
@@ -54,6 +58,8 @@ export class ReportsController {
         .send<GenerateReportRpcResult>(REPORTS_PDF_GENERATE_PATTERN, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
+
+    this.assertReportPathIsContained(result.reportPath);
 
     let reportFileDeleted = false;
 
@@ -97,4 +103,21 @@ export class ReportsController {
   }
 
   private readonly logger: AppLogger;
+
+  // Defense-in-depth: the RMQ reply is internal (service-b's own generated
+  // path, already UUID-constrained upstream), but this refuses to read or
+  // delete anything outside the shared report-storage directory this
+  // gateway process is configured for, rather than trusting the reply path
+  // unconditionally.
+  private assertReportPathIsContained(reportPath: string): void {
+    const reportDirectory = resolve(this.reportConfiguration.dir);
+    const resolvedReportPath = resolve(reportPath);
+
+    if (
+      resolvedReportPath !== reportDirectory &&
+      !resolvedReportPath.startsWith(`${reportDirectory}${sep}`)
+    ) {
+      throw new ReportPathOutsideConfiguredDirectoryError(reportPath, reportDirectory);
+    }
+  }
 }

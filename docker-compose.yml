@@ -113,17 +113,6 @@ services:
       redis:
         condition: service_healthy
 
-  front-end:
-    container_name: task1-front-end
-    build:
-      context: .
-      dockerfile: front-end/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "4200:80"
-    depends_on:
-      - api-gateway
-
 volumes:
   archive-storage:
   report-storage:

@@ -8,7 +8,6 @@
 **/node_modules
 **/dist
 **/coverage
-**/.angular
 
 # Logs
 pnpm-debug.log*

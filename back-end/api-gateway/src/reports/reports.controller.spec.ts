@@ -12,19 +12,23 @@ import { type Response } from 'express';
 import { of } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config.js';
+import { type ReportConfiguration } from '../config/report.config.js';
 
 import { type GetReportQueryDto } from './dto/get-report-query.dto.js';
+import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { ReportsController } from './reports.controller.js';
 
 function buildController(
   sendMock: ReturnType<typeof vi.fn>,
   loggerMocks: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> },
   requestContextService: RequestContextService,
+  reportDirectory: string,
 ): ReportsController {
   const serviceBClient = { send: sendMock } as unknown as ClientProxy;
   const rabbitmqConfiguration = {
     rpcTimeoutMs: 10_000,
   } as unknown as ConfigType<typeof rabbitmqConfig>;
+  const reportConfiguration: ReportConfiguration = { dir: reportDirectory };
   const loggerService = {
     getLogger: vi.fn().mockReturnValue({
       warn: loggerMocks.warn,
@@ -40,6 +44,7 @@ function buildController(
     serviceBClient,
     requestContextService,
     rabbitmqConfiguration,
+    reportConfiguration,
     loggerService,
   );
 }
@@ -77,7 +82,12 @@ describe('ReportsController', () => {
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
-      const controller = buildController(sendMock, { warn, error }, requestContextService);
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
       const response = buildFakeResponse();
 
       await requestContextService.run(
@@ -100,7 +110,12 @@ describe('ReportsController', () => {
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
-      const controller = buildController(sendMock, { warn, error }, requestContextService);
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
       const response = buildFakeResponse();
 
       await requestContextService.run(
@@ -121,7 +136,12 @@ describe('ReportsController', () => {
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
-      const controller = buildController(sendMock, { warn, error }, requestContextService);
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
       const response = buildFakeResponse();
 
       await requestContextService.run(
@@ -141,7 +161,12 @@ describe('ReportsController', () => {
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
-      const controller = buildController(sendMock, { warn, error }, requestContextService);
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
       const response = buildFakeResponse();
 
       await requestContextService.run(
@@ -162,7 +187,12 @@ describe('ReportsController', () => {
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
-      const controller = buildController(sendMock, { warn, error }, requestContextService);
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
       const response = buildFakeResponse();
 
       await requestContextService.run(
@@ -179,6 +209,65 @@ describe('ReportsController', () => {
         expect.objectContaining({ reportPath }),
         'failed to delete generated PDF report file',
       );
+    });
+
+    it('should throw, when the RMQ reply reportPath resolves outside the configured report directory', async () => {
+      const outsideDirectory = mkdtempSync(join(tmpdir(), 'reports-controller-outside-'));
+      const reportPath = join(outsideDirectory, 'report.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
+      writeFileSync(reportPath, '%PDF-1.4 fake report body');
+      const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
+      const warn = vi.fn();
+      const error = vi.fn();
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
+      const response = buildFakeResponse();
+
+      try {
+        await expect(
+          requestContextService.run(
+            { correlationId: 'correlation-id', requestId: 'request-id' },
+            () => controller.getPdfReport(query, response),
+          ),
+        ).rejects.toThrow(ReportPathOutsideConfiguredDirectoryError);
+      } finally {
+        rmSync(outsideDirectory, { recursive: true, force: true });
+      }
+    });
+
+    it('should not delete the outside file, when the RMQ reply reportPath resolves outside the configured report directory', async () => {
+      const outsideDirectory = mkdtempSync(join(tmpdir(), 'reports-controller-outside-'));
+      const reportPath = join(outsideDirectory, 'report.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      writeFileSync(reportPath, '%PDF-1.4 fake report body');
+      const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
+      const warn = vi.fn();
+      const error = vi.fn();
+      const controller = buildController(
+        sendMock,
+        { warn, error },
+        requestContextService,
+        reportDirectory,
+      );
+      const response = buildFakeResponse();
+
+      try {
+        await requestContextService
+          .run({ correlationId: 'correlation-id', requestId: 'request-id' }, () =>
+            controller.getPdfReport(query, response),
+          )
+          .catch(() => undefined);
+        await flushMicrotasks();
+
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+        expect(existsSync(reportPath)).toBe(true);
+      } finally {
+        rmSync(outsideDirectory, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -1,10 +1,9 @@
 # task1
 
-pnpm workspace monorepo: an Angular front-end and NestJS microservices back-end.
+pnpm workspace monorepo: NestJS microservices back-end.
 
 ```
 task1/
-├── front-end/              Angular app (talks only to the gateway's REST API)
 └── back-end/
     ├── api-gateway/         Public HTTP entrypoint - REST API, forwards to microservices over RabbitMQ
     ├── service-a/           Internal microservice (RabbitMQ transport only, no HTTP)
@@ -19,7 +18,7 @@ the internal microservices over NestJS's RabbitMQ transport using `ClientProxy` 
 RabbitMQ consumers.
 
 ```
-Angular (front-end)
+Client
       │  HTTP (REST)
       ▼
    gateway  ──RabbitMQ RPC──▶  service-a  ──RabbitMQ RPC──▶  service-b
@@ -38,7 +37,7 @@ nvm use
 
 pnpm install
 
-# start RabbitMQ + service-a + service-b + gateway + front-end
+# start RabbitMQ + service-a + service-b + gateway
 pnpm docker:up
 
 # or run services individually against a local RabbitMQ:
@@ -49,10 +48,8 @@ cp back-end/service-b/.env.example back-end/service-b/.env
 pnpm dev:service-b
 pnpm dev:service-a
 pnpm dev:api-gateway
-pnpm dev:front-end
 ```
 
-- Front-end: http://localhost:4200
 - Gateway REST API: http://localhost:3000 (aggregated health at `/health`, liveness at
   `/health/live`, readiness at `/health/ready` — see `back-end/api-gateway/README.md` for details)
 - Gateway Swagger docs: http://localhost:3000/api-docs
@@ -71,18 +68,17 @@ pnpm dev:front-end
 | `pnpm lint` | Lint the back-end services (ESLint) |
 | `pnpm format` / `pnpm format:check` | Prettier across the whole workspace |
 | `pnpm check` | `lint` + `test` - also runs automatically on `git push` (Husky) |
-| `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ and all three back-end services + front-end |
+| `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ and all three back-end services |
 
 ## Tooling notes
 
-- **Package manager**: pnpm workspaces (`pnpm-workspace.yaml`: `front-end`, `back-end/*`).
+- **Package manager**: pnpm workspaces (`pnpm-workspace.yaml`: `back-end/*`, `back-end/libs/*`).
 - **Testing**: Vitest for all three NestJS services (`*.spec.ts` unit tests, `*.int.spec.ts`
   HTTP-integration tests for the gateway via `supertest`).
 - **Prettier**: one shared config at the repo root (`.prettierrc.mjs`), applies to every package.
 - **ESLint**: `back-end/api-gateway`, `back-end/service-a`, and `back-end/service-b` each have their
   own `eslint.config.mjs` (typescript-eslint + import ordering + security/sonarjs/unicorn rules),
-  pointed at each app's own `tsconfig.json`. `front-end` doesn't use this config - it's
-  Node/NestJS-specific tooling; add `@angular-eslint` separately if you want linting there.
+  pointed at each app's own `tsconfig.json`.
 - **Git hooks**: Husky runs `pnpm check` (lint + test) on `git push`, not on every commit -
   `.husky/pre-push`. Hooks install automatically the first time you run `pnpm install` (the root
   `prepare` script).
