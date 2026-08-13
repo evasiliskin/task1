@@ -23,7 +23,6 @@ COPY back-end/api-gateway/package.json back-end/api-gateway/package.json
 COPY back-end/service-b/package.json back-end/service-b/package.json
 COPY back-end/service-a/package.json back-end/service-a/package.json
 COPY back-end/libs/shared/package.json back-end/libs/shared/package.json
-COPY front-end/package.json front-end/package.json
 
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
