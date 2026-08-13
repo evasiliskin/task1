@@ -97,6 +97,9 @@ services:
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue
       MONGODB_URI: mongodb://mongodb:27017/gateway
       REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/archives
+    volumes:
+      - archive-storage:/data/archives
     depends_on:
       rabbitmq:
         condition: service_healthy

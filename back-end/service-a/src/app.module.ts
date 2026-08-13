@@ -5,6 +5,7 @@ import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/ex
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
+import { ArchiveModule } from './archive/archive.module.js';
 import archiveConfig from './config/archive.config.js';
 import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
@@ -34,6 +35,7 @@ import { RedisModule } from './infra/redis/redis.module.js';
     MongoModule,
     RedisModule,
     HealthModule,
+    ArchiveModule,
   ],
 })
 export class AppModule {}

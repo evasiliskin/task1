@@ -4,6 +4,6 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './auth.guard.js';
 
 @Module({
-  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [{ provide: APP_GUARD, useExisting: AuthGuard }, AuthGuard],
 })
 export class AuthModule {}

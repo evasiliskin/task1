@@ -36,6 +36,7 @@
     "class-validator": "^0.14.1",
     "ioredis": "^6.0.0",
     "mongodb": "^7.5.0",
+    "multer": "^2.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^4.4.3"
@@ -47,6 +48,7 @@
     "@nestjs/testing": "^11.0.1",
     "@swc/core": "^1.7.39",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
     "@typescript-eslint/eslint-plugin": "^8.20.0",

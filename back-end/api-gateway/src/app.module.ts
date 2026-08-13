@@ -10,20 +10,32 @@ import appConfig from './config/app.config.js';
 import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
+import storageConfig from './config/storage.config.js';
+import uploadConfig from './config/upload.config.js';
 import { HealthModule } from './health/health.module.js';
+import { ImportsModule } from './imports/imports.module.js';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,
-      load: [appConfig, loggerConfig, rabbitmqConfig, mongodbConfig, redisConfig],
+      load: [
+        appConfig,
+        loggerConfig,
+        rabbitmqConfig,
+        mongodbConfig,
+        redisConfig,
+        storageConfig,
+        uploadConfig,
+      ],
     }),
     RequestContextModule,
     LoggerModule,
     ExceptionHandlingModule,
     AuthModule,
     HealthModule,
+    ImportsModule,
   ],
 })
 export class AppModule {}
