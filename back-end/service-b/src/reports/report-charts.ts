@@ -8,6 +8,7 @@ export type PdfDocument = InstanceType<typeof PDFDocument>;
 const TIME_CHART_WIDTH = 400;
 const TIME_CHART_HEIGHT = 120;
 const TIME_CHART_BOTTOM_MARGIN = 20;
+const SINGLE_POINT_MARKER_RADIUS = 3;
 
 const BAR_CHART_HEIGHT = 120;
 const BAR_WIDTH = 60;
@@ -46,8 +47,8 @@ export function drawEventsOverTimeChart(
   document_.fontSize(14).text('Events Processed Over Time', { underline: true });
   document_.moveDown(0.5);
 
-  if (timeSeries.length < 2) {
-    document_.fontSize(11).text('Not enough data points to draw a chart.');
+  if (timeSeries.length === 0) {
+    document_.fontSize(11).text('No data available to draw a chart.');
 
     return;
   }
@@ -55,27 +56,35 @@ export function drawEventsOverTimeChart(
   const originX = document_.x;
   const originY = document_.y;
   const maxValue = Math.max(...timeSeries.map((point) => point.value), 1);
-  const stepX = TIME_CHART_WIDTH / (timeSeries.length - 1);
 
   document_
     .moveTo(originX, originY + TIME_CHART_HEIGHT)
     .lineTo(originX + TIME_CHART_WIDTH, originY + TIME_CHART_HEIGHT)
     .stroke();
 
-  timeSeries.forEach((point, index) => {
-    const x = originX + index * stepX;
+  if (timeSeries.length === 1) {
+    const [point] = timeSeries;
     const y = originY + TIME_CHART_HEIGHT - (point.value / maxValue) * TIME_CHART_HEIGHT;
 
-    if (index === 0) {
-      document_.moveTo(x, y);
+    document_.circle(originX, y, SINGLE_POINT_MARKER_RADIUS).fill('black');
+  } else {
+    const stepX = TIME_CHART_WIDTH / (timeSeries.length - 1);
 
-      return;
-    }
+    timeSeries.forEach((point, index) => {
+      const x = originX + index * stepX;
+      const y = originY + TIME_CHART_HEIGHT - (point.value / maxValue) * TIME_CHART_HEIGHT;
 
-    document_.lineTo(x, y);
-  });
+      if (index === 0) {
+        document_.moveTo(x, y);
 
-  document_.stroke();
+        return;
+      }
+
+      document_.lineTo(x, y);
+    });
+
+    document_.stroke();
+  }
 
   document_.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
 }

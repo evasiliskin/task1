@@ -59,22 +59,34 @@ describe('drawSummarySection', () => {
 });
 
 describe('drawEventsOverTimeChart', () => {
-  it('should write a "not enough data" message and draw no lines, when the series is empty', () => {
+  it('should write a "no data" message and draw no lines, when the series is empty', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
 
     drawEventsOverTimeChart(doc as never, []);
 
-    expect(doc.text).toHaveBeenCalledWith('Not enough data points to draw a chart.');
+    expect(doc.text).toHaveBeenCalledWith('No data available to draw a chart.');
     expect(doc.moveTo).not.toHaveBeenCalled();
   });
 
-  it('should write a "not enough data" message and draw no lines, when only one point is given', () => {
-    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
+  it('should draw the axis line and a single point marker, when only one point is given', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
     drawEventsOverTimeChart(doc as never, [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }]);
 
-    expect(doc.text).toHaveBeenCalledWith('Not enough data points to draw a chart.');
-    expect(doc.moveTo).not.toHaveBeenCalled();
+    expect(doc.text).not.toHaveBeenCalledWith('No data available to draw a chart.');
+    expect(doc.moveTo).toHaveBeenCalledTimes(1);
+    expect(doc.lineTo).toHaveBeenCalledTimes(1);
+    expect(doc.stroke).toHaveBeenCalledTimes(1);
+    expect(doc.circle).toHaveBeenCalledTimes(1);
+    expect(doc.fill).toHaveBeenCalledWith('black');
+  });
+
+  it('should advance doc.y below the fixed-height chart area, when only one point is given', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
+
+    drawEventsOverTimeChart(doc as never, [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }]);
+
+    expect(doc.y).toBe(100 + 120 + 20);
   });
 
   it('should draw one axis line and one polyline, when 3 points are given', () => {
