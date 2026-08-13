@@ -49,6 +49,9 @@ services:
       RABBITMQ_QUEUE: service_b_queue
       MONGODB_URI: mongodb://mongodb:27017/service_b
       REDIS_URL: redis://redis:6379
+      REPORT_DIR: /data/reports
+    volumes:
+      - report-storage:/data/reports
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -98,8 +101,10 @@ services:
       MONGODB_URI: mongodb://mongodb:27017/gateway
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data/archives
+      REPORT_DIR: /data/reports
     volumes:
       - archive-storage:/data/archives
+      - report-storage:/data/reports
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -121,3 +126,4 @@ services:
 
 volumes:
   archive-storage:
+  report-storage:

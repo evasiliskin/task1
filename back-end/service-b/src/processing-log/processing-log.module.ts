@@ -22,5 +22,6 @@ import { StatsService } from './stats/stats.service.js';
     StatsMetricsReader,
     StatsService,
   ],
+  exports: [StatsService],
 })
 export class ProcessingLogModule {}

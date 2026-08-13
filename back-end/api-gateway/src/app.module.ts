@@ -10,11 +10,13 @@ import appConfig from './config/app.config.js';
 import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
+import reportConfig from './config/report.config.js';
 import storageConfig from './config/storage.config.js';
 import uploadConfig from './config/upload.config.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ImportsModule } from './imports/imports.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { StatsModule } from './stats/stats.module.js';
 
 @Module({
@@ -30,6 +32,7 @@ import { StatsModule } from './stats/stats.module.js';
         redisConfig,
         storageConfig,
         uploadConfig,
+        reportConfig,
       ],
     }),
     RequestContextModule,
@@ -40,6 +43,7 @@ import { StatsModule } from './stats/stats.module.js';
     ImportsModule,
     EventsModule,
     StatsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

@@ -8,17 +8,19 @@ import { RequestContextModule } from '@task1/shared/request-context/rmq/request-
 import mongodbConfig from './config/mongodb.config.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
+import reportConfig from './config/report.config.js';
 import { HealthModule } from './health/health.module.js';
 import { MongoModule } from './infra/mongo/mongo.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
 import { ProcessingLogModule } from './processing-log/processing-log.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,
-      load: [loggerConfig, rabbitmqConfig, mongodbConfig, redisConfig],
+      load: [loggerConfig, rabbitmqConfig, mongodbConfig, redisConfig, reportConfig],
     }),
     RequestContextModule,
     LoggerModule,
@@ -27,6 +29,7 @@ import { ProcessingLogModule } from './processing-log/processing-log.module.js';
     RedisModule,
     HealthModule,
     ProcessingLogModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

@@ -1,0 +1,100 @@
+import { createReadStream } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+
+import { Controller, Get, Inject, Query, Res, StreamableFile } from '@nestjs/common';
+import { type ConfigType } from '@nestjs/config';
+import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { type Response } from 'express';
+import { firstValueFrom, timeout } from 'rxjs';
+
+import rabbitmqConfig from '../config/rabbitmq.config.js';
+
+import { GetReportQueryDto } from './dto/get-report-query.dto.js';
+import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
+
+const REPORTS_PDF_GENERATE_PATTERN = 'reports.pdf.generate';
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `IGenerateReportResult`
+type GenerateReportRpcResult = { reportPath: string };
+
+@ApiTags('reports')
+@Controller('reports')
+export class ReportsController {
+  public constructor(
+    @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
+    private readonly requestContextService: RequestContextService,
+    @Inject(rabbitmqConfig.KEY)
+    private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
+    loggerService: LoggerService,
+  ) {
+    this.logger = loggerService.getLogger('ReportsController');
+  }
+
+  @Get('pdf')
+  @ApiOperation({
+    summary: 'Generate and download a PDF processing report, optionally scoped to one import',
+  })
+  @ApiQuery({ name: 'importId', required: false, description: 'Import run UUID' })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({ description: 'The generated PDF report' })
+  public async getPdfReport(
+    @Query() query: GetReportQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
+    const record = new RmqRecordBuilder(query).setOptions({ headers }).build();
+
+    const result = await firstValueFrom(
+      this.serviceBClient
+        .send<GenerateReportRpcResult>(REPORTS_PDF_GENERATE_PATTERN, record)
+        .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
+    );
+
+    let reportFileDeleted = false;
+
+    const deleteReportFile = (): void => {
+      if (reportFileDeleted) {
+        return;
+      }
+
+      reportFileDeleted = true;
+
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
+      unlink(result.reportPath).catch((error: unknown) => {
+        this.logger.warn(
+          { reportPath: result.reportPath, error },
+          'failed to delete generated PDF report file',
+        );
+      });
+    };
+
+    // 'close' fires once the response has fully finished sending (after
+    // 'finish') AND when the underlying connection is terminated
+    // prematurely (client-aborted download) — a single listener covers
+    // both the happy path and an aborted download.
+    response.on('close', deleteReportFile);
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    const reportFileStream = createReadStream(result.reportPath);
+
+    reportFileStream.on('error', (error) => {
+      this.logger.error(
+        { reportPath: result.reportPath, error },
+        'failed to stream generated PDF report file',
+      );
+      deleteReportFile();
+    });
+
+    return new StreamableFile(reportFileStream, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="report-${query.importId ?? 'aggregate'}.pdf"`,
+    });
+  }
+
+  private readonly logger: AppLogger;
+}
