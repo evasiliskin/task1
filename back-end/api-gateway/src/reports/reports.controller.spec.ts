@@ -59,6 +59,24 @@ async function flushMicrotasks(): Promise<void> {
   });
 }
 
+async function waitFor(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 2000,
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (!condition()) {
+    if (Date.now() - startTime > timeoutMs) {
+      throw new Error(`Timeout waiting for ${description} after ${timeoutMs}ms`);
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+}
+
 describe('ReportsController', () => {
   let reportDirectory: string;
   let requestContextService: RequestContextService;
@@ -199,7 +217,7 @@ describe('ReportsController', () => {
         { correlationId: 'correlation-id', requestId: 'request-id' },
         () => controller.getPdfReport(query, response),
       );
-      await flushMicrotasks();
+      await waitFor(() => warn.mock.calls.length > 0, 'the delete-failure warning to be logged');
 
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
