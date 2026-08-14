@@ -13,19 +13,17 @@ import {
 } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type Request } from 'express';
-import { z } from 'zod';
 
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
+import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
-import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
-import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import {
@@ -45,13 +43,13 @@ const UNLINK_REJECTED_UPLOAD_FAILED_LOG = 'Failed to remove an upload rejected a
 
 @ApiTags('imports')
 @Controller('imports')
-export class UploadImportController {
+export class UploadImportController extends LoggerAware {
   public constructor(
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('UploadImportController');
+    super(loggerService);
   }
 
   // Tighter than the global default (100/min) — literal here must be kept in
@@ -67,9 +65,7 @@ export class UploadImportController {
     schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
   })
   @Contract({ request: EmptyRequestSchema, response: UploadImportResponseSchema })
-  @ApiCreatedResponse({
-    schema: singleEnvelopeJsonSchema(z.toJSONSchema(UploadImportResponseSchema) as SwaggerSchema),
-  })
+  @ApiSingleResponse(UploadImportResponseSchema, { status: HttpStatus.CREATED })
   public async upload(
     @Req() request: Request & { rejectedFilename?: string },
     @UploadedFile() file?: Express.Multer.File,
@@ -114,8 +110,6 @@ export class UploadImportController {
 
     return { importId };
   }
-
-  private readonly logger: AppLogger;
 
   private publish(pattern: string, payload: Record<string, unknown>): void {
     this.serviceAClient.emit(pattern, payload).subscribe({

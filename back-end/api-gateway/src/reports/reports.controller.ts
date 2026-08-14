@@ -6,8 +6,8 @@ import { Controller, Get, Inject, Res, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
@@ -29,7 +29,7 @@ type GenerateReportRpcResult = { reportPath: string };
 
 @ApiTags('reports')
 @Controller('reports')
-export class ReportsController {
+export class ReportsController extends LoggerAware {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
     private readonly requestContextService: RequestContextService,
@@ -38,7 +38,7 @@ export class ReportsController {
     @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('ReportsController');
+    super(loggerService);
   }
 
   @Get('pdf')
@@ -104,8 +104,6 @@ export class ReportsController {
       disposition: `attachment; filename="report-${bound.data.importId ?? 'aggregate'}.pdf"`,
     });
   }
-
-  private readonly logger: AppLogger;
 
   // Defense-in-depth: the RMQ reply is internal (service-b's own generated
   // path, already UUID-constrained upstream), but this refuses to read or

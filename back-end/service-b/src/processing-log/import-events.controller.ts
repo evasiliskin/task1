@@ -9,7 +9,7 @@ import {
   type ImportFailedEvent,
   type ImportStartedEvent,
 } from '@task1/shared/github-archive/index';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type ZodType } from 'zod';
 
@@ -53,13 +53,13 @@ const REPUBLISH_REFUSED_LOG =
 const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
 @Controller()
-export class ImportEventsController {
+export class ImportEventsController extends LoggerAware {
   public constructor(
     private readonly tracker: ProcessingLogTracker,
     @Inject(rabbitmqConfig.KEY) private readonly rabbitmqConfiguration: RabbitmqConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('ImportEventsController');
+    super(loggerService);
   }
 
   @EventPattern(EVENT_PATTERNS.IMPORT_STARTED)
@@ -103,8 +103,6 @@ export class ImportEventsController {
       context,
     );
   }
-
-  private readonly logger: AppLogger;
 
   private async processEvent<
     TEvent extends ImportStartedEvent | ImportCompletedEvent | ImportFailedEvent,

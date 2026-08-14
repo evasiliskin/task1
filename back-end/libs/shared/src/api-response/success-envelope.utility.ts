@@ -1,5 +1,6 @@
+import { isListResult } from '../pagination/list-result.js';
+
 import { type IApiSuccessResponse } from './api-response.types.js';
-import { isListResult } from './list-result.js';
 
 const SUCCESS_MESSAGE = 'OK';
 

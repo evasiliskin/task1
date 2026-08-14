@@ -2,16 +2,16 @@ import { randomUUID } from 'node:crypto';
 
 import { Controller, Headers, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
-import { ApiAcceptedResponse, ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { z } from 'zod';
 
+import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
-import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
-import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
+import { toSwaggerSchema } from '../contract/schemas/swagger-schema.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { InvalidIdempotencyKeyError } from './errors.js';
@@ -26,12 +26,12 @@ function isValidIdempotencyKey(value: string): boolean {
 
 @ApiTags('imports')
 @Controller('imports')
-export class TriggerImportController {
+export class TriggerImportController extends LoggerAware {
   public constructor(
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('TriggerImportController');
+    super(loggerService);
   }
 
   @Post()
@@ -43,10 +43,8 @@ export class TriggerImportController {
     description:
       'Client-supplied UUID. Replaying the same key returns the same importId and does not start a second import.',
   })
-  @ApiBody({ schema: z.toJSONSchema(TriggerImportRequestSchema.shape.body) as SwaggerSchema })
-  @ApiAcceptedResponse({
-    schema: singleEnvelopeJsonSchema(z.toJSONSchema(TriggerImportResponseSchema) as SwaggerSchema),
-  })
+  @ApiBody({ schema: toSwaggerSchema(TriggerImportRequestSchema.shape.body) })
+  @ApiSingleResponse(TriggerImportResponseSchema, { status: HttpStatus.ACCEPTED })
   public trigger(
     @ModelBinder(TriggerImportRequestSchema)
     bound: BoundRequest<typeof TriggerImportRequestSchema>,
@@ -65,8 +63,6 @@ export class TriggerImportController {
 
     return { importId };
   }
-
-  private readonly logger: AppLogger;
 
   private publish(pattern: string, payload: Record<string, unknown>): void {
     this.serviceAClient.emit(pattern, payload).subscribe({

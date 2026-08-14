@@ -1,4 +1,4 @@
-import { listResult } from '@task1/shared/exception-handling/http/list-result';
+import { listResult } from '@task1/shared/pagination/list-result';
 import { z, type ZodTypeAny } from 'zod';
 
 const PaginationSchema = z.object({ nextCursor: z.string().optional() });

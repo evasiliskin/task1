@@ -1,19 +1,18 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { listResult } from '@task1/shared/exception-handling/http/list-result';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
+import { listResult } from '@task1/shared/pagination/list-result';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
-import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { ApiListResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
-import { listEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
-import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { type EventView } from './schemas/event.schema.js';
@@ -23,9 +22,6 @@ import {
   SearchEventsResponseSchema,
   SearchEventsResultShape,
 } from './schemas/search-events-response.schema.js';
-
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `SearchEventsResult`
-type SearchEventsRpcResult = { data: EventView[]; nextCursor?: string };
 
 @ApiTags('events')
 @Controller('events')
@@ -59,9 +55,7 @@ export class EventsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({
-    schema: listEnvelopeJsonSchema(z.toJSONSchema(SearchEventsResultShape) as SwaggerSchema),
-  })
+  @ApiListResponse(SearchEventsResultShape)
   public async search(
     @ModelBinder(SearchEventsRequestSchema)
     bound: BoundRequest<typeof SearchEventsRequestSchema>,
@@ -71,7 +65,7 @@ export class EventsController {
 
     const result = await firstValueFrom(
       this.serviceAClient
-        .send<SearchEventsRpcResult>(RPC_PATTERNS.EVENTS_SEARCH, record)
+        .send<ICursorPage<EventView>>(RPC_PATTERNS.EVENTS_SEARCH, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

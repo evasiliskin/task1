@@ -1,4 +1,5 @@
-import { listResult } from './list-result.js';
+import { listResult } from '../pagination/list-result.js';
+
 import { buildSuccessEnvelope } from './success-envelope.utility.js';
 
 const CORRELATION_ID = '2f1fdc5d-4324-4f56-95ae-d25df842bd7b';

@@ -1,4 +1,4 @@
-import { isListResult } from '@task1/shared/exception-handling/http/list-result';
+import { isListResult } from '@task1/shared/pagination/list-result';
 import { z } from 'zod';
 
 import { listResponseSchema } from './list-response.schema.js';

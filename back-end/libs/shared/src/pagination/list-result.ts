@@ -1,7 +1,5 @@
-import { type IApiPagination } from './api-response.types.js';
+import { type IApiPagination } from '../api-response/api-response.types.js';
 
-// Module-local symbol: `isListResult` is an exact identity check, not a structural guess,
-// so a plain `{ items, pagination }` object can never be mistaken for a list result.
 const LIST_RESULT = Symbol('LIST_RESULT');
 
 export interface IListResult<T> {

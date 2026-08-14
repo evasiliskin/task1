@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, type RmqContext } from '@nestjs/microservices';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
@@ -15,13 +15,13 @@ const ALREADY_CLAIMED_LOG_MESSAGE =
   'Import already claimed by another consumer, skipping duplicate';
 
 @Controller()
-export class UploadImportController {
+export class UploadImportController extends LoggerAware {
   public constructor(
     private readonly importOrchestrationService: ImportOrchestrationService,
     private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('UploadImportController');
+    super(loggerService);
   }
 
   @EventPattern(RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD)
@@ -48,6 +48,4 @@ export class UploadImportController {
       ackMessage(context);
     }
   }
-
-  private readonly logger: AppLogger;
 }

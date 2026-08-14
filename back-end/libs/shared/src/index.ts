@@ -2,6 +2,10 @@ export * from './errors/index.js';
 
 export * from './github-archive/index.js';
 
+export * from './api-response/api-response.types.js';
+export * from './api-response/error-envelope.utility.js';
+export * from './api-response/success-envelope.utility.js';
+
 export * from './exception-handling/error-format.service.js';
 export * from './exception-handling/error-format.strategy.interface.js';
 export * from './exception-handling/error-format.tokens.js';
@@ -14,9 +18,12 @@ export * from './exception-handling/strategies/http-exception.format-strategy.js
 export * from './messaging/rpc-patterns.const.js';
 
 export * from './pagination/cursor-codec.js';
+export * from './pagination/cursor-page.types.js';
+export * from './pagination/list-result.js';
 export * from './pagination/pagination.const.js';
 
 export * from './logger/app-logger.js';
+export * from './logger/logger-aware.base.js';
 export * from './logger/nest-logger.bridge.js';
 export * from './logger/redact-paths.js';
 export * from './logger/types.js';

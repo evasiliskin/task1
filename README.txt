@@ -9,7 +9,8 @@ task1/
     ├── service-a/           Internal microservice (RabbitMQ transport only, no HTTP)
     ├── service-b/           Internal microservice (RabbitMQ transport only, no HTTP)
     └── libs/shared/         Shared library (@task1/shared) - errors, exception handling,
-                              request-context/correlation-ID propagation, logging, GH Archive contracts
+                              API response envelopes, pagination, request-context/correlation-ID
+                              propagation, logging, GH Archive contracts
 ```
 
 ## Contents

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type Redis } from 'ioredis';
 
@@ -27,13 +27,13 @@ export interface IEventsTimeSeriesResult {
 }
 
 @Injectable()
-export class StatsMetricsReader {
+export class StatsMetricsReader extends LoggerAware {
   public constructor(
     @Inject(REDIS_CLIENT) private readonly client: Redis,
     @Inject(redisConfig.KEY) private readonly redisConfiguration: RedisConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('StatsMetricsReader');
+    super(loggerService);
   }
 
   public async readAverageProcessingDuration(): Promise<IProcessingDurationResult> {
@@ -88,6 +88,4 @@ export class StatsMetricsReader {
       return { timeSeries: [], degraded: true };
     }
   }
-
-  private readonly logger: AppLogger;
 }

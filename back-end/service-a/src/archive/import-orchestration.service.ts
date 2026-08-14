@@ -2,7 +2,7 @@ import { unlink } from 'node:fs/promises';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 
 import { MetricsService } from '../infra/redis/metrics.service.js';
@@ -18,7 +18,7 @@ const EMIT_FAILED_LOG = 'Failed to publish lifecycle event';
 const DELETE_FAILED_LOG = 'Failed to delete processed archive';
 
 @Injectable()
-export class ImportOrchestrationService {
+export class ImportOrchestrationService extends LoggerAware {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
     private readonly metricsService: MetricsService,
@@ -27,7 +27,7 @@ export class ImportOrchestrationService {
     private readonly archiveProcessingService: ArchiveProcessingService,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('ImportOrchestrationService');
+    super(loggerService);
   }
 
   public importDownload(
@@ -55,8 +55,6 @@ export class ImportOrchestrationService {
       this.buildDependencies(),
     );
   }
-
-  private readonly logger: AppLogger;
 
   private buildDependencies(): IImportArchiveDependencies {
     return {

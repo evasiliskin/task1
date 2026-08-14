@@ -1,4 +1,5 @@
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { type Collection } from 'mongodb';
 
 import { buildEventsFilter } from './build-events-filter.js';
@@ -7,15 +8,10 @@ import { type SearchEventsMessage } from './search-events-message.schema.js';
 
 const EVENT_PROJECTION = { _id: 0 } as const;
 
-export interface IPaginationResult<T> {
-  data: T[];
-  nextCursor?: string;
-}
-
 export async function searchEvents(
   collection: Collection<IGithubEventDocument>,
   message: SearchEventsMessage,
-): Promise<IPaginationResult<IGithubEventDocument>> {
+): Promise<ICursorPage<IGithubEventDocument>> {
   const cursor = message.cursor === undefined ? undefined : decodeEventCursor(message.cursor);
   const filter = buildEventsFilter(message, cursor);
 

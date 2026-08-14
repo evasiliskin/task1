@@ -1,3 +1,4 @@
+import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { type Collection, type WithId } from 'mongodb';
 
 import { type IProcessingLogDocument } from '../processing-log.types.js';
@@ -19,11 +20,7 @@ const LOG_PROJECTION = {
   errorInfo: 1,
 } as const;
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`: matches the brief's `SearchLogsResult` shape consumed by Task 6's `LogsSearchService`.
-export type SearchLogsResult = {
-  data: IProcessingLogDocument[];
-  nextCursor?: string;
-};
+export type SearchLogsResult = ICursorPage<IProcessingLogDocument>;
 
 export async function searchLogs(
   collection: Collection<IProcessingLogDocument>,

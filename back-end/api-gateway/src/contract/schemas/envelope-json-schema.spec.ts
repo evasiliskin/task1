@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { listEnvelopeJsonSchema, singleEnvelopeJsonSchema } from './envelope-json-schema.js';
 import { listResponseSchema } from './list-response.schema.js';
-import { type SwaggerSchema } from './swagger-schema.type.js';
+import { type SwaggerSchema } from './swagger-schema.js';
 
 describe('singleEnvelopeJsonSchema', () => {
   it('should nest the payload under result.data, when wrapping a single schema', () => {

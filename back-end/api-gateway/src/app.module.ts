@@ -50,12 +50,6 @@ import { StatsModule } from './stats/stats.module.js';
     ResponseEnvelopeModule,
     HealthModule,
     RmqClientsModule,
-    // ThrottlerModule must be imported (and its APP_GUARD provider registered)
-    // before AuthModule: NestJS runs multiple global guards in registration
-    // order, so rate limiting has to be evaluated before the (currently
-    // allow-all) auth guard. `imports: [HealthModule]` here lets the factory
-    // below inject the gateway's single shared REDIS_CLIENT instead of
-    // opening a second Redis connection just for throttling.
     ThrottlerModule.forRootAsync({
       imports: [HealthModule],
       inject: [throttleConfig.KEY, REDIS_CLIENT],

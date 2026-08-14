@@ -4,8 +4,8 @@ import {
   HealthCheckService as TerminusHealthCheckService,
   type HealthCheckResult,
 } from '@nestjs/terminus';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
 import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
@@ -29,7 +29,7 @@ export interface IAggregatedHealth {
 }
 
 @Injectable()
-export class HealthCheckService {
+export class HealthCheckService extends LoggerAware {
   public constructor(
     private readonly terminus: TerminusHealthCheckService,
     private readonly gatewayIndicator: GatewayHealthIndicator,
@@ -41,7 +41,7 @@ export class HealthCheckService {
     private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('HealthCheckService');
+    super(loggerService);
   }
 
   public async getHealth(): Promise<IAggregatedHealth> {
@@ -65,8 +65,6 @@ export class HealthCheckService {
 
     return { ready, result };
   }
-
-  private readonly logger: AppLogger;
 
   private async runAllChecks(): Promise<IAggregatedHealth> {
     const startedAt = Date.now();

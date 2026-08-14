@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 
-import { type IApiErrorBody } from '../error-response.types.js';
+import { type IApiErrorBody } from '../exception-handling/error-response.types.js';
 
 import { type IApiErrorResponse } from './api-response.types.js';
 

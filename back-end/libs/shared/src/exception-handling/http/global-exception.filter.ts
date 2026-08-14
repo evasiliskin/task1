@@ -8,12 +8,11 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+import { type IApiErrorResponse } from '../../api-response/api-response.types.js';
+import { buildErrorEnvelope } from '../../api-response/error-envelope.utility.js';
 import { resolveId } from '../../request-context/id-validation.util.js';
 import { RequestContextService } from '../../request-context/request-context.service.js';
 import { ErrorFormatService } from '../error-format.service.js';
-
-import { type IApiErrorResponse } from './api-response.types.js';
-import { buildErrorEnvelope } from './error-envelope.utility.js';
 
 @Catch()
 @Injectable()

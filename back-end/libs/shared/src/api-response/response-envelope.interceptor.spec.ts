@@ -1,9 +1,9 @@
 import { type ExecutionContext, StreamableFile } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
-import { RequestContextService } from '../../request-context/request-context.service.js';
+import { listResult } from '../pagination/list-result.js';
+import { RequestContextService } from '../request-context/request-context.service.js';
 
-import { listResult } from './list-result.js';
 import { ResponseEnvelopeInterceptor } from './response-envelope.interceptor.js';
 
 const CORRELATION_ID = '2f1fdc5d-4324-4f56-95ae-d25df842bd7b';

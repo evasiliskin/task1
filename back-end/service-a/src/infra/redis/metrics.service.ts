@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { type Redis } from 'ioredis';
 
@@ -12,13 +12,13 @@ const FAILED_METRICS_LOG_MESSAGE = 'Failed to record metrics';
 const FAILED_METRICS_ENTRY_LOG_MESSAGE = 'Failed to record metric in batch';
 
 @Injectable()
-export class MetricsService {
+export class MetricsService extends LoggerAware {
   public constructor(
     @Inject(REDIS_CLIENT) private readonly client: Redis,
     @Inject(redisConfig.KEY) private readonly redisConfiguration: RedisConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('MetricsService');
+    super(loggerService);
   }
 
   public async recordMetric(key: string, value: number): Promise<void> {
@@ -66,6 +66,4 @@ export class MetricsService {
       this.logger.warn({ entries }, FAILED_METRICS_LOG_MESSAGE, error);
     }
   }
-
-  private readonly logger: AppLogger;
 }

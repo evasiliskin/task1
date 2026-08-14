@@ -1,19 +1,18 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { listResult } from '@task1/shared/exception-handling/http/list-result';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
+import { listResult } from '@task1/shared/pagination/list-result';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
-import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { ApiListResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
-import { listEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
-import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
 import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { SearchLogsRequestSchema } from './schemas/search-logs-request.schema.js';
@@ -23,9 +22,6 @@ import {
   SearchLogsResponseSchema,
   SearchLogsResultShape,
 } from './schemas/search-logs-response.schema.js';
-
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- matches the RMQ reply shape of service-b's SearchLogsResult, same convention as EventsController's SearchEventsRpcResult.
-type SearchLogsRpcResult = { data: LogEntry[]; nextCursor?: string };
 
 @ApiTags('logs')
 @Controller('logs')
@@ -58,9 +54,7 @@ export class LogsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({
-    schema: listEnvelopeJsonSchema(z.toJSONSchema(SearchLogsResultShape) as SwaggerSchema),
-  })
+  @ApiListResponse(SearchLogsResultShape)
   public async search(
     @ModelBinder(SearchLogsRequestSchema) bound: BoundRequest<typeof SearchLogsRequestSchema>,
   ): Promise<SearchLogsResponse> {
@@ -69,7 +63,7 @@ export class LogsController {
 
     const result = await firstValueFrom(
       this.serviceBClient
-        .send<SearchLogsRpcResult>(RPC_PATTERNS.LOGS_SEARCH, record)
+        .send<ICursorPage<LogEntry>>(RPC_PATTERNS.LOGS_SEARCH, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
