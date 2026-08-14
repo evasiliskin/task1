@@ -1,0 +1,31 @@
+# Version control / IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Dependencies & build output
+**/node_modules
+**/dist
+**/coverage
+
+# Logs
+pnpm-debug.log*
+npm-debug.log*
+*.log
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Docs
+README.txt
+
+# AI skill docs
+skills/
+
+# Keep these (needed for the build)
+!pnpm-lock.yaml
+!package.json
+!pnpm-workspace.yaml

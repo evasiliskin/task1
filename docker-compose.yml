@@ -1,0 +1,118 @@
+name: task1
+
+x-rabbitmq-url: &rabbitmq_url
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: task1-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongodb:
+    image: mongo:7
+    container_name: task1-mongodb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: task1-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  service-b:
+    container_name: task1-service-b
+    build:
+      context: .
+      dockerfile: back-end/service-b/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq_url
+      RABBITMQ_QUEUE: service_b_queue
+      MONGODB_URI: mongodb://mongodb:27017/service_b
+      REDIS_URL: redis://redis:6379
+      REPORT_DIR: /data/reports
+    volumes:
+      - report-storage:/data/reports
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  service-a:
+    container_name: task1-service-a
+    build:
+      context: .
+      dockerfile: back-end/service-a/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq_url
+      RABBITMQ_QUEUE: service_a_queue
+      MONGODB_URI: mongodb://mongodb:27017/service_a
+      MONGO_BATCH_SIZE: 500
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/archives
+    volumes:
+      - archive-storage:/data/archives
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-gateway:
+    container_name: task1-api-gateway
+    build:
+      context: .
+      dockerfile: back-end/api-gateway/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      <<: *rabbitmq_url
+      PORT: 3000
+      RABBITMQ_SERVICE_B_QUEUE: service_b_queue
+      RABBITMQ_SERVICE_A_QUEUE: service_a_queue
+      MONGODB_URI: mongodb://mongodb:27017/gateway
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/archives
+      REPORT_DIR: /data/reports
+    volumes:
+      - archive-storage:/data/archives
+      - report-storage:/data/reports
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  archive-storage:
+  report-storage:

@@ -1,0 +1,25 @@
+packages:
+  - "back-end/*"
+  - "back-end/libs/*"
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  '@swc/core': true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+  unrs-resolver: true
+
+ignoredOptionalDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+
+peerDependencyRules:
+  allowedVersions:
+    'eslint-config-standard>eslint': '9'
+    'eslint-config-standard>eslint-plugin-n': '17'
+    'eslint-config-standard>eslint-plugin-promise': '7'
+
+injectWorkspacePackages: true

@@ -1,0 +1,77 @@
+import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
+import { RequestContractViolationError } from '@task1/shared/errors/index';
+import { z, type ZodType } from 'zod';
+
+export interface IBoundRequest<TData> {
+  readonly data: TData;
+}
+
+interface IRequestShape {
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+type ExtractParameters<T> = T extends { params: infer P } ? P : object;
+type ExtractQuery<T> = T extends { query: infer Q } ? Q : object;
+type ExtractBody<T> = T extends { body: infer B } ? B : object;
+
+export type MergeModelData<T> = ExtractBody<T> & ExtractQuery<T> & ExtractParameters<T>;
+
+export type BoundRequest<TSchema extends ZodType> = IBoundRequest<MergeModelData<z.infer<TSchema>>>;
+
+function buildValidationInput(request: IRequestShape): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+
+  if (request.params !== undefined) {
+    input.params = request.params;
+  }
+
+  if (request.query !== undefined) {
+    input.query = request.query;
+  }
+
+  if (request.body !== undefined) {
+    input.body = request.body;
+  }
+
+  return input;
+}
+
+function mergeParsedData(parsed: IRequestShape): Record<string, unknown> {
+  return { ...(parsed.body ?? {}), ...(parsed.query ?? {}), ...(parsed.params ?? {}) };
+}
+
+export function bindRequest(schema: ZodType, context: ExecutionContext): IBoundRequest<unknown> {
+  const request = context.switchToHttp().getRequest<IRequestShape>();
+  const input = buildValidationInput(request);
+  const parsed = schema.safeParse(input);
+
+  if (!parsed.success) {
+    throw new RequestContractViolationError({
+      controllerName: context.getClass().name,
+      methodName: context.getHandler().name,
+      errors: z.treeifyError(parsed.error),
+    });
+  }
+
+  return { data: mergeParsedData(parsed.data as IRequestShape) };
+}
+
+interface IModelBinderInput {
+  readonly schema: ZodType;
+}
+
+// NestJS's createParamDecorator() distinguishes a decorator's `data` argument from a
+// PipeTransform via duck-typing: anything with a function-typed `.transform` property is
+// treated as a pipe (see @nestjs/common's `isPipe` in create-route-param-metadata.decorator.js).
+// A bare ZodType has a `.transform()` method (`z.string().transform(...)`), so passing the
+// schema directly as `data` makes NestJS misclassify it as a pipe and silently drop it — the
+// factory below then receives `undefined` instead of the schema. Wrapping it in a plain object
+// with no `transform` property avoids the false match.
+const modelBinderFactory = createParamDecorator(
+  (input: IModelBinderInput, context: ExecutionContext): IBoundRequest<unknown> =>
+    bindRequest(input.schema, context),
+);
+
+export const ModelBinder = (schema: ZodType): ParameterDecorator => modelBinderFactory({ schema });
