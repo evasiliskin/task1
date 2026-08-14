@@ -49,16 +49,77 @@ describe('CentralizedErrorHandlerService', () => {
   });
 
   describe('when the error is a FatalError', () => {
-    it('should log at fatal level and exit the process with code 1', () => {
-      const error = new FatalError(new Error('boom'));
+    it('should log at fatal level and set a failing exit code without exiting synchronously', () => {
+      vi.useFakeTimers();
 
-      service.handleError(error);
+      try {
+        const error = new FatalError(new Error('boom'));
 
-      expect(logger.fatal).toHaveBeenCalledWith(
-        { name: error.name, message: error.message, stack: error.stack },
-        `Fatal error: ${error.message}`,
-      );
-      expect(exitSpy).toHaveBeenCalledWith(1);
+        service.handleError(error);
+
+        expect(logger.fatal).toHaveBeenCalledWith(
+          { name: error.name, message: error.message, stack: error.stack },
+          `Fatal error: ${error.message}`,
+        );
+        expect(exitSpy).not.toHaveBeenCalled();
+        expect(process.exitCode).toBe(1);
+
+        process.exitCode = 0;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should set a failing exit code and allow the runtime to drain rather than exiting synchronously', () => {
+      vi.useFakeTimers();
+
+      try {
+        const handler = new CentralizedErrorHandlerService(logger as unknown as AppLogger);
+
+        handler.handleError(new FatalError(new Error('boom')));
+
+        expect(logger.fatal).toHaveBeenCalled();
+        expect(exitSpy).not.toHaveBeenCalled();
+        expect(process.exitCode).toBe(1);
+
+        process.exitCode = 0;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should emit SIGTERM to trigger graceful shutdown hooks', () => {
+      vi.useFakeTimers();
+      const emitSpy = vi.spyOn(process, 'emit');
+
+      try {
+        service.handleError(new FatalError(new Error('boom')));
+
+        expect(emitSpy).toHaveBeenCalledWith('SIGTERM');
+
+        process.exitCode = 0;
+      } finally {
+        emitSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('should schedule an unref backstop that force-exits if shutdown hangs', () => {
+      vi.useFakeTimers();
+
+      try {
+        service.handleError(new FatalError(new Error('boom')));
+
+        expect(exitSpy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(5000);
+
+        expect(exitSpy).toHaveBeenCalledWith(1);
+
+        process.exitCode = 0;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

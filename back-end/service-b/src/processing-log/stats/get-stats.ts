@@ -13,6 +13,8 @@ import { type StatsMetricsReader } from './stats-metrics-reader.service.js';
 
 const FAILED_READ_MONGO_STATS_LOG = 'Failed to read processing-log stats from MongoDB';
 
+const MAX_STATUSES_PER_IMPORT = 4;
+
 const EMPTY_MONGO_STATS: IMongoStats = {
   archivesProcessed: 0,
   eventsProcessed: 0,
@@ -29,24 +31,27 @@ export interface IStatsResult {
   errors: number;
   processingDurationMs?: number;
   timeSeries: IImportTimeSeriesPoint[];
+  degraded: boolean;
+}
+
+interface IMongoStatsResult {
+  stats: IMongoStats;
+  degraded: boolean;
 }
 
 async function readMongoStats(
   collection: Collection<IProcessingLogDocument>,
   importId: string | undefined,
   logger?: AppLogger,
-): Promise<IMongoStats> {
+): Promise<IMongoStatsResult> {
   try {
     const groups = await collection.aggregate<IStatsGroup>(buildStatsPipeline(importId)).toArray();
 
-    return shapeStats(groups);
+    return { stats: shapeStats(groups), degraded: false };
   } catch (error) {
-    logger?.warn(
-      { importId, error: error instanceof Error ? error.message : String(error) },
-      FAILED_READ_MONGO_STATS_LOG,
-    );
+    logger?.warn({ importId }, FAILED_READ_MONGO_STATS_LOG, error);
 
-    return EMPTY_MONGO_STATS;
+    return { stats: EMPTY_MONGO_STATS, degraded: true };
   }
 }
 
@@ -59,37 +64,39 @@ export async function getStats(
   const mongoStats = await readMongoStats(collection, importId, logger);
 
   if (importId === undefined) {
-    const [processingDurationMs, timeSeries] = await Promise.all([
+    const [durationResult, timeSeriesResult] = await Promise.all([
       metricsReader.readAverageProcessingDuration(),
       metricsReader.readEventsTimeSeries(),
     ]);
 
     return {
-      ...mongoStats,
-      ...(processingDurationMs === undefined ? {} : { processingDurationMs }),
-      timeSeries,
+      ...mongoStats.stats,
+      ...(durationResult.value === undefined ? {} : { processingDurationMs: durationResult.value }),
+      timeSeries: timeSeriesResult.timeSeries,
+      degraded: mongoStats.degraded || durationResult.degraded || timeSeriesResult.degraded,
     };
   }
 
   let documents: IProcessingLogDocument[];
+  let findDegraded = false;
 
   try {
-    documents = await collection.find({ importId }).toArray();
+    // The unique {importId, status} index ensures at most 4 documents (one per status enum value).
+    documents = await collection.find({ importId }).limit(MAX_STATUSES_PER_IMPORT).toArray();
   } catch (error) {
-    logger?.warn(
-      { importId, error: error instanceof Error ? error.message : String(error) },
-      FAILED_READ_MONGO_STATS_LOG,
-    );
+    logger?.warn({ importId }, FAILED_READ_MONGO_STATS_LOG, error);
     documents = [];
+    findDegraded = true;
   }
 
   const importDurationStats = deriveImportDurationStats(documents);
 
   return {
-    ...mongoStats,
+    ...mongoStats.stats,
     ...(importDurationStats.processingDurationMs === undefined
       ? {}
       : { processingDurationMs: importDurationStats.processingDurationMs }),
     timeSeries: importDurationStats.timeSeries,
+    degraded: mongoStats.degraded || findDegraded,
   };
 }

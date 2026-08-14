@@ -8,11 +8,11 @@ import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
+import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+
 import { GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
-import { MongoHealthIndicator } from './indicators/mongo.health-indicator.js';
 import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
 import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
-import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rabbitmq-clients.tokens.js';
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
 export type ServiceStatus = 'ok' | 'unavailable';
@@ -24,7 +24,6 @@ export interface IAggregatedHealth {
     rabbitmq: ServiceStatus;
     serviceA: ServiceStatus;
     serviceB: ServiceStatus;
-    mongodb: ServiceStatus;
     redis: ServiceStatus;
   };
 }
@@ -36,7 +35,6 @@ export class HealthCheckService {
     private readonly gatewayIndicator: GatewayHealthIndicator,
     private readonly rabbitMqConnectionIndicator: RabbitMqConnectionHealthIndicator,
     private readonly rabbitMqPingIndicator: RabbitMqPingHealthIndicator,
-    private readonly mongoIndicator: MongoHealthIndicator,
     private readonly redisIndicator: RedisHealthIndicator,
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
@@ -58,8 +56,8 @@ export class HealthCheckService {
     const result = await this.runAllChecks();
 
     // Critical for readiness: rabbitmq, serviceA, serviceB — the gateway's
-    // sole purpose is routing through them. mongodb/redis are informational
-    // (nothing in the gateway's request path uses them today).
+    // sole purpose is routing through them. redis is informational
+    // (nothing in the gateway's request path uses it today).
     const ready =
       result.services.rabbitmq === 'ok' &&
       result.services.serviceA === 'ok' &&
@@ -82,7 +80,6 @@ export class HealthCheckService {
       rabbitmq: raw.details.rabbitmq?.status === 'up' ? 'ok' : 'unavailable',
       serviceA: raw.details.serviceA?.status === 'up' ? 'ok' : 'unavailable',
       serviceB: raw.details.serviceB?.status === 'up' ? 'ok' : 'unavailable',
-      mongodb: raw.details.mongodb?.status === 'up' ? 'ok' : 'unavailable',
       redis: raw.details.redis?.status === 'up' ? 'ok' : 'unavailable',
     };
 
@@ -102,7 +99,6 @@ export class HealthCheckService {
         () => this.rabbitMqConnectionIndicator.isHealthy('rabbitmq'),
         () => this.rabbitMqPingIndicator.isHealthy('serviceA', this.serviceAClient),
         () => this.rabbitMqPingIndicator.isHealthy('serviceB', this.serviceBClient),
-        () => this.mongoIndicator.isHealthy('mongodb'),
         () => this.redisIndicator.isHealthy('redis'),
       ]);
     } catch (error) {
@@ -119,9 +115,6 @@ export class HealthCheckService {
     }
   }
 
-  // Requirement 13: structured logging for failed health checks — service
-  // name, correlationId, requestId, error, and the response time of the
-  // overall check cycle. One place, not duplicated across six indicators.
   private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
     const correlationId = this.requestContextService.getCorrelationId();
     const requestId = this.requestContextService.getRequestId();

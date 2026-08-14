@@ -12,12 +12,6 @@ export interface IPaginationResult<T> {
   nextCursor?: string;
 }
 
-// TODO The comments for the reviewers
-// This interview project queries the MongoDB `Collection` directly instead of going through a
-// generic repository. In a production codebase this data-access step would live behind a repository
-
-// The pattern Specification will be used in the real project.
-// https://en.wikipedia.org/wiki/Specification_pattern
 export async function searchEvents(
   collection: Collection<IGithubEventDocument>,
   message: SearchEventsMessage,

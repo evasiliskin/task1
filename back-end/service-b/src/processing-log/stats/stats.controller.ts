@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { getStatsMessageSchema } from './get-stats-message.schema.js';
 import { type IStatsResult } from './get-stats.js';
@@ -9,7 +10,7 @@ import { StatsService } from './stats.service.js';
 export class StatsController {
   public constructor(private readonly statsService: StatsService) {}
 
-  @MessagePattern('stats.get')
+  @MessagePattern(RPC_PATTERNS.STATS_GET)
   public async handleGetStats(
     @Payload() payload: unknown,
     @Ctx() context: RmqContext,

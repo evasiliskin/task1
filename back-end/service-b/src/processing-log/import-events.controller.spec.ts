@@ -23,6 +23,8 @@ describe('ImportEventsController', () => {
     prefetchCount: 10,
     maxRetries: 5,
     deadLetterQueue: 'service_b_queue.dlq',
+    retryQueue: 'service_b_queue.retry',
+    retryDelayMs: 5000,
   };
 
   function buildController(upsertLog: ReturnType<typeof vi.fn>): ImportEventsController {
@@ -38,19 +40,21 @@ describe('ImportEventsController', () => {
     context: RmqContext;
     message: { content: Buffer; properties: { headers: Record<string, unknown> } };
     ack: ReturnType<typeof vi.fn>;
+    nack: ReturnType<typeof vi.fn>;
     sendToQueue: ReturnType<typeof vi.fn>;
     assertQueue: ReturnType<typeof vi.fn>;
   } {
     const message = { content: Buffer.from('payload'), properties: { headers } };
     const ack = vi.fn();
-    const sendToQueue = vi.fn();
+    const nack = vi.fn();
+    const sendToQueue = vi.fn().mockReturnValue(true);
     const assertQueue = vi.fn().mockResolvedValue(undefined);
     const context = {
-      getChannelRef: vi.fn().mockReturnValue({ ack, sendToQueue, assertQueue }),
+      getChannelRef: vi.fn().mockReturnValue({ ack, nack, sendToQueue, assertQueue }),
       getMessage: vi.fn().mockReturnValue(message),
     } as unknown as RmqContext;
 
-    return { context, message, ack, sendToQueue, assertQueue };
+    return { context, message, ack, nack, sendToQueue, assertQueue };
   }
 
   describe('handleImportStarted', () => {
@@ -95,7 +99,7 @@ describe('ImportEventsController', () => {
       expect(ack).toHaveBeenCalledWith(message);
     });
 
-    it('should republish to the same queue with an incremented retry header and ack the original, when the repository write fails below maxRetries', async () => {
+    it('should republish to the retry queue with an incremented retry header and ack the original, when the repository write fails below maxRetries', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
       const controller = buildController(upsertLog);
       const { context, message, ack, sendToQueue, assertQueue } = buildContext({
@@ -104,11 +108,52 @@ describe('ImportEventsController', () => {
 
       await controller.handleImportStarted(validPayload, context);
 
-      expect(sendToQueue).toHaveBeenCalledWith('service_b_queue', message.content, {
+      expect(assertQueue).toHaveBeenCalledWith('service_b_queue.retry', {
+        durable: true,
+        arguments: {
+          'x-message-ttl': 5000,
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': 'service_b_queue',
+        },
+      });
+      expect(sendToQueue).toHaveBeenCalledWith('service_b_queue.retry', message.content, {
         headers: { 'x-retry-count': 3 },
       });
-      expect(assertQueue).not.toHaveBeenCalled();
       expect(ack).toHaveBeenCalledWith(message);
+    });
+
+    it('should publish to the retry queue rather than the working queue, when the log write fails below maxRetries', async () => {
+      const upsertLog = vi.fn().mockRejectedValueOnce(new Error('mongo down'));
+      const controller = buildController(upsertLog);
+      const { context, message, ack, sendToQueue, assertQueue } = buildContext();
+
+      await controller.handleImportStarted(validPayload, context);
+
+      expect(assertQueue).toHaveBeenCalledWith('service_b_queue.retry', {
+        durable: true,
+        arguments: {
+          'x-message-ttl': 5000,
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': 'service_b_queue',
+        },
+      });
+      expect(sendToQueue).toHaveBeenCalledWith('service_b_queue.retry', message.content, {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        headers: expect.objectContaining({ 'x-retry-count': 1 }),
+      });
+      expect(ack).toHaveBeenCalledWith(message);
+    });
+
+    it('should nack-requeue the original and never ack it, when the retry publish is refused by channel backpressure', async () => {
+      const upsertLog = vi.fn().mockRejectedValueOnce(new Error('mongo down'));
+      const controller = buildController(upsertLog);
+      const { context, message, ack, nack, sendToQueue } = buildContext();
+      sendToQueue.mockReturnValue(false);
+
+      await controller.handleImportStarted(validPayload, context);
+
+      expect(nack).toHaveBeenCalledWith(message, false, true);
+      expect(ack).not.toHaveBeenCalled();
     });
 
     it('should dead-letter the message and record a queryable dead-lettered log entry, when the repository write fails at maxRetries', async () => {
@@ -149,34 +194,36 @@ describe('ImportEventsController', () => {
       expect(ack).toHaveBeenCalledWith(message);
     });
 
-    it('should still ack the original message, when republishing to the retry queue throws', async () => {
+    it('should nack-requeue the original message without acking, when republishing to the retry queue throws', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
       const controller = buildController(upsertLog);
-      const { context, message, ack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
+      const { context, message, ack, nack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
       sendToQueue.mockImplementation(() => {
         throw new Error('channel closed: PRECONDITION_FAILED');
       });
 
       await controller.handleImportStarted(validPayload, context);
 
-      expect(ack).toHaveBeenCalledWith(message);
+      expect(nack).toHaveBeenCalledWith(message, false, true);
+      expect(ack).not.toHaveBeenCalled();
     });
 
-    it('should still ack the original message, when asserting the dead-letter queue throws at maxRetries', async () => {
+    it('should nack-requeue the original message without acking, when asserting the dead-letter queue throws at maxRetries', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
       const controller = buildController(upsertLog);
-      const { context, message, ack, assertQueue } = buildContext({ 'x-retry-count': 5 });
+      const { context, message, ack, nack, assertQueue } = buildContext({ 'x-retry-count': 5 });
       assertQueue.mockRejectedValue(new Error('channel closed: PRECONDITION_FAILED'));
 
       await controller.handleImportStarted(validPayload, context);
 
-      expect(ack).toHaveBeenCalledWith(message);
+      expect(nack).toHaveBeenCalledWith(message, false, true);
+      expect(ack).not.toHaveBeenCalled();
     });
 
-    it('should still ack the original message, when the upsert and republish failures are non-Error values', async () => {
+    it('should nack-requeue the original message without acking, when the upsert and republish failures are non-Error values', async () => {
       const upsertLog = vi.fn().mockRejectedValue('connection refused');
       const controller = buildController(upsertLog);
-      const { context, message, ack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
+      const { context, message, ack, nack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
       sendToQueue.mockImplementation(() => {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error branch of the error-message formatting
         throw 'channel closed: PRECONDITION_FAILED';
@@ -184,7 +231,8 @@ describe('ImportEventsController', () => {
 
       await controller.handleImportStarted(validPayload, context);
 
-      expect(ack).toHaveBeenCalledWith(message);
+      expect(nack).toHaveBeenCalledWith(message, false, true);
+      expect(ack).not.toHaveBeenCalled();
     });
   });
 

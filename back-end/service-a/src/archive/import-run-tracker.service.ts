@@ -1,12 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type Collection } from 'mongodb';
+import { type Collection, MongoServerError } from 'mongodb';
 
+import { ImportAlreadyClaimedError } from './import-claim.error.js';
 import { type IImportRunDocument, type ImportSourceRecord } from './import-run.types.js';
 import { IMPORTS_COLLECTION } from './imports-collection.provider.js';
 import { type ImportResult } from './processing/process-archive.js';
 
 const ERROR_SAMPLE_MAX_LENGTH = 500;
 const ERROR_SAMPLES_LIMIT = 5;
+const DUPLICATE_KEY_ERROR_CODE = 11_000;
 
 @Injectable()
 export class ImportRunTracker {
@@ -23,7 +25,15 @@ export class ImportRunTracker {
     source: ImportSourceRecord,
     startedAt: Date,
   ): Promise<void> {
-    await this.collection.insertOne({ importId, source, status: 'started', startedAt });
+    try {
+      await this.collection.insertOne({ importId, source, status: 'started', startedAt });
+    } catch (error) {
+      if (error instanceof MongoServerError && error.code === DUPLICATE_KEY_ERROR_CODE) {
+        throw new ImportAlreadyClaimedError(importId);
+      }
+
+      throw error;
+    }
   }
 
   public async recordCompleted(

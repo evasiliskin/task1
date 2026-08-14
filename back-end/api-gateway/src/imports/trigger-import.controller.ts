@@ -2,31 +2,23 @@ import { randomUUID } from 'node:crypto';
 
 import { Controller, Headers, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
-import {
-  type ApiResponseSchemaHost,
-  ApiAcceptedResponse,
-  ApiBody,
-  ApiHeader,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiAcceptedResponse, ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { z } from 'zod';
 
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
+import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { InvalidIdempotencyKeyError } from './errors.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { TriggerImportRequestSchema } from './schemas/trigger-import-request.schema.js';
 import { TriggerImportResponseSchema } from './schemas/trigger-import-response.schema.js';
 
-const ARCHIVE_IMPORT_DOWNLOAD_PATTERN = 'archive.import.download';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
+const PUBLISH_FAILED_LOG = 'Failed to publish message to service-a';
 
 function isValidIdempotencyKey(value: string): boolean {
   return z.string().uuid().safeParse(value).success;
@@ -35,7 +27,12 @@ function isValidIdempotencyKey(value: string): boolean {
 @ApiTags('imports')
 @Controller('imports')
 export class TriggerImportController {
-  public constructor(@Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy) {}
+  public constructor(
+    @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
+    loggerService: LoggerService,
+  ) {
+    this.logger = loggerService.getLogger('TriggerImportController');
+  }
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
@@ -61,11 +58,21 @@ export class TriggerImportController {
 
     const importId = idempotencyKey ?? randomUUID();
 
-    this.serviceAClient.emit(ARCHIVE_IMPORT_DOWNLOAD_PATTERN, {
+    this.publish(RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD, {
       importId,
       dateHour: bound.data.dateHour,
     });
 
     return { importId };
+  }
+
+  private readonly logger: AppLogger;
+
+  private publish(pattern: string, payload: Record<string, unknown>): void {
+    this.serviceAClient.emit(pattern, payload).subscribe({
+      error: (error: unknown) => {
+        this.logger.error({ pattern, payload }, PUBLISH_FAILED_LOG, error);
+      },
+    });
   }
 }

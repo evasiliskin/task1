@@ -15,9 +15,10 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { ImportsModule } from './imports.module.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 
 type App = Parameters<typeof request>[0];
 
@@ -41,6 +42,7 @@ describe('GetImportStatusController (HTTP Integration)', () => {
         ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         ImportsModule,
       ],
     })

@@ -1,3 +1,4 @@
+import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { type Collection } from 'mongodb';
 
 import { type IProcessingLogDocument } from '../processing-log.types.js';
@@ -17,27 +18,36 @@ describe('getStats', () => {
     collection: Collection<IProcessingLogDocument>;
     aggregate: ReturnType<typeof vi.fn>;
     find: ReturnType<typeof vi.fn>;
+    findCursor: { limit: ReturnType<typeof vi.fn> };
   } {
     const aggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(groups) });
-    const find = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(documents) });
+    const findCursor = {
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue(documents),
+    };
+    const find = vi.fn().mockReturnValue(findCursor);
 
     return {
       collection: { aggregate, find } as unknown as Collection<IProcessingLogDocument>,
       aggregate,
       find,
+      findCursor,
     };
   }
 
   function buildMetricsReader(
     processingDurationMs: number | undefined,
     timeSeries: { timestamp: string; value: number }[],
+    degraded = false,
   ): {
     reader: StatsMetricsReader;
     readAverageProcessingDuration: ReturnType<typeof vi.fn>;
     readEventsTimeSeries: ReturnType<typeof vi.fn>;
   } {
-    const readAverageProcessingDuration = vi.fn().mockResolvedValue(processingDurationMs);
-    const readEventsTimeSeries = vi.fn().mockResolvedValue(timeSeries);
+    const readAverageProcessingDuration = vi
+      .fn()
+      .mockResolvedValue({ value: processingDurationMs, degraded });
+    const readEventsTimeSeries = vi.fn().mockResolvedValue({ timeSeries, degraded });
 
     return {
       reader: {
@@ -62,6 +72,7 @@ describe('getStats', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     });
   });
 
@@ -90,6 +101,7 @@ describe('getStats', () => {
       errors: 0,
       processingDurationMs: 15_000,
       timeSeries,
+      degraded: false,
     });
   });
 
@@ -132,7 +144,7 @@ describe('getStats', () => {
         },
       },
     ];
-    const { collection, aggregate, find } = buildCollection(groups, documents);
+    const { collection, aggregate, find, findCursor } = buildCollection(groups, documents);
     const { reader, readAverageProcessingDuration, readEventsTimeSeries } = buildMetricsReader(
       undefined,
       [],
@@ -142,6 +154,7 @@ describe('getStats', () => {
 
     expect(aggregate).toHaveBeenCalledWith(buildStatsPipeline(importId));
     expect(find).toHaveBeenCalledWith({ importId });
+    expect(findCursor.limit).toHaveBeenCalledWith(4);
     expect(readAverageProcessingDuration).not.toHaveBeenCalled();
     expect(readEventsTimeSeries).not.toHaveBeenCalled();
     expect(result).toEqual({
@@ -152,6 +165,7 @@ describe('getStats', () => {
       errors: 0,
       processingDurationMs: 300_000,
       timeSeries: [{ timestamp: '2026-08-11T00:05:00.000Z', value: 500 }],
+      degraded: false,
     });
   });
 
@@ -198,6 +212,7 @@ describe('getStats', () => {
       errors: 0,
       processingDurationMs: 15_000,
       timeSeries,
+      degraded: true,
     });
     expect(readAverageProcessingDuration).toHaveBeenCalled();
     expect(readEventsTimeSeries).toHaveBeenCalled();
@@ -220,6 +235,66 @@ describe('getStats', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: true,
     });
+  });
+
+  it('should mark the result as degraded, when the MongoDB aggregation fails', async () => {
+    const collection = {
+      aggregate: () => ({ toArray: vi.fn().mockRejectedValue(new Error('mongo down')) }),
+      find: () => ({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as unknown as Collection<IProcessingLogDocument>;
+    const { reader } = buildMetricsReader(undefined, []);
+    const logger = { warn: vi.fn() } as unknown as AppLogger;
+
+    const result = await getStats(collection, reader, undefined, logger);
+
+    expect(result.degraded).toBe(true);
+    expect(result.eventsProcessed).toBe(0);
+  });
+
+  it('should not mark the result as degraded, when every source responds', async () => {
+    const { collection } = buildCollection([]);
+    const { reader } = buildMetricsReader(undefined, []);
+    const logger = { warn: vi.fn() } as unknown as AppLogger;
+
+    const result = await getStats(collection, reader, undefined, logger);
+
+    expect(result.degraded).toBe(false);
+  });
+
+  it('should mark the result as degraded, when Redis fails to read the average processing duration', async () => {
+    const { collection } = buildCollection([]);
+    const { reader } = buildMetricsReader(undefined, [], true);
+
+    const result = await getStats(collection, reader);
+
+    expect(result.degraded).toBe(true);
+  });
+
+  it('should mark the result as degraded, when Redis fails to read the events time series', async () => {
+    const { collection } = buildCollection([]);
+    const readAverageProcessingDuration = vi
+      .fn()
+      .mockResolvedValue({ value: undefined, degraded: false });
+    const readEventsTimeSeries = vi.fn().mockResolvedValue({ timeSeries: [], degraded: true });
+    const reader = {
+      readAverageProcessingDuration,
+      readEventsTimeSeries,
+    } as unknown as StatsMetricsReader;
+
+    const result = await getStats(collection, reader);
+
+    expect(result.degraded).toBe(true);
+  });
+
+  it('should not mark the result as degraded due to Redis, when scoped to an importId (Redis is not queried)', async () => {
+    const documents: IProcessingLogDocument[] = [];
+    const { collection } = buildCollection([], documents);
+    const { reader } = buildMetricsReader(undefined, [], true);
+
+    const result = await getStats(collection, reader, importId);
+
+    expect(result.degraded).toBe(false);
   });
 });

@@ -24,10 +24,18 @@ describe('storageConfig', () => {
   });
 
   describe('validation', () => {
-    it('should throw, when STORAGE_DIR is an empty string', () => {
+    it('should fall back to the documented default, when STORAGE_DIR is an empty string outside production', () => {
+      process.env.NODE_ENV = 'development';
       process.env.STORAGE_DIR = '';
 
-      expect(() => storageConfig()).toThrow();
+      expect(storageConfig()).toEqual({ dir: './data/archives' });
+    });
+
+    it('should throw, when STORAGE_DIR is unset in production', () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.STORAGE_DIR;
+
+      expect(() => storageConfig()).toThrow(/STORAGE_DIR/);
     });
   });
 });

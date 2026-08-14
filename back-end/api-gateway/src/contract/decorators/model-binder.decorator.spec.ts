@@ -1,9 +1,10 @@
 import { type ExecutionContext } from '@nestjs/common';
-import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RequestContractViolationError } from '@task1/shared/errors/index';
 import { z } from 'zod';
 
 import { bindRequest, ModelBinder } from './model-binder.decorator.js';
+
+const ROUTE_ARGS_METADATA = '__routeArguments__';
 
 interface IFakeRequest {
   params?: Record<string, unknown>;
@@ -42,7 +43,7 @@ describe('bindRequest', () => {
       query: z
         .object({ limit: z.coerce.number().default(50) })
         .strict()
-        .default({}),
+        .default({ limit: 50 }),
     });
     const context = makeContext({ query: {} });
 

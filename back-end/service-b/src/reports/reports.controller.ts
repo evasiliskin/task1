@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { generateReportMessageSchema } from './generate-report-message.schema.js';
 import { type IGenerateReportResult } from './generate-report.js';
@@ -9,7 +10,7 @@ import { ReportsService } from './reports.service.js';
 export class ReportsController {
   public constructor(private readonly reportsService: ReportsService) {}
 
-  @MessagePattern('reports.pdf.generate')
+  @MessagePattern(RPC_PATTERNS.REPORTS_PDF_GENERATE)
   public async handleGenerateReport(
     @Payload() payload: unknown,
     @Ctx() context: RmqContext,

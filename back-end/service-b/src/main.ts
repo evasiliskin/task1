@@ -1,4 +1,4 @@
-import { type INestMicroservice, ValidationPipe } from '@nestjs/common';
+import { type INestMicroservice } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
@@ -30,14 +30,6 @@ async function bootstrap(): Promise<void> {
     const loggerService = app.get(LoggerService);
     const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
     app.useLogger(new NestLoggerBridge(bootstrapLogger));
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
 
     app.enableShutdownHooks();
 

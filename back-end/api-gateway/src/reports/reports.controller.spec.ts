@@ -7,6 +7,7 @@ import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { type LoggerService } from '@task1/shared/logger/http/logger.service';
+import { type LogFields } from '@task1/shared/logger/types';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { type Response } from 'express';
 import { of } from 'rxjs';
@@ -19,9 +20,13 @@ import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { ReportsController } from './reports.controller.js';
 import { type GetReportRequestSchema } from './schemas/get-report-request.schema.js';
 
+type LogMock = ReturnType<
+  typeof vi.fn<(fields: LogFields, message: string, error?: unknown) => void>
+>;
+
 function buildController(
   sendMock: ReturnType<typeof vi.fn>,
-  loggerMocks: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> },
+  loggerMocks: { warn: LogMock; error: LogMock },
   requestContextService: RequestContextService,
   reportDirectory: string,
 ): ReportsController {

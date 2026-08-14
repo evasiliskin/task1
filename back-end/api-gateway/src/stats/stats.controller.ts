@@ -1,13 +1,8 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import {
-  type ApiResponseSchemaHost,
-  ApiOkResponse,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -17,18 +12,11 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
+import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { GetStatsRequestSchema } from './schemas/get-stats-request.schema.js';
 import { type StatsResponse, StatsResponseSchema } from './schemas/stats-response.schema.js';
-
-const STATS_GET_PATTERN = 'stats.get';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 @ApiTags('stats')
 @Controller('stats')
@@ -55,7 +43,7 @@ export class StatsController {
 
     return await firstValueFrom(
       this.serviceBClient
-        .send<StatsResponse>(STATS_GET_PATTERN, record)
+        .send<StatsResponse>(RPC_PATTERNS.STATS_GET, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
   }

@@ -13,8 +13,9 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { StatsModule } from './stats.module.js';
 
 type App = Parameters<typeof request>[0];
@@ -39,6 +40,7 @@ describe('StatsController (HTTP Integration)', () => {
         ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         StatsModule,
       ],
     })
@@ -99,6 +101,27 @@ describe('StatsController (HTTP Integration)', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
         meta: { tracing: { correlationId: expect.any(String) } },
       });
+    });
+
+    it('should pass through degraded: true from service-b, when the upstream response includes it', async () => {
+      serviceBClient.send.mockReturnValue(
+        of({
+          archivesProcessed: 0,
+          eventsProcessed: 0,
+          successfulEvents: 0,
+          invalidEvents: 0,
+          errors: 0,
+          timeSeries: [],
+          degraded: true,
+        }),
+      );
+
+      const response = await request(httpServer).get('/stats');
+
+      expect(response.status).toBe(200);
+      expect(
+        (response.body as { result: { data: { degraded?: boolean } } }).result.data,
+      ).toHaveProperty('degraded', true);
     });
 
     it('should return 200 without processingDurationMs, when service-b omits it', async () => {

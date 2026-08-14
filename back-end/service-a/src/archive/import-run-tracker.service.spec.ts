@@ -1,6 +1,8 @@
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { MongoServerError } from 'mongodb';
 import { type Collection } from 'mongodb';
 
+import { ImportAlreadyClaimedError } from './import-claim.error.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { type IImportRunDocument } from './import-run.types.js';
 import { type ImportResult } from './processing/process-archive.js';
@@ -117,6 +119,41 @@ describe('ImportRunTracker', () => {
           $push: { errorSamples: { $each: [longReason.slice(0, 500)], $slice: -5 } },
         },
       );
+    });
+  });
+
+  describe('recordStarted duplicate handling', () => {
+    it('should throw ImportAlreadyClaimedError, when the unique importId index rejects the insert', async () => {
+      const duplicateKeyError = new MongoServerError({ message: 'E11000 duplicate key' });
+      duplicateKeyError.code = 11_000;
+
+      const collection = {
+        insertOne: vi.fn().mockRejectedValue(duplicateKeyError),
+      } as unknown as Collection<IImportRunDocument>;
+      const tracker = new ImportRunTracker(collection);
+
+      await expect(
+        tracker.recordStarted(
+          'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+          { type: 'download', archive: 'x.json.gz' },
+          new Date(),
+        ),
+      ).rejects.toBeInstanceOf(ImportAlreadyClaimedError);
+    });
+
+    it('should rethrow the original error, when the insert fails for any reason other than a duplicate key', async () => {
+      const collection = {
+        insertOne: vi.fn().mockRejectedValue(new Error('connection reset')),
+      } as unknown as Collection<IImportRunDocument>;
+      const tracker = new ImportRunTracker(collection);
+
+      await expect(
+        tracker.recordStarted(
+          'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+          { type: 'download', archive: 'x.json.gz' },
+          new Date(),
+        ),
+      ).rejects.toThrow('connection reset');
     });
   });
 });

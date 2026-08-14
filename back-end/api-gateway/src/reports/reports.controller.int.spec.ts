@@ -18,8 +18,9 @@ import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import reportConfig from '../config/report.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { ReportsModule } from './reports.module.js';
 
 type App = Parameters<typeof request>[0];
@@ -51,6 +52,7 @@ describe('ReportsController (HTTP Integration)', () => {
         ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         ReportsModule,
       ],
     })

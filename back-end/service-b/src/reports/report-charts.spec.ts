@@ -29,6 +29,7 @@ describe('drawSummarySection', () => {
       errors: 2,
       processingDurationMs: 15_000,
       timeSeries: [],
+      degraded: false,
     };
 
     drawSummarySection(doc as never, stats, true);
@@ -50,11 +51,52 @@ describe('drawSummarySection', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     };
 
     drawSummarySection(doc as never, stats, true);
 
     expect(doc.text).toHaveBeenCalledWith('Processing duration: n/a');
+  });
+
+  it('should write a degraded warning in red and reset the fill color, when stats.degraded is true', () => {
+    const doc = buildFakeDoc(['fillColor']);
+    const stats: IStatsResult = {
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+      degraded: true,
+    };
+
+    drawSummarySection(doc as never, stats, true);
+
+    expect(doc.fillColor).toHaveBeenCalledWith('#C62828');
+    expect(doc.text).toHaveBeenCalledWith(
+      'Warning: some data sources were unavailable; figures may be incomplete.',
+    );
+    expect(doc.fillColor).toHaveBeenCalledWith('black');
+  });
+
+  it('should not write a degraded warning, when stats.degraded is false', () => {
+    const doc = buildFakeDoc(['fillColor']);
+    const stats: IStatsResult = {
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+      degraded: false,
+    };
+
+    drawSummarySection(doc as never, stats, true);
+
+    expect(doc.text).not.toHaveBeenCalledWith(
+      'Warning: some data sources were unavailable; figures may be incomplete.',
+    );
   });
 
   it('should write a report-scope line, when called with an aggregate-scope flag', () => {
@@ -66,6 +108,7 @@ describe('drawSummarySection', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     };
 
     drawSummarySection(doc as never, stats, true);
@@ -82,6 +125,7 @@ describe('drawSummarySection', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     };
 
     drawSummarySection(doc as never, stats, false);
@@ -184,6 +228,7 @@ describe('drawStatusBreakdownChart', () => {
       invalidEvents: 15,
       errors: 5,
       timeSeries: [],
+      degraded: false,
     };
 
     drawStatusBreakdownChart(doc as never, stats);
@@ -203,6 +248,7 @@ describe('drawStatusBreakdownChart', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     };
 
     drawStatusBreakdownChart(doc as never, stats);
@@ -219,6 +265,7 @@ describe('drawStatusBreakdownChart', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     };
 
     drawStatusBreakdownChart(doc as never, stats);

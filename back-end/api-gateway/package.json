@@ -22,6 +22,7 @@
     "test:cov": "cross-env NODE_ENV=test vitest run --coverage"
   },
   "dependencies": {
+    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -29,11 +30,11 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.6",
     "@nestjs/terminus": "^11.1.1",
+    "@nestjs/throttler": "^6.5.0",
     "@task1/shared": "workspace:*",
     "amqp-connection-manager": "^5.0.0",
     "amqplib": "^2.0.1",
     "ioredis": "^6.0.0",
-    "mongodb": "^7.5.0",
     "multer": "^2.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

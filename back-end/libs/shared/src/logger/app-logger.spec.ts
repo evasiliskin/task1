@@ -1,15 +1,15 @@
 import type { Mock } from 'vitest';
 
-import { AppLogger, type IPinoLikeLogger } from './app-logger.js';
+import { AppLogger, type IAppLogger } from './app-logger.js';
 
 describe('AppLogger', () => {
   let pinoLogger: {
-    trace: Mock<IPinoLikeLogger['trace']>;
-    debug: Mock<IPinoLikeLogger['debug']>;
-    info: Mock<IPinoLikeLogger['info']>;
-    warn: Mock<IPinoLikeLogger['warn']>;
-    error: Mock<IPinoLikeLogger['error']>;
-    fatal: Mock<IPinoLikeLogger['fatal']>;
+    trace: Mock<IAppLogger['trace']>;
+    debug: Mock<IAppLogger['debug']>;
+    info: Mock<IAppLogger['info']>;
+    warn: Mock<IAppLogger['warn']>;
+    error: Mock<IAppLogger['error']>;
+    fatal: Mock<IAppLogger['fatal']>;
   };
   let logger: AppLogger;
 
@@ -76,6 +76,51 @@ describe('AppLogger', () => {
     expect(pinoLogger.fatal).toHaveBeenCalledWith(
       { source: 'HealthController', channel: 'http' },
       'fatal message',
+    );
+  });
+
+  it('should include a normalized error field on warn(), when a real Error is passed as the third argument', () => {
+    logger.warn({ key: 'x' }, 'warn message', new Error('boom'));
+
+    expect(pinoLogger.warn).toHaveBeenCalledWith(
+      { key: 'x', error: 'boom', source: 'HealthController', channel: 'http' },
+      'warn message',
+    );
+  });
+
+  it('should stringify a non-Error value passed as the third argument to warn()', () => {
+    logger.warn({}, 'warn message', 'not an Error instance');
+
+    expect(pinoLogger.warn).toHaveBeenCalledWith(
+      { error: 'not an Error instance', source: 'HealthController', channel: 'http' },
+      'warn message',
+    );
+  });
+
+  it('should include a normalized error field on error()', () => {
+    logger.error({ pattern: 'x.y' }, 'error message', new Error('kaboom'));
+
+    expect(pinoLogger.error).toHaveBeenCalledWith(
+      { pattern: 'x.y', error: 'kaboom', source: 'HealthController', channel: 'http' },
+      'error message',
+    );
+  });
+
+  it('should include a normalized error field on fatal()', () => {
+    logger.fatal({}, 'fatal message', new Error('fatal boom'));
+
+    expect(pinoLogger.fatal).toHaveBeenCalledWith(
+      { error: 'fatal boom', source: 'HealthController', channel: 'http' },
+      'fatal message',
+    );
+  });
+
+  it('should not add an error field, when the third argument is omitted (backward compatible)', () => {
+    logger.warn({ key: 'x' }, 'warn message');
+
+    expect(pinoLogger.warn).toHaveBeenCalledWith(
+      { key: 'x', source: 'HealthController', channel: 'http' },
+      'warn message',
     );
   });
 });

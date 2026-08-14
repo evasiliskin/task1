@@ -115,7 +115,7 @@ completes normally and sets the status code, so no error envelope is produced.
 | `GET` | `/api/v1/health/live` | Liveness probe (process is running) | Public | — |
 | `GET` | `/api/v1/health/ready` | Readiness probe (`503` if RabbitMQ/service-a/service-b down) | Public | — |
 | `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported) | Required | `archive.import.download` → service-a |
-| `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart) | Required | `archive.process.upload` → service-a |
+| `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart, max 512 MiB, gzip magic bytes verified) | Required | `archive.process.upload` → service-a |
 | `GET` | `/api/v1/imports/:importId` | Get one import run's status/counters | Required | `imports.status.get` → service-a |
 | `GET` | `/api/v1/events` | Search imported GitHub events, cursor pagination | Required | `events.search` → service-a |
 | `GET` | `/api/v1/logs` | Search processing-log entries, cursor pagination | Required | `logs.search` → service-b |
@@ -150,6 +150,34 @@ Until then:
   auth is wired in; running them as-is against an unmodified checkout currently succeeds without
   credentials rather than returning `401`/`403`.
 
+## Rate limiting
+
+Every gateway endpoint except `/health*` is rate-limited via `@nestjs/throttler`, registered as a
+global `APP_GUARD` in `back-end/api-gateway/src/app.module.ts` — positioned before `AuthModule`'s
+own `APP_GUARD` so a request is throttled before it reaches the (currently allow-all) auth check.
+
+- Default limit: 100 requests / 60,000 ms per client, configurable via `THROTTLE_LIMIT` /
+  `THROTTLE_TTL_MS`.
+- `POST /api/v1/imports/upload` has a tighter limit — 5 requests / 60,000 ms
+  (`@Throttle({ default: { limit: 5, ttl: 60_000 } })` on `UploadImportController.upload`,
+  matching `THROTTLE_UPLOAD_LIMIT`'s default) — since uploads are the most expensive request the
+  gateway accepts.
+- `/health`, `/health/live`, and `/health/ready` are exempted (`@SkipThrottle()` on
+  `HealthController`) so orchestrator liveness/readiness probes never trip the limit.
+- An exhausted limit returns `429 Too Many Requests` and never reaches the controller handler.
+
+**Storage is Redis-backed, not the library's default in-memory store**, via
+`ThrottlerStorageRedisService` from `@nest-lab/throttler-storage-redis`. In-memory storage would
+track hit counts per gateway process — with more than one gateway replica behind a load balancer,
+each replica would enforce the limit independently, letting a client exceed the intended aggregate
+limit by a multiple of the replica count. Redis-backed storage shares one counter across every
+replica, so the limit holds regardless of how many gateway instances are running.
+
+The `ThrottlerStorageRedisService` is constructed from the gateway's existing shared `ioredis`
+client (`REDIS_CLIENT`, provided by `HealthModule` and already used by `RedisHealthIndicator`) —
+`new ThrottlerStorageRedisService(redisClient)` — rather than opening a second Redis connection
+with its own connection options. The gateway maintains exactly one Redis connection.
+
 ## Health checks
 
 The gateway exposes three endpoints under `/health` (`GET /health`, `/health/live`, `/health/ready`
@@ -164,9 +192,9 @@ help, but it also shouldn't receive requests it cannot fulfill.
 
 **Critical vs informational dependencies.** `/health/ready` treats RabbitMQ, service-a, and
 service-b as critical — the gateway's only purpose is routing requests to those services through
-the broker, so if any of them is unreachable, `/health/ready` returns `503`. MongoDB and Redis are
-reported for visibility but are informational only — nothing in the gateway's request path uses
-them today (there is no persistence layer or caching configured), so their failure never causes
+the broker, so if any of them is unreachable, `/health/ready` returns `503`. Redis is
+reported for visibility but is informational only — nothing in the gateway's request path uses
+it today (there is no persistence layer or caching configured), so its failure never causes
 `/health/ready` to fail.
 
 **Why the gateway never accesses service-a/b's databases directly.** The gateway has no visibility
@@ -192,7 +220,6 @@ Example — `GET /health`, everything healthy (see "Response format" above for t
         "rabbitmq": "ok",
         "serviceA": "ok",
         "serviceB": "ok",
-        "mongodb": "ok",
         "redis": "ok"
       }
     }
@@ -235,14 +262,14 @@ export it into the shell's actual environment before running `pnpm dev:*` (or us
 - Gateway Swagger docs: http://localhost:3000/api-docs
 - RabbitMQ management UI: http://localhost:15672 (guest/guest)
 - `service-a`/`service-b`: internal only, reachable over RabbitMQ (not exposed to the browser)
-- MongoDB: each service owns its own database (`gateway`, `service_a`, `service_b`) — service-a
-  persists imported GitHub events and import-run tracking, service-b persists processing-log
-  entries (see "MongoDB indexes" below); the gateway itself only pings MongoDB for its own health
-  check, it has no collections of its own
+- MongoDB: owned by `service-a` (`service_a`) and `service-b` (`service_b`) — service-a persists
+  imported GitHub events and import-run tracking, service-b persists processing-log entries (see
+  "MongoDB indexes" below); the gateway does not use MongoDB at all — it has no database of its
+  own and no MongoDB health check
 - Redis: service-a records pipeline metrics via RedisTimeSeries (see "RedisTimeSeries metrics"
   below); the gateway only pings it for health checks, no caching is implemented against it
-- to point the gateway at a non-default `MONGODB_URI`/`REDIS_URL` when running outside Docker,
-  export them into the shell environment before `pnpm dev:api-gateway` (see the `.env` note above)
+- to point the gateway at a non-default `REDIS_URL` when running outside Docker, export it into
+  the shell environment before `pnpm dev:api-gateway` (see the `.env` note above)
 
 ## Common tasks
 
@@ -255,7 +282,6 @@ export it into the shell's actual environment before running `pnpm dev:*` (or us
 | `pnpm check` | `lint` + `test` - also runs automatically on `git push` (Husky) |
 | `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ, MongoDB, Redis, and all three back-end services |
 | `pnpm --filter <package> run <script>` | Run one package's script directly, e.g. `pnpm --filter api-gateway run test:cov` |
-| `pnpm --filter service-a run bench:memory <dateHour>` | Manual memory-safety diagnostic against a running Docker stack — see "Memory safety" below |
 
 ## Tooling notes
 
@@ -282,7 +308,9 @@ export it into the shell's actual environment before running `pnpm dev:*` (or us
 A memory-safe pipeline that downloads or accepts an uploaded [GH Archive](https://www.gharchive.org/)
 hourly `.json.gz` file (one hour of every public GitHub event, as newline-delimited JSON once
 decompressed), imports it into MongoDB, and exposes search/stats/PDF-report endpoints over the
-gateway's REST API. Full design: `docs/superpowers/specs/2026-08-12-github-archive-platform-design.md`.
+gateway's REST API. Full design: `docs/superpowers/specs/2026-08-12-github-archive-platform-design.md`
+(this path is `.gitignore`d — not committed to this repo, so the link only resolves for someone
+with that file locally).
 
 ### Data flow
 
@@ -318,22 +346,23 @@ splitting keeps only the current trailing partial line in memory; validation/tra
 event at a time; batching yields arrays capped at `MONGO_BATCH_SIZE`, default 500) feeding a Mongo
 `bulkWrite` per batch. Each batch write is awaited before the next batch is pulled — that's what
 makes backpressure work: the pipeline cannot outrun MongoDB, and RSS stays flat regardless of how
-large the source archive is. `pnpm --filter service-a run bench:memory <dateHour>` runs this real
-pipeline against a live `docker compose` stack and prints `process.memoryUsage().rss` on a 1s
-interval so this is directly observable rather than asserted:
+large the source archive is.
+
+This property is enforced structurally (streams and async generators end to end, no full-archive
+buffer anywhere in `back-end/service-a/src/archive/`) rather than by an automated assertion: the
+test suite mocks the network and MongoDB, and there is no RSS threshold check anywhere — such
+thresholds are flaky across machines and Node versions. To observe it on a real archive, run an
+import against the Docker stack and watch the container's memory while it works:
 
 ```bash
 pnpm docker:up
-cp back-end/service-a/.env.example back-end/service-a/.env  # point MONGODB_URI/STORAGE_DIR at the running stack if not using docker:up's own network
-pnpm --filter service-a run bench:memory 2026-08-11-0
+curl -s -X POST http://localhost:3000/api/v1/imports -H 'Content-Type: application/json' \
+  -d '{"dateHour": "2026-08-11-0"}'
+docker stats task1-service-a
 ```
 
-Expected output: a `[download]` line every second while the archive downloads (its `bytesReadSoFar`
-climbing toward the final archive size), then a `[process]` line every second while it's parsed and
-inserted — in both phases, `rss` should stay roughly flat rather than growing with bytes consumed.
-This is a manual diagnostic (needs a real network archive + a running Mongo), not part of the
-automated (mocked) test suite, and CI does not assert a threshold on it — RSS thresholds are flaky
-across machines and Node versions; read the printed numbers instead.
+Expected: `MEM USAGE` stays roughly flat for the whole download-and-insert run instead of growing
+with the size of the archive being consumed.
 
 ### Pagination
 
@@ -379,9 +408,10 @@ primary import.
 ### Trying it end-to-end
 
 There is no frontend — every capability is reachable via `curl` or the gateway's Swagger UI
-(`http://localhost:3000/api-docs`). All routes below other than `/health*` require authentication —
-see "Authentication" above; the current stub denies them until real auth is wired in, so treat this
-as the intended flow rather than something runnable end-to-end on an unmodified checkout:
+(`http://localhost:3000/api-docs`). All routes below other than `/health*` are declared as
+requiring authentication, but the current `AuthGuard` stub lets every request through (see
+"Authentication" above), so this flow runs end-to-end on an unmodified checkout with no
+credentials:
 
 ```bash
 pnpm docker:up
@@ -401,20 +431,49 @@ curl -s 'http://localhost:3000/api/v1/events?type=PushEvent&limit=10'
 curl -s http://localhost:3000/api/v1/logs
 curl -s http://localhost:3000/api/v1/stats
 
-# download the PDF report
-curl -s http://localhost:3000/api/v1/reports/pdf?importId=<importId> -o report.pdf
+# download the PDF report (omit importId for an aggregate report across all imports)
+curl -s 'http://localhost:3000/api/v1/reports/pdf?importId=<importId>' -o report.pdf
 ```
 
-**The PDF report call above currently fails against an unmodified `pnpm docker:up` stack** — see
-"Known limitations" below.
+`GET /stats` response (see "Response format" above for the envelope shape):
+
+```json
+{
+  "status": "SUCCESS",
+  "code": 200,
+  "message": "OK",
+  "result": {
+    "data": {
+      "archivesProcessed": 12,
+      "eventsProcessed": 48000,
+      "successfulEvents": 47500,
+      "invalidEvents": 500,
+      "errors": 3,
+      "processingDurationMs": 15230,
+      "timeSeries": [{ "timestamp": "2026-08-11T00:00:00.000Z", "value": 100 }],
+      "degraded": false
+    }
+  },
+  "meta": { "tracing": { "correlationId": "2f1fdc5d-4324-4f56-95ae-d25df842bd7b" } }
+}
+```
+
+`degraded` is `true` when MongoDB or Redis was unreachable while computing the statistics — the
+numeric fields fall back to zeros (or omit `processingDurationMs`/return an empty `timeSeries`) in
+that case rather than the request failing, so `degraded` is what distinguishes "zero because no
+imports have run yet" from "zero because a data source was down". It is optional on the response
+schema and only present in service-b's payload when set, so existing clients that ignore unknown
+fields are unaffected. The PDF report (`GET /reports/pdf`) prints a corresponding warning line in
+its summary section when the underlying stats were degraded.
 
 ### Trade-offs
 
 No gRPC, no cross-batch transaction spanning a whole import, no unlimited filter-combination
 indexing, no auth, no Repository/CQRS/event-sourcing/extra-caching layer — all deliberate, all
-explained in the design doc's own
-[Out of scope / trade-offs](docs/superpowers/specs/2026-08-12-github-archive-platform-design.md#out-of-scope--trade-offs)
-section rather than duplicated here.
+explained in the design doc's own "Out of scope / trade-offs" section rather than duplicated here
+(`docs/superpowers/specs/2026-08-12-github-archive-platform-design.md#out-of-scope--trade-offs` —
+`docs/` is `.gitignore`d and not committed, so this link only resolves locally, not from a fresh
+clone).
 
 ## Correlation ID & Request ID
 
@@ -510,20 +569,21 @@ curl -i http://localhost:3000/api/v1/health/ready \
 
 Expected: `503`, with the same `x-correlation-id` you sent still present on the error response.
 
-See `docs/superpowers/specs/2026-08-12-correlation-request-id-design.md` for the full design.
+See `docs/superpowers/specs/2026-08-12-correlation-request-id-design.md` for the full design
+(not committed — `docs/` is `.gitignore`d, so this resolves only if you have that file locally).
 
 ## Known limitations
 
 These are current, verifiable gaps in the implementation — not roadmap items, and not exhaustive.
-For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`.
+For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`
+(not committed — `docs/` is `.gitignore`d, so this resolves only if you have that file locally).
 
 - **No integration tests exercise the real RabbitMQ broker, MongoDB, or the Docker filesystem.**
   `service-a`/`service-b` have unit tests only (mocked collections/channels), so `pnpm test` alone
   would not catch a container-filesystem-permissions bug (e.g. a missing `chown` on a Docker
-  volume). There is now a manual smoke test that does exercise the real Docker stack —
-  `back-end/service-a/scripts/docker-smoke-test.ts`, run via `pnpm --filter service-a run
-  smoke:report <dateHour>` — but it isn't wired into any CI, since this repo has no CI config, so
-  it must still be run manually rather than catching regressions automatically.
+  volume). The only way to catch that class of regression today is to run the stack by hand
+  (`pnpm docker:up`) and walk the flow in "Trying it end-to-end" above — there is no automated
+  smoke test and no CI config in this repo.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
   `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
   visible: each dead-lettered message is recorded as a `processing-logs` document with `status:

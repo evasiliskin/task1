@@ -25,6 +25,9 @@ describe('ArchiveDownloadService', () => {
     const archiveConfiguration: ArchiveConfiguration = {
       baseUrl: 'https://data.gharchive.org',
       downloadTimeoutMs: 1000,
+      downloadTotalTimeoutMs: 5000,
+      downloadMaxAttempts: 3,
+      downloadRetryDelayMs: 10,
     };
     const storageConfiguration: StorageConfiguration = { dir: storageDirectory };
 

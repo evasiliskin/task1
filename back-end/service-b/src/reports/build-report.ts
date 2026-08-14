@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import PDFDocument from 'pdfkit';
@@ -22,25 +22,37 @@ export async function buildReport(
 
   const document = new PDFDocument({ margin: 50 });
 
-  await new Promise<void>((resolve, reject) => {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      const writeStream = createWriteStream(reportPath);
+
+      const fail = (error: Error): void => {
+        writeStream.destroy();
+        reject(error);
+      };
+
+      writeStream.on('finish', resolve);
+      writeStream.on('error', fail);
+      document.on('error', fail);
+
+      document.pipe(writeStream);
+
+      document.fontSize(20).text('GitHub Archive Processing Report', { align: 'center' });
+      document.moveDown();
+
+      drawSummarySection(document, stats, isAggregate);
+      document.moveDown();
+      drawEventsOverTimeChart(document, stats.timeSeries, isAggregate);
+      document.moveDown();
+      drawStatusBreakdownChart(document, stats);
+
+      document.end();
+    });
+  } catch (error) {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-    const writeStream = createWriteStream(reportPath);
+    await unlink(reportPath).catch(() => undefined);
 
-    writeStream.on('finish', resolve);
-    writeStream.on('error', reject);
-    document.on('error', reject);
-
-    document.pipe(writeStream);
-
-    document.fontSize(20).text('GitHub Archive Processing Report', { align: 'center' });
-    document.moveDown();
-
-    drawSummarySection(document, stats, isAggregate);
-    document.moveDown();
-    drawEventsOverTimeChart(document, stats.timeSeries, isAggregate);
-    document.moveDown();
-    drawStatusBreakdownChart(document, stats);
-
-    document.end();
-  });
+    throw error;
+  }
 }

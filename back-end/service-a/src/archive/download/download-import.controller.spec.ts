@@ -1,11 +1,18 @@
+import { type RmqContext } from '@nestjs/microservices';
 import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
+import { ImportAlreadyClaimedError } from '../import-claim.error.js';
 import { type ImportOrchestrationService } from '../import-orchestration.service.js';
-import { type ImportRunTracker } from '../import-run-tracker.service.js';
-import { type IImportRunDocument } from '../import-run.types.js';
 
 import { DownloadImportController } from './download-import.controller.js';
+
+function buildRmqContext(): RmqContext {
+  return {
+    getChannelRef: () => ({ ack: vi.fn() }),
+    getMessage: () => ({ fields: { deliveryTag: 1 } }),
+  } as unknown as RmqContext;
+}
 
 describe('DownloadImportController', () => {
   const validPayload = {
@@ -15,19 +22,16 @@ describe('DownloadImportController', () => {
   const correlationId = 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
   function buildController(
-    findByImportId: ReturnType<typeof vi.fn>,
     importDownload: ReturnType<typeof vi.fn>,
     requestContextService: RequestContextService,
   ): { controller: DownloadImportController; infoMock: ReturnType<typeof vi.fn> } {
     const importOrchestrationService = { importDownload } as unknown as ImportOrchestrationService;
-    const importRunTracker = { findByImportId } as unknown as ImportRunTracker;
     const infoMock = vi.fn();
     const loggerService = {
       getLogger: vi.fn().mockReturnValue({ info: infoMock }),
     } as unknown as LoggerService;
     const controller = new DownloadImportController(
       importOrchestrationService,
-      importRunTracker,
       requestContextService,
       loggerService,
     );
@@ -35,8 +39,7 @@ describe('DownloadImportController', () => {
     return { controller, infoMock };
   }
 
-  it('should call importDownload with the validated dateHour, importId, and correlationId, when no import is recorded yet', async () => {
-    const findByImportId = vi.fn().mockResolvedValue(null);
+  it('should call importDownload with the validated dateHour, importId, and correlationId, when the payload is valid', async () => {
     const importDownload = vi.fn().mockResolvedValue({
       eventsProcessed: 1,
       validEvents: 1,
@@ -45,13 +48,12 @@ describe('DownloadImportController', () => {
       errorCount: 0,
     });
     const requestContextService = new RequestContextService();
-    const { controller } = buildController(findByImportId, importDownload, requestContextService);
+    const { controller } = buildController(importDownload, requestContextService);
 
     await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
-      await controller.handleDownload(validPayload);
+      await controller.handleDownload(validPayload, buildRmqContext());
     });
 
-    expect(findByImportId).toHaveBeenCalledWith(validPayload.importId);
     expect(importDownload).toHaveBeenCalledWith(
       validPayload.dateHour,
       validPayload.importId,
@@ -59,36 +61,70 @@ describe('DownloadImportController', () => {
     );
   });
 
-  it('should skip importDownload and log, when the importId is already recorded', async () => {
-    const existing = { importId: validPayload.importId } as unknown as IImportRunDocument;
-    const findByImportId = vi.fn().mockResolvedValue(existing);
-    const importDownload = vi.fn();
+  it('should swallow ImportAlreadyClaimedError and not rethrow, when another consumer already claimed the import', async () => {
+    const importDownload = vi
+      .fn()
+      .mockRejectedValue(new ImportAlreadyClaimedError('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'));
     const requestContextService = new RequestContextService();
-    const { controller, infoMock } = buildController(
-      findByImportId,
-      importDownload,
-      requestContextService,
-    );
+    const { controller } = buildController(importDownload, requestContextService);
 
     await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
-      await controller.handleDownload(validPayload);
+      await expect(
+        controller.handleDownload(
+          {
+            importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            dateHour: '2026-08-11-0',
+          },
+          buildRmqContext(),
+        ),
+      ).resolves.toBeUndefined();
     });
-
-    expect(importDownload).not.toHaveBeenCalled();
-    expect(infoMock).toHaveBeenCalledWith(
-      { importId: validPayload.importId },
-      'Import already recorded, skipping duplicate download trigger',
-    );
   });
 
-  it('should throw and not call findByImportId, when the payload fails schema validation', async () => {
-    const findByImportId = vi.fn();
+  it('should rethrow, when the import fails for any reason other than an existing claim', async () => {
+    const importDownload = vi.fn().mockRejectedValue(new Error('archive download failed'));
     const requestContextService = new RequestContextService();
-    const { controller } = buildController(findByImportId, vi.fn(), requestContextService);
+    const { controller } = buildController(importDownload, requestContextService);
 
     await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
-      await expect(controller.handleDownload({ importId: 'not-a-uuid' })).rejects.toThrow();
+      await expect(
+        controller.handleDownload(
+          {
+            importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            dateHour: '2026-08-11-0',
+          },
+          buildRmqContext(),
+        ),
+      ).rejects.toThrow('archive download failed');
     });
-    expect(findByImportId).not.toHaveBeenCalled();
+  });
+
+  it('should throw, when the payload fails schema validation', async () => {
+    const importDownload = vi.fn();
+    const requestContextService = new RequestContextService();
+    const { controller } = buildController(importDownload, requestContextService);
+
+    await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
+      await expect(
+        controller.handleDownload({ importId: 'not-a-uuid' }, buildRmqContext()),
+      ).rejects.toThrow();
+    });
+    expect(importDownload).not.toHaveBeenCalled();
+  });
+
+  it('should ack the message, even when the handler throws', async () => {
+    const ack = vi.fn();
+    const context = {
+      getChannelRef: () => ({ ack }),
+      getMessage: () => ({ fields: { deliveryTag: 1 } }),
+    } as unknown as RmqContext;
+    const importDownload = vi.fn().mockRejectedValue(new Error('boom'));
+    const requestContextService = new RequestContextService();
+    const { controller } = buildController(importDownload, requestContextService);
+
+    await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
+      await expect(controller.handleDownload(validPayload, context)).rejects.toThrow('boom');
+    });
+    expect(ack).toHaveBeenCalledTimes(1);
   });
 });

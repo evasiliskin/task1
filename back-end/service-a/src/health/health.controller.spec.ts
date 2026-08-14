@@ -1,7 +1,15 @@
+import { type RmqContext } from '@nestjs/microservices';
 import { TerminusModule } from '@nestjs/terminus';
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import { HealthController } from './health.controller.js';
+
+function buildRmqContext(): RmqContext {
+  return {
+    getChannelRef: () => ({ ack: vi.fn() }),
+    getMessage: () => ({ fields: { deliveryTag: 1 } }),
+  } as unknown as RmqContext;
+}
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -17,7 +25,7 @@ describe('HealthController', () => {
 
   describe('check', () => {
     it('should return ok health check result, when health.check message is handled', async () => {
-      const result = await controller.check();
+      const result = await controller.check(buildRmqContext());
 
       expect(result).toEqual({
         status: 'ok',
@@ -25,6 +33,20 @@ describe('HealthController', () => {
         error: {},
         details: {},
       });
+    });
+
+    it('should ack the message, even when the handler throws', async () => {
+      const ack = vi.fn();
+      const context = {
+        getChannelRef: () => ({ ack }),
+        getMessage: () => ({ fields: { deliveryTag: 1 } }),
+      } as unknown as RmqContext;
+      const brokenController = new HealthController({
+        check: vi.fn().mockRejectedValue(new Error('boom')),
+      } as never);
+
+      await expect(brokenController.check(context)).rejects.toThrow('boom');
+      expect(ack).toHaveBeenCalledTimes(1);
     });
   });
 });

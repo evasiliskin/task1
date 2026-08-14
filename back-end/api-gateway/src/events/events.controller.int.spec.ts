@@ -13,9 +13,10 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { EventsModule } from './events.module.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 
 type App = Parameters<typeof request>[0];
 
@@ -39,6 +40,7 @@ describe('EventsController (HTTP Integration)', () => {
         ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         EventsModule,
       ],
     })

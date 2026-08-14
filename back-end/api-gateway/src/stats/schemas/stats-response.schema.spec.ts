@@ -27,4 +27,31 @@ describe('StatsResponseSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('should accept a payload with degraded set to true, when parsed', () => {
+    const result = StatsResponseSchema.safeParse({
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+      degraded: true,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept a payload without degraded, when parsed', () => {
+    const result = StatsResponseSchema.safeParse({
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+      timeSeries: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

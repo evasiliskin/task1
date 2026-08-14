@@ -18,6 +18,7 @@ import rabbitmqConfig, { type RabbitmqConfiguration } from '../config/rabbitmq.c
 import { ProcessingLogTracker } from './processing-log-tracker.service.js';
 import { type IProcessingLogDocument } from './processing-log.types.js';
 import { buildRetryHeaders, getRetryCount, type IRmqMessage } from './retry-count.util.js';
+import { buildRetryQueueArguments } from './retry-queue.util.js';
 import {
   toCompletedLogEntry,
   toFailedLogEntry,
@@ -26,12 +27,16 @@ import {
 
 interface IRmqChannel {
   ack(message: IRmqMessage): void;
+  nack(message: IRmqMessage, allUpTo: boolean, requeue: boolean): void;
   sendToQueue(
     queue: string,
     content: Buffer,
     options?: { headers?: Record<string, unknown> },
   ): boolean;
-  assertQueue(queue: string, options?: { durable?: boolean }): Promise<unknown>;
+  assertQueue(
+    queue: string,
+    options?: { durable?: boolean; arguments?: Record<string, unknown> },
+  ): Promise<unknown>;
 }
 
 const MALFORMED_MESSAGE_LOG = 'Rejected malformed import event, acking without storing';
@@ -43,6 +48,8 @@ const DEAD_LETTER_RECORD_FAILED_LOG =
   'Failed to record the dead-lettered event as a processing-log entry';
 const REPUBLISH_FAILED_LOG =
   'Retry/dead-letter republish failed, acking the original message to release the prefetch slot';
+const REPUBLISH_REFUSED_LOG =
+  'Retry/dead-letter publish refused by channel backpressure, requeueing the original message';
 const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
 @Controller()
@@ -140,29 +147,72 @@ export class ImportEventsController {
     const retryCount = getRetryCount(message) + 1;
     const headers = buildRetryHeaders(message, retryCount);
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const isExhausted = retryCount > this.rabbitmqConfiguration.maxRetries;
+
+    let accepted: boolean;
 
     try {
-      if (retryCount > this.rabbitmqConfiguration.maxRetries) {
-        await channel.assertQueue(this.rabbitmqConfiguration.deadLetterQueue, { durable: true });
-        channel.sendToQueue(this.rabbitmqConfiguration.deadLetterQueue, message.content, {
-          headers,
-        });
-        this.logger.error({ eventType, retryCount, error: errorMessage }, DEAD_LETTERED_LOG);
-        await this.recordDeadLetter(entry, eventType, errorMessage);
-      } else {
-        channel.sendToQueue(this.rabbitmqConfiguration.queue, message.content, { headers });
-        this.logger.warn({ eventType, retryCount, error: errorMessage }, RETRY_SCHEDULED_LOG);
-      }
+      accepted = isExhausted
+        ? await this.publishDeadLetter(channel, message, headers)
+        : await this.publishRetry(channel, message, headers);
     } catch (republishError) {
-      const republishErrorMessage =
-        republishError instanceof Error ? republishError.message : String(republishError);
       this.logger.error(
-        { eventType, retryCount, error: errorMessage, republishError: republishErrorMessage },
+        {
+          eventType,
+          retryCount,
+          error: errorMessage,
+          republishError:
+            republishError instanceof Error ? republishError.message : String(republishError),
+        },
         REPUBLISH_FAILED_LOG,
       );
-    } finally {
-      channel.ack(message);
+      channel.nack(message, false, true);
+
+      return;
     }
+
+    if (!accepted) {
+      this.logger.error({ eventType, retryCount, error: errorMessage }, REPUBLISH_REFUSED_LOG);
+      channel.nack(message, false, true);
+
+      return;
+    }
+
+    if (isExhausted) {
+      this.logger.error({ eventType, retryCount, error: errorMessage }, DEAD_LETTERED_LOG);
+      await this.recordDeadLetter(entry, eventType, errorMessage);
+    } else {
+      this.logger.warn({ eventType, retryCount, error: errorMessage }, RETRY_SCHEDULED_LOG);
+    }
+
+    channel.ack(message);
+  }
+
+  private async publishRetry(
+    channel: IRmqChannel,
+    message: IRmqMessage,
+    headers: Record<string, unknown>,
+  ): Promise<boolean> {
+    const { retryQueue, retryDelayMs, queue } = this.rabbitmqConfiguration;
+
+    await channel.assertQueue(retryQueue, {
+      durable: true,
+      arguments: buildRetryQueueArguments(queue, retryDelayMs),
+    });
+
+    return channel.sendToQueue(retryQueue, message.content, { headers });
+  }
+
+  private async publishDeadLetter(
+    channel: IRmqChannel,
+    message: IRmqMessage,
+    headers: Record<string, unknown>,
+  ): Promise<boolean> {
+    await channel.assertQueue(this.rabbitmqConfiguration.deadLetterQueue, { durable: true });
+
+    return channel.sendToQueue(this.rabbitmqConfiguration.deadLetterQueue, message.content, {
+      headers,
+    });
   }
 
   private async recordDeadLetter(

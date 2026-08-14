@@ -17,6 +17,7 @@ import { importsCollectionProvider } from './imports-collection.provider.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { EventsSearchController } from './search/events-search.controller.js';
 import { EventsSearchService } from './search/events-search.service.js';
+import { StorageCleanupService } from './storage-cleanup.service.js';
 import { ArchiveProcessingService } from './upload/archive-processing.service.js';
 import { UploadImportController } from './upload/upload-import.controller.js';
 
@@ -54,6 +55,7 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     ImportRunTracker,
     ImportOrchestrationService,
     EventsSearchService,
+    StorageCleanupService,
   ],
 })
 export class ArchiveModule {}

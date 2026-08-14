@@ -10,19 +10,19 @@ import { of, throwError } from 'rxjs';
 import request from 'supertest';
 
 import { AuthModule } from '../auth/auth.module.js';
-import mongodbConfig from '../config/mongodb.config.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import redisConfig from '../config/redis.config.js';
 import { ContractModule } from '../contract/contract.module.js';
-
-import { type IAggregatedHealth } from './health-check.service.js';
-import { HealthModule } from './health.module.js';
-import { MONGO_CLIENT, REDIS_CLIENT } from './infra-clients.tokens.js';
 import {
   RABBITMQ_CONNECTION_MANAGER,
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
-} from './rabbitmq-clients.tokens.js';
+} from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
+
+import { type IAggregatedHealth } from './health-check.service.js';
+import { HealthModule } from './health.module.js';
+import { REDIS_CLIENT } from './infra-clients.tokens.js';
 
 type App = Parameters<typeof request>[0];
 
@@ -32,14 +32,12 @@ describe('HealthController (HTTP Integration)', () => {
   let serviceAClient: { send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
   let connectionManager: { isConnected: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
-  let mongoClient: { db: ReturnType<typeof vi.fn> };
   let redisClient: { ping: ReturnType<typeof vi.fn> };
 
   beforeAll(async () => {
     serviceAClient = { send: vi.fn() };
     serviceBClient = { send: vi.fn() };
     connectionManager = { isConnected: vi.fn(), close: vi.fn().mockResolvedValue(undefined) };
-    mongoClient = { db: vi.fn() };
     redisClient = { ping: vi.fn() };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -47,13 +45,14 @@ describe('HealthController (HTTP Integration)', () => {
         ConfigModule.forRoot({
           isGlobal: true,
           ignoreEnvFile: true,
-          load: [rabbitmqConfig, loggerConfig, mongodbConfig, redisConfig],
+          load: [rabbitmqConfig, loggerConfig, redisConfig],
         }),
         RequestContextModule,
         ExceptionHandlingModule,
         ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         HealthModule,
       ],
     })
@@ -63,8 +62,6 @@ describe('HealthController (HTTP Integration)', () => {
       .useValue(serviceBClient as unknown as ClientProxy)
       .overrideProvider(RABBITMQ_CONNECTION_MANAGER)
       .useValue(connectionManager)
-      .overrideProvider(MONGO_CLIENT)
-      .useValue(mongoClient)
       .overrideProvider(REDIS_CLIENT)
       .useValue(redisClient)
       .compile();
@@ -85,7 +82,6 @@ describe('HealthController (HTTP Integration)', () => {
     serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
     serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
     connectionManager.isConnected.mockReturnValue(true);
-    mongoClient.db.mockReturnValue({ command: vi.fn().mockResolvedValue({ ok: 1 }) });
     redisClient.ping.mockResolvedValue('PONG');
   });
 
@@ -106,7 +102,6 @@ describe('HealthController (HTTP Integration)', () => {
               rabbitmq: 'ok',
               serviceA: 'ok',
               serviceB: 'ok',
-              mongodb: 'ok',
               redis: 'ok',
             },
           },
@@ -134,7 +129,6 @@ describe('HealthController (HTTP Integration)', () => {
               rabbitmq: 'ok',
               serviceA: 'ok',
               serviceB: 'unavailable',
-              mongodb: 'ok',
               redis: 'ok',
             },
           },

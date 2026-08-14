@@ -25,6 +25,7 @@ export interface IImportArchiveDependencies {
   processArchive: (filePath: string, importId: string) => Promise<ImportResult>;
   emitEvent: (pattern: string, payload: unknown) => void;
   recordMetric: (key: string, value: number) => Promise<void>;
+  recordMetrics: (entries: readonly (readonly [string, number])[]) => Promise<void>;
   recordImportStarted: (
     importId: string,
     source: ImportSourceRecord,
@@ -36,6 +37,7 @@ export interface IImportArchiveDependencies {
     completedAt: Date,
   ) => Promise<void>;
   recordImportFailed: (importId: string, reason: string, failedAt: Date) => Promise<void>;
+  deleteArchive: (filePath: string) => Promise<void>;
 }
 
 export async function importArchive(
@@ -59,8 +61,11 @@ export async function importArchive(
     correlationId,
   };
 
-  dependencies.emitEvent(EVENT_PATTERNS.IMPORT_STARTED, startedEvent);
   await dependencies.recordImportStarted(importId, sourceRecord, startedAt);
+  dependencies.emitEvent(EVENT_PATTERNS.IMPORT_STARTED, startedEvent);
+
+  let processedPath: string | undefined;
+  let hasFailed = false;
 
   try {
     let filePath: string;
@@ -76,16 +81,22 @@ export async function importArchive(
       filePath = source.filePath;
     }
 
+    processedPath = filePath;
+
     const processingStartedAt = Date.now();
     const result = await dependencies.processArchive(filePath, importId);
 
-    await dependencies.recordMetric(METRIC_PROCESSING_DURATION, Date.now() - processingStartedAt);
-    await dependencies.recordMetric(METRIC_EVENTS_PROCESSED, result.eventsProcessed);
-    await dependencies.recordMetric(METRIC_EVENTS_INVALID, result.invalidEvents);
+    const completionMetrics: [string, number][] = [
+      [METRIC_PROCESSING_DURATION, Date.now() - processingStartedAt],
+      [METRIC_EVENTS_PROCESSED, result.eventsProcessed],
+      [METRIC_EVENTS_INVALID, result.invalidEvents],
+    ];
 
     if (result.errorCount > 0) {
-      await dependencies.recordMetric(METRIC_PROCESSING_ERRORS, result.errorCount);
+      completionMetrics.push([METRIC_PROCESSING_ERRORS, result.errorCount]);
     }
+
+    await dependencies.recordMetrics(completionMetrics);
 
     const completedAt = new Date();
     const completedEvent: ImportCompletedEvent = {
@@ -106,6 +117,8 @@ export async function importArchive(
 
     return result;
   } catch (error) {
+    hasFailed = true;
+
     const failedAt = new Date();
     const reason = error instanceof Error ? error.message : String(error);
     const failedEvent: ImportFailedEvent = {
@@ -121,5 +134,11 @@ export async function importArchive(
     await dependencies.recordImportFailed(importId, reason, failedAt);
 
     throw error;
+  } finally {
+    const shouldDelete = source.type === 'download' || !hasFailed;
+
+    if (processedPath !== undefined && shouldDelete) {
+      await dependencies.deleteArchive(processedPath).catch(() => undefined);
+    }
   }
 }

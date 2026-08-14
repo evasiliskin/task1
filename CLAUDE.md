@@ -24,10 +24,13 @@ Ground truth before applying the policies below — keep this section in sync wi
 - **Redis**: used by `service-a` for RedisTimeSeries pipeline metrics (`TS.ADD`), and by the
   gateway/all services for health-check pings. Not used as a cache.
 - **Authentication**: `AuthGuard` (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered
-  globally and is an **intentional fail-closed stub** — every endpoint except `/health`,
-  `/health/live`, `/health/ready` currently returns `403 Forbidden` until real credential
-  verification (Auth0/Passport.js/JWT/OIDC or similar) is implemented. Do not "fix" this by making
-  it default-allow; extend it with a real provider only when explicitly asked to.
+  globally, but is an **intentional placeholder** — its `isAuthenticated()` unconditionally
+  returns `true`, so every endpoint currently responds normally with no credentials supplied. This
+  is deliberate and documented in the code comment there. The structure (`canActivate`, the
+  `@Public()` override on `/health*`, the `isAuthenticated` seam, `UnauthenticatedError`) is
+  already in place so real credential verification (Auth0/Passport.js/JWT/OIDC or similar) can be
+  dropped into `isAuthenticated()` later. Do not implement a real provider, and do not change the
+  stub's behavior, unless explicitly asked to.
 - Full endpoint list, RabbitMQ message-pattern names, and the correlation-ID/request-ID system:
   see [README.txt](README.txt).
 
@@ -201,10 +204,13 @@ Authorization data must always come from trusted storage.
 
 Missing authorization configuration must fail application startup.
 
-**Current state:** real authentication is not implemented yet — see "Current Architecture
-Snapshot" above. `AuthGuard` fails closed (denies) rather than failing open, which satisfies "deny
-by default" even in its unimplemented state. Do not weaken it to unblock testing; override it in
-tests instead (see `*.controller.int.spec.ts` for the pattern).
+**Current state:** real authentication is not implemented yet — `AuthGuard`'s `isAuthenticated()`
+is a placeholder that returns `true`, so nothing is actually enforced today (see "Current
+Architecture Snapshot" above). The deny-by-default rules in this section describe how the guard
+must behave once a real provider is wired into that seam; they are not a description of current
+behavior. Do not rely on the guard for protection in the meantime, and keep overriding it in
+integration tests rather than depending on its current always-allow result (see
+`*.controller.int.spec.ts` for the pattern).
 
 ---
 

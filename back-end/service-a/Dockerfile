@@ -1,6 +1,5 @@
 ARG NODE_VERSION=26.5.0-bookworm-slim
 
-# ---- Base -------------------------------------------------------------
 FROM node:${NODE_VERSION} AS base
 
 ENV PNPM_HOME=/pnpm
@@ -27,7 +26,6 @@ COPY back-end/libs/shared/package.json back-end/libs/shared/package.json
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
 
-# ---- Build --------------------------------------------------------------
 FROM deps AS build
 
 COPY back-end/libs/shared back-end/libs/shared
@@ -37,7 +35,6 @@ RUN pnpm --filter service-a... run build
 
 RUN pnpm deploy --filter service-a --prod /prod/service-a
 
-# ---- Runtime ------------------------------------------------------------
 FROM base AS runtime
 
 ENV NODE_ENV=production
@@ -49,6 +46,14 @@ COPY --chown=node:node --from=build /prod/service-a ./
 RUN mkdir -p /data/archives && chown node:node /data/archives
 
 USER node
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD node -e "\
+    const amqp = require('amqplib'); \
+    amqp.connect(process.env.RABBITMQ_URL) \
+      .then((c) => c.close()) \
+      .then(() => process.exit(0)) \
+      .catch(() => process.exit(1));"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 

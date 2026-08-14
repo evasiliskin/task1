@@ -50,4 +50,15 @@ describe('ProcessErrorHandlerService', () => {
 
     expect(centralizedErrorHandler.handleError).toHaveBeenCalledWith(new FatalError(error));
   });
+
+  it('should remove the registered listeners, when the module is destroyed', () => {
+    const unhandledRejectionCountBefore = process.listenerCount('unhandledRejection');
+    const uncaughtExceptionCountBefore = process.listenerCount('uncaughtException');
+
+    service.onModuleInit();
+    service.onModuleDestroy();
+
+    expect(process.listenerCount('unhandledRejection')).toBe(unhandledRejectionCountBefore);
+    expect(process.listenerCount('uncaughtException')).toBe(uncaughtExceptionCountBefore);
+  });
 });

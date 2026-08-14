@@ -11,6 +11,11 @@ export * from './exception-handling/strategies/app-error.format-strategy.js';
 export * from './exception-handling/strategies/default.format-strategy.js';
 export * from './exception-handling/strategies/http-exception.format-strategy.js';
 
+export * from './messaging/rpc-patterns.const.js';
+
+export * from './pagination/cursor-codec.js';
+export * from './pagination/pagination.const.js';
+
 export * from './logger/app-logger.js';
 export * from './logger/nest-logger.bridge.js';
 export * from './logger/redact-paths.js';
@@ -24,5 +29,6 @@ export * from './request-context/request-context.types.js';
 
 export * from './config/environment.helper.js';
 export * from './config/logger.config.js';
+export * from './config/require-in-production.js';
 
 export * from './security/helmet.config.js';

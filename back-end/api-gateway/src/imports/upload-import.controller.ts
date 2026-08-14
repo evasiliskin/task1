@@ -7,47 +7,58 @@ import {
   HttpStatus,
   Inject,
   Post,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
-import {
-  type ApiResponseSchemaHost,
-  ApiBody,
-  ApiConsumes,
-  ApiCreatedResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { type Request } from 'express';
 import { z } from 'zod';
 
-import storageConfig from '../config/storage.config.js';
+import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
 import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
+import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import {
   ArchiveUploadError,
   MissingUploadFileError,
   UnsupportedArchiveFormatError,
 } from './errors.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { UploadImportResponseSchema } from './schemas/upload-import-response.schema.js';
 import {
   buildFinalArchiveFilename,
-  isArchiveFilename,
+  isGzipFile,
   parseImportIdFromTemporaryFilename,
 } from './upload-storage.util.js';
 
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
-
-const ARCHIVE_PROCESS_UPLOAD_PATTERN = 'archive.process.upload';
+const PUBLISH_FAILED_LOG = 'Failed to publish message to service-a';
+const UNLINK_REJECTED_UPLOAD_FAILED_LOG = 'Failed to remove an upload rejected as non-gzip content';
 
 @ApiTags('imports')
 @Controller('imports')
 export class UploadImportController {
-  public constructor(@Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy) {}
+  public constructor(
+    @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
+    @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
+    loggerService: LoggerService,
+  ) {
+    this.logger = loggerService.getLogger('UploadImportController');
+  }
 
+  // Tighter than the global default (100/min) — literal here must be kept in
+  // sync with throttle.config.ts's uploadLimit/ttlMs defaults; @Throttle's
+  // metadata is a compile-time decorator argument, not something that can
+  // read injected config at request time.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FileInterceptor('file'))
@@ -59,20 +70,29 @@ export class UploadImportController {
   @ApiCreatedResponse({
     schema: singleEnvelopeJsonSchema(z.toJSONSchema(UploadImportResponseSchema) as SwaggerSchema),
   })
-  public async upload(@UploadedFile() file?: Express.Multer.File): Promise<{ importId: string }> {
+  public async upload(
+    @Req() request: Request & { rejectedFilename?: string },
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<{ importId: string }> {
+    if (request.rejectedFilename !== undefined) {
+      throw new UnsupportedArchiveFormatError(request.rejectedFilename);
+    }
+
     if (file === undefined) {
       throw new MissingUploadFileError();
     }
 
-    if (!isArchiveFilename(file.originalname)) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- file.path is the temp path Multer just wrote inside the configured storage directory, not raw external input.
-      await unlink(file.path).catch(() => undefined);
+    if (!(await isGzipFile(file.path))) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- file.path is the temp path multer just wrote inside the configured storage directory.
+      await unlink(file.path).catch((error: unknown) => {
+        this.logger.warn({ path: file.path }, UNLINK_REJECTED_UPLOAD_FAILED_LOG, error);
+      });
 
       throw new UnsupportedArchiveFormatError(file.originalname);
     }
 
     const importId = parseImportIdFromTemporaryFilename(file.filename);
-    const finalPath = join(storageConfig().dir, buildFinalArchiveFilename(importId));
+    const finalPath = join(this.storageConfiguration.dir, buildFinalArchiveFilename(importId));
 
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- both paths are derived from the configured storage directory and a server-generated UUID, never raw external input.
@@ -90,8 +110,18 @@ export class UploadImportController {
       );
     }
 
-    this.serviceAClient.emit(ARCHIVE_PROCESS_UPLOAD_PATTERN, { importId, filePath: finalPath });
+    this.publish(RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD, { importId, filePath: finalPath });
 
     return { importId };
+  }
+
+  private readonly logger: AppLogger;
+
+  private publish(pattern: string, payload: Record<string, unknown>): void {
+    this.serviceAClient.emit(pattern, payload).subscribe({
+      error: (error: unknown) => {
+        this.logger.error({ pattern, payload }, PUBLISH_FAILED_LOG, error);
+      },
+    });
   }
 }

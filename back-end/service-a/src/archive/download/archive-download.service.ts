@@ -20,6 +20,9 @@ export class ArchiveDownloadService {
         baseUrl: this.archiveConfiguration.baseUrl,
         storageDirectory: this.storageConfiguration.dir,
         timeoutMs: this.archiveConfiguration.downloadTimeoutMs,
+        totalTimeoutMs: this.archiveConfiguration.downloadTotalTimeoutMs,
+        maxAttempts: this.archiveConfiguration.downloadMaxAttempts,
+        retryDelayMs: this.archiveConfiguration.downloadRetryDelayMs,
       },
       httpGet,
     );

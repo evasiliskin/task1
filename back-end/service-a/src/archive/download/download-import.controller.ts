@@ -1,41 +1,52 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { Ctx, EventPattern, Payload, type RmqContext } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
+import { ImportAlreadyClaimedError } from '../import-claim.error.js';
 import { ImportOrchestrationService } from '../import-orchestration.service.js';
-import { ImportRunTracker } from '../import-run-tracker.service.js';
+import { ackMessage } from '../rmq-ack.util.js';
 
 import { downloadImportMessageSchema } from './download-import-message.schema.js';
 
-const ALREADY_RECORDED_LOG_MESSAGE = 'Import already recorded, skipping duplicate download trigger';
+const ALREADY_CLAIMED_LOG_MESSAGE =
+  'Import already claimed by another consumer, skipping duplicate';
 
 @Controller()
 export class DownloadImportController {
   public constructor(
     private readonly importOrchestrationService: ImportOrchestrationService,
-    private readonly importRunTracker: ImportRunTracker,
     private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger('DownloadImportController');
   }
 
-  @EventPattern('archive.import.download')
-  public async handleDownload(@Payload() payload: unknown): Promise<void> {
-    const { importId, dateHour } = downloadImportMessageSchema.parse(payload);
-    const existing = await this.importRunTracker.findByImportId(importId);
+  @EventPattern(RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD)
+  public async handleDownload(
+    @Payload() payload: unknown,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    try {
+      const { importId, dateHour } = downloadImportMessageSchema.parse(payload);
+      const { correlationId } = this.requestContextService.requireContext();
 
-    if (existing !== null) {
-      this.logger.info({ importId }, ALREADY_RECORDED_LOG_MESSAGE);
+      try {
+        await this.importOrchestrationService.importDownload(dateHour, importId, correlationId);
+      } catch (error) {
+        if (error instanceof ImportAlreadyClaimedError) {
+          this.logger.info({ importId }, ALREADY_CLAIMED_LOG_MESSAGE);
 
-      return;
+          return;
+        }
+
+        throw error;
+      }
+    } finally {
+      ackMessage(context);
     }
-
-    const { correlationId } = this.requestContextService.requireContext();
-
-    await this.importOrchestrationService.importDownload(dateHour, importId, correlationId);
   }
 
   private readonly logger: AppLogger;

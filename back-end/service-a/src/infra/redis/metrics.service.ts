@@ -8,6 +8,8 @@ import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
 const AUTOMATIC_TIMESTAMP = '*';
 const FAILED_METRIC_LOG_MESSAGE = 'Failed to record metric';
+const FAILED_METRICS_LOG_MESSAGE = 'Failed to record metrics';
+const FAILED_METRICS_ENTRY_LOG_MESSAGE = 'Failed to record metric in batch';
 
 @Injectable()
 export class MetricsService {
@@ -30,10 +32,38 @@ export class MetricsService {
         this.redisConfiguration.metricsRetentionMs,
       );
     } catch (error) {
-      this.logger.warn(
-        { key, value, error: error instanceof Error ? error.message : String(error) },
-        FAILED_METRIC_LOG_MESSAGE,
-      );
+      this.logger.warn({ key, value }, FAILED_METRIC_LOG_MESSAGE, error);
+    }
+  }
+
+  public async recordMetrics(entries: readonly (readonly [string, number])[]): Promise<void> {
+    try {
+      const pipeline = this.client.pipeline();
+
+      for (const [key, value] of entries) {
+        pipeline.call(
+          'TS.ADD',
+          key,
+          AUTOMATIC_TIMESTAMP,
+          value,
+          'RETENTION',
+          this.redisConfiguration.metricsRetentionMs,
+        );
+      }
+
+      const results = await pipeline.exec();
+
+      results?.forEach(([error], index) => {
+        const entry = entries.at(index);
+
+        if (error !== null && entry !== undefined) {
+          const [key, value] = entry;
+
+          this.logger.warn({ key, value }, FAILED_METRICS_ENTRY_LOG_MESSAGE, error);
+        }
+      });
+    } catch (error) {
+      this.logger.warn({ entries }, FAILED_METRICS_LOG_MESSAGE, error);
     }
   }
 

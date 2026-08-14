@@ -1,6 +1,5 @@
 ARG NODE_VERSION=26.5.0-bookworm-slim
 
-# ---- Base -------------------------------------------------------------
 FROM node:${NODE_VERSION} AS base
 
 ENV PNPM_HOME=/pnpm
@@ -27,7 +26,6 @@ COPY back-end/libs/shared/package.json back-end/libs/shared/package.json
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
 
-# ---- Build --------------------------------------------------------------
 FROM deps AS build
 
 COPY back-end/libs/shared back-end/libs/shared
@@ -37,7 +35,6 @@ RUN pnpm --filter api-gateway... run build
 
 RUN pnpm deploy --filter api-gateway --prod /prod/api-gateway
 
-# ---- Runtime ------------------------------------------------------------
 FROM base AS runtime
 
 ENV NODE_ENV=production
@@ -46,6 +43,9 @@ ENV PORT=3000
 WORKDIR /app
 
 COPY --chown=node:node --from=build /prod/api-gateway ./
+
+RUN mkdir -p /data/archives /data/reports \
+    && chown node:node /data/archives /data/reports
 
 USER node
 

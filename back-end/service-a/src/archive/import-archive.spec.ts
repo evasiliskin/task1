@@ -25,9 +25,11 @@ describe('importArchive', () => {
       processArchive: vi.fn().mockResolvedValue(successfulResult),
       emitEvent: vi.fn(),
       recordMetric: vi.fn().mockResolvedValue(undefined),
+      recordMetrics: vi.fn().mockResolvedValue(undefined),
       recordImportStarted: vi.fn().mockResolvedValue(undefined),
       recordImportCompleted: vi.fn().mockResolvedValue(undefined),
       recordImportFailed: vi.fn().mockResolvedValue(undefined),
+      deleteArchive: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as IImportArchiveDependencies &
       Record<keyof IImportArchiveDependencies, ReturnType<typeof vi.fn>>;
@@ -77,8 +79,13 @@ describe('importArchive', () => {
         (call: unknown[]) => call[0] as string,
       );
 
-      expect(recordedMetricKeys).toEqual([
-        'service_a.archive.download.duration',
+      expect(recordedMetricKeys).toEqual(['service_a.archive.download.duration']);
+
+      const [completionMetricEntries] = dependencies.recordMetrics.mock.calls[0] as [
+        [string, number][],
+      ];
+
+      expect(completionMetricEntries.map(([key]) => key)).toEqual([
         'service_a.archive.processing.duration',
         'service_a.archive.events.processed',
         'service_a.archive.events.invalid',
@@ -108,11 +115,13 @@ describe('importArchive', () => {
         dependencies,
       );
 
-      const recordedMetricKeys = dependencies.recordMetric.mock.calls.map(
-        (call: unknown[]) => call[0] as string,
-      );
+      const [completionMetricEntries] = dependencies.recordMetrics.mock.calls[0] as [
+        [string, number][],
+      ];
 
-      expect(recordedMetricKeys).toContain('service_a.archive.processing.errors');
+      expect(completionMetricEntries.map(([key]) => key)).toContain(
+        'service_a.archive.processing.errors',
+      );
     });
   });
 
@@ -202,6 +211,118 @@ describe('importArchive', () => {
         EVENT_PATTERNS.IMPORT_FAILED,
       ]);
       expect(dependencies.recordImportCompleted).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('claim ordering', () => {
+    it('should not emit IMPORT_STARTED, when the import run cannot be claimed', async () => {
+      const dependencies = buildDependencies({
+        recordImportStarted: vi.fn().mockRejectedValue(new Error('E11000 duplicate key')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'download', dateHour: '2026-08-11-0' },
+          importId,
+          correlationId,
+          dependencies,
+        ),
+      ).rejects.toThrow('E11000 duplicate key');
+
+      expect(dependencies.emitEvent).not.toHaveBeenCalled();
+      expect(dependencies.downloadArchive).not.toHaveBeenCalled();
+    });
+
+    it('should emit IMPORT_STARTED only after the claim succeeds', async () => {
+      const callOrder: string[] = [];
+      const dependencies = buildDependencies({
+        recordImportStarted: vi.fn().mockImplementation(() => {
+          callOrder.push('claim');
+
+          return Promise.resolve();
+        }),
+        emitEvent: vi.fn().mockImplementation((pattern: string) => {
+          callOrder.push(`emit:${pattern}`);
+        }),
+      });
+
+      await importArchive(
+        { type: 'download', dateHour: '2026-08-11-0' },
+        importId,
+        correlationId,
+        dependencies,
+      );
+
+      expect(callOrder[0]).toBe('claim');
+      expect(callOrder[1]).toBe(`emit:${EVENT_PATTERNS.IMPORT_STARTED}`);
+    });
+  });
+
+  describe('archive cleanup', () => {
+    it('should delete the downloaded archive after a successful import', async () => {
+      const dependencies = buildDependencies();
+
+      await importArchive(
+        { type: 'download', dateHour: '2026-08-11-0' },
+        importId,
+        correlationId,
+        dependencies,
+      );
+
+      expect(dependencies.deleteArchive).toHaveBeenCalledWith(
+        '/data/archives/2026-08-11-0.json.gz',
+      );
+    });
+
+    it('should delete the downloaded archive even when processing fails, because it can be re-downloaded', async () => {
+      const dependencies = buildDependencies({
+        processArchive: vi.fn().mockRejectedValue(new Error('corrupt gzip')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'download', dateHour: '2026-08-11-0' },
+          importId,
+          correlationId,
+          dependencies,
+        ),
+      ).rejects.toThrow('corrupt gzip');
+
+      expect(dependencies.deleteArchive).toHaveBeenCalledWith(
+        '/data/archives/2026-08-11-0.json.gz',
+      );
+    });
+
+    it('should keep an uploaded archive when processing fails, because it cannot be re-obtained', async () => {
+      const dependencies = buildDependencies({
+        processArchive: vi.fn().mockRejectedValue(new Error('mongo down')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'upload', filePath: '/data/archives/x.json.gz' },
+          importId,
+          correlationId,
+          dependencies,
+        ),
+      ).rejects.toThrow('mongo down');
+
+      expect(dependencies.deleteArchive).not.toHaveBeenCalled();
+    });
+
+    it('should not fail the import when deletion fails', async () => {
+      const dependencies = buildDependencies({
+        deleteArchive: vi.fn().mockRejectedValue(new Error('EBUSY')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'download', dateHour: '2026-08-11-0' },
+          importId,
+          correlationId,
+          dependencies,
+        ),
+      ).resolves.toEqual(successfulResult);
     });
   });
 });

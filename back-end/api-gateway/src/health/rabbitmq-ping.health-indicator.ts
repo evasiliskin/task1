@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -23,7 +24,7 @@ export class RabbitMqPingHealthIndicator {
 
     try {
       await firstValueFrom(
-        client.send('health.check', record).pipe(timeout(this.config.pingTimeoutMs)),
+        client.send(RPC_PATTERNS.HEALTH_CHECK, record).pipe(timeout(this.config.pingTimeoutMs)),
       );
 
       return indicator.up();

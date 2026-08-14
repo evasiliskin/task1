@@ -11,7 +11,7 @@ describe('uploadConfig', () => {
     it('should return the documented default, when no environment variable is set', () => {
       delete process.env.UPLOAD_MAX_FILE_SIZE_BYTES;
 
-      expect(uploadConfig()).toEqual({ maxFileSizeBytes: 2_147_483_648 });
+      expect(uploadConfig()).toEqual({ maxFileSizeBytes: 536_870_912 });
     });
   });
 

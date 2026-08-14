@@ -1,8 +1,17 @@
+import { type RmqContext } from '@nestjs/microservices';
+
 import { type MetricsService } from '../infra/redis/metrics.service.js';
 
 import { type ImportRunTracker } from './import-run-tracker.service.js';
 import { type IImportRunDocument } from './import-run.types.js';
 import { ImportStatusController } from './import-status.controller.js';
+
+function buildRmqContext(): RmqContext {
+  return {
+    getChannelRef: () => ({ ack: vi.fn() }),
+    getMessage: () => ({ fields: { deliveryTag: 1 } }),
+  } as unknown as RmqContext;
+}
 
 describe('ImportStatusController', () => {
   const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -23,7 +32,7 @@ describe('ImportStatusController', () => {
     const { metricsService } = buildMetricsService();
     const controller = new ImportStatusController(importRunTracker, metricsService);
 
-    const result = await controller.handleGetStatus({ importId });
+    const result = await controller.handleGetStatus({ importId }, buildRmqContext());
 
     expect(result).toBe(document);
     expect(findByImportId).toHaveBeenCalledWith(importId);
@@ -35,7 +44,7 @@ describe('ImportStatusController', () => {
     const { metricsService } = buildMetricsService();
     const controller = new ImportStatusController(importRunTracker, metricsService);
 
-    await expect(controller.handleGetStatus({ importId })).resolves.toBeNull();
+    await expect(controller.handleGetStatus({ importId }, buildRmqContext())).resolves.toBeNull();
   });
 
   it('should reject and not call findByImportId, when the payload fails schema validation', async () => {
@@ -44,7 +53,9 @@ describe('ImportStatusController', () => {
     const { metricsService, recordMetric } = buildMetricsService();
     const controller = new ImportStatusController(importRunTracker, metricsService);
 
-    await expect(controller.handleGetStatus({ importId: 'not-a-uuid' })).rejects.toThrow();
+    await expect(
+      controller.handleGetStatus({ importId: 'not-a-uuid' }, buildRmqContext()),
+    ).rejects.toThrow();
     expect(findByImportId).not.toHaveBeenCalled();
     expect(recordMetric).not.toHaveBeenCalled();
   });
@@ -55,8 +66,23 @@ describe('ImportStatusController', () => {
     const { metricsService, recordMetric } = buildMetricsService();
     const controller = new ImportStatusController(importRunTracker, metricsService);
 
-    await controller.handleGetStatus({ importId });
+    await controller.handleGetStatus({ importId }, buildRmqContext());
 
     expect(recordMetric).toHaveBeenCalledWith('service_a.archive.status.requests', 1);
+  });
+
+  it('should ack the message, even when the handler throws', async () => {
+    const ack = vi.fn();
+    const context = {
+      getChannelRef: () => ({ ack }),
+      getMessage: () => ({ fields: { deliveryTag: 1 } }),
+    } as unknown as RmqContext;
+    const findByImportId = vi.fn().mockRejectedValue(new Error('boom'));
+    const importRunTracker = { findByImportId } as unknown as ImportRunTracker;
+    const { metricsService } = buildMetricsService();
+    const controller = new ImportStatusController(importRunTracker, metricsService);
+
+    await expect(controller.handleGetStatus({ importId }, context)).rejects.toThrow('boom');
+    expect(ack).toHaveBeenCalledTimes(1);
   });
 });

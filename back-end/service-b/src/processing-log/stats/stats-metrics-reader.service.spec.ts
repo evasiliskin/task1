@@ -31,14 +31,20 @@ describe('StatsMetricsReader', () => {
       ]);
       const reader = buildReader(call);
 
-      await expect(reader.readAverageProcessingDuration()).resolves.toBe(150);
+      await expect(reader.readAverageProcessingDuration()).resolves.toEqual({
+        value: 150,
+        degraded: false,
+      });
     });
 
     it('should return undefined, when Redis returns an empty series', async () => {
       const call = vi.fn().mockResolvedValue([]);
       const reader = buildReader(call);
 
-      await expect(reader.readAverageProcessingDuration()).resolves.toBeUndefined();
+      await expect(reader.readAverageProcessingDuration()).resolves.toEqual({
+        value: undefined,
+        degraded: false,
+      });
     });
 
     it('should call TS.RANGE with AGGREGATION avg bucketed by the configured retention, when called', async () => {
@@ -58,15 +64,19 @@ describe('StatsMetricsReader', () => {
       );
     });
 
-    it('should return undefined and log a warning, when Redis rejects', async () => {
+    it('should return undefined and degraded true, and log a warning, when Redis rejects', async () => {
       const call = vi.fn().mockRejectedValue(new Error('connection lost'));
       const warnMock = vi.fn();
       const reader = buildReader(call, warnMock);
 
-      await expect(reader.readAverageProcessingDuration()).resolves.toBeUndefined();
+      await expect(reader.readAverageProcessingDuration()).resolves.toEqual({
+        value: undefined,
+        degraded: true,
+      });
       expect(warnMock).toHaveBeenCalledWith(
-        { error: 'connection lost' },
+        {},
         'Failed to read average processing duration metric',
+        expect.any(Error),
       );
     });
   });
@@ -79,10 +89,13 @@ describe('StatsMetricsReader', () => {
       ]);
       const reader = buildReader(call);
 
-      await expect(reader.readEventsTimeSeries()).resolves.toEqual([
-        { timestamp: new Date(1_691_712_000_000).toISOString(), value: 10 },
-        { timestamp: new Date(1_691_712_120_000).toISOString(), value: 12 },
-      ]);
+      await expect(reader.readEventsTimeSeries()).resolves.toEqual({
+        timeSeries: [
+          { timestamp: new Date(1_691_712_000_000).toISOString(), value: 10 },
+          { timestamp: new Date(1_691_712_120_000).toISOString(), value: 12 },
+        ],
+        degraded: false,
+      });
     });
 
     it('should call TS.RANGE with a bucket size capping the series at 50 points, when called', async () => {
@@ -102,15 +115,19 @@ describe('StatsMetricsReader', () => {
       );
     });
 
-    it('should return an empty array and log a warning, when Redis rejects', async () => {
+    it('should return an empty array and degraded true, and log a warning, when Redis rejects', async () => {
       const call = vi.fn().mockRejectedValue(new Error('connection lost'));
       const warnMock = vi.fn();
       const reader = buildReader(call, warnMock);
 
-      await expect(reader.readEventsTimeSeries()).resolves.toEqual([]);
+      await expect(reader.readEventsTimeSeries()).resolves.toEqual({
+        timeSeries: [],
+        degraded: true,
+      });
       expect(warnMock).toHaveBeenCalledWith(
-        { error: 'connection lost' },
+        {},
         'Failed to read events-processed time series metric',
+        expect.any(Error),
       );
     });
   });

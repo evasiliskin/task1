@@ -13,6 +13,7 @@ export const StatsResponseSchema = z.object({
   errors: z.number(),
   processingDurationMs: z.number().optional(),
   timeSeries: z.array(StatsTimeSeriesPointSchema),
+  degraded: z.boolean().optional(),
 });
 
 export type StatsResponse = z.infer<typeof StatsResponseSchema>;

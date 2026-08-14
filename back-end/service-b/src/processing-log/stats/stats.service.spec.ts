@@ -12,8 +12,10 @@ describe('StatsService', () => {
     const find = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
     const collection = { aggregate, find } as unknown as Collection<IProcessingLogDocument>;
     const metricsReader = {
-      readAverageProcessingDuration: vi.fn().mockResolvedValue(undefined),
-      readEventsTimeSeries: vi.fn().mockResolvedValue([]),
+      readAverageProcessingDuration: vi
+        .fn()
+        .mockResolvedValue({ value: undefined, degraded: false }),
+      readEventsTimeSeries: vi.fn().mockResolvedValue({ timeSeries: [], degraded: false }),
     } as unknown as StatsMetricsReader;
     const loggerService = {
       getLogger: vi.fn().mockReturnValue({ warn: vi.fn() }),
@@ -29,6 +31,7 @@ describe('StatsService', () => {
       invalidEvents: 0,
       errors: 0,
       timeSeries: [],
+      degraded: false,
     });
   });
 });

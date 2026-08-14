@@ -37,6 +37,14 @@ export function drawSummarySection(
   document_.moveDown(0.5);
   document_.fontSize(11);
   document_.text(`Report scope: ${isAggregate ? 'all imports' : 'single import'}`);
+
+  if (stats.degraded) {
+    document_
+      .fillColor('#C62828')
+      .text('Warning: some data sources were unavailable; figures may be incomplete.');
+    document_.fillColor('black');
+  }
+
   document_.text(`Archives processed: ${stats.archivesProcessed}`);
   document_.text(`Events processed: ${stats.eventsProcessed}`);
   document_.text(`Successful events: ${stats.successfulEvents}`);

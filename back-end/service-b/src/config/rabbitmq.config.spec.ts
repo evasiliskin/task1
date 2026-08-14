@@ -14,6 +14,8 @@ describe('rabbitmqConfig', () => {
       delete process.env.RABBITMQ_PREFETCH_COUNT;
       delete process.env.RABBITMQ_MAX_RETRIES;
       delete process.env.RABBITMQ_DEAD_LETTER_QUEUE;
+      delete process.env.RABBITMQ_RETRY_QUEUE;
+      delete process.env.RABBITMQ_RETRY_DELAY_MS;
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://guest:guest@localhost:5672',
@@ -21,6 +23,8 @@ describe('rabbitmqConfig', () => {
         prefetchCount: 10,
         maxRetries: 5,
         deadLetterQueue: 'service_b_queue.dlq',
+        retryQueue: 'service_b_queue.retry',
+        retryDelayMs: 5000,
       });
     });
   });
@@ -32,6 +36,8 @@ describe('rabbitmqConfig', () => {
       process.env.RABBITMQ_PREFETCH_COUNT = '20';
       process.env.RABBITMQ_MAX_RETRIES = '3';
       process.env.RABBITMQ_DEAD_LETTER_QUEUE = 'custom_service_b_queue.dlq';
+      process.env.RABBITMQ_RETRY_QUEUE = 'custom_service_b_queue.retry';
+      process.env.RABBITMQ_RETRY_DELAY_MS = '10000';
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://user:pass@rabbit-host:5672',
@@ -39,6 +45,8 @@ describe('rabbitmqConfig', () => {
         prefetchCount: 20,
         maxRetries: 3,
         deadLetterQueue: 'custom_service_b_queue.dlq',
+        retryQueue: 'custom_service_b_queue.retry',
+        retryDelayMs: 10000,
       });
     });
   });

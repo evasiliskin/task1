@@ -6,6 +6,19 @@ import { buildLogsFilter } from './build-logs-filter.js';
 import { decodeLogCursor, encodeLogCursor } from './log-cursor.util.js';
 import { type SearchLogsMessage } from './search-logs-message.schema.js';
 
+const LOG_PROJECTION = {
+  _id: 1,
+  importId: 1,
+  eventType: 1,
+  service: 1,
+  status: 1,
+  timestamp: 1,
+  correlationId: 1,
+  archive: 1,
+  metadata: 1,
+  errorInfo: 1,
+} as const;
+
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`: matches the brief's `SearchLogsResult` shape consumed by Task 6's `LogsSearchService`.
 export type SearchLogsResult = {
   data: IProcessingLogDocument[];
@@ -20,7 +33,7 @@ export async function searchLogs(
   const filter = buildLogsFilter(message, cursor);
 
   const documents = await collection
-    .find(filter)
+    .find(filter, { projection: LOG_PROJECTION })
     .sort({ timestamp: -1, _id: -1 })
     .limit(message.limit + 1)
     .toArray();

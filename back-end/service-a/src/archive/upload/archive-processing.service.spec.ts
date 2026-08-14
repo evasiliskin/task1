@@ -76,13 +76,9 @@ describe('ArchiveProcessingService', () => {
       { ordered: false },
     );
     expect(warnMock).toHaveBeenCalledWith(
-      {
-        importId: 'import-1',
-        rawLine: 'not valid json',
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        error: expect.any(String),
-      },
+      { importId: 'import-1', rawLine: 'not valid json' },
       'Skipped invalid archive line',
+      expect.anything(),
     );
   });
 

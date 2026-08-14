@@ -2,7 +2,7 @@ import { type Params } from 'nestjs-pino';
 
 import { type ILoggerConfiguration } from '../../config/logger.config.js';
 import { type RequestContextService } from '../../request-context/request-context.service.js';
-import { REDACT_CENSOR, REDACT_PATHS } from '../redact-paths.js';
+import { buildBasePinoOptions } from '../base-pino-options.js';
 
 function isHealthCheckRequest(request: { url?: string }): boolean {
   return (request.url ?? '').includes('/health/');
@@ -14,14 +14,8 @@ export function pinoConfigFactory(
 ): Params {
   return {
     pinoHttp: {
-      level: config.level,
-      mixin: () => requestContextService.getAttributes(),
-      redact: { paths: [...REDACT_PATHS], censor: REDACT_CENSOR },
+      ...buildBasePinoOptions(config, requestContextService),
       autoLogging: { ignore: isHealthCheckRequest },
-      transport:
-        config.transport === 'pretty'
-          ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
-          : undefined,
     },
   };
 }

@@ -9,7 +9,6 @@ describe('HealthResponseSchema', () => {
         rabbitmq: 'ok',
         serviceA: 'ok',
         serviceB: 'unavailable',
-        mongodb: 'ok',
         redis: 'ok',
       },
     });
@@ -25,7 +24,6 @@ describe('HealthResponseSchema', () => {
         rabbitmq: 'ok',
         serviceA: 'ok',
         serviceB: 'ok',
-        mongodb: 'ok',
         redis: 'ok',
       },
     });

@@ -1,3 +1,5 @@
+import { unlink } from 'node:fs/promises';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
@@ -13,6 +15,7 @@ import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { ArchiveProcessingService } from './upload/archive-processing.service.js';
 
 const EMIT_FAILED_LOG = 'Failed to publish lifecycle event';
+const DELETE_FAILED_LOG = 'Failed to delete processed archive';
 
 @Injectable()
 export class ImportOrchestrationService {
@@ -63,20 +66,28 @@ export class ImportOrchestrationService {
       emitEvent: (pattern, payload) => {
         this.serviceBClient.emit(pattern, payload).subscribe({
           error: (error: unknown) => {
-            this.logger.warn(
-              { pattern, error: error instanceof Error ? error.message : String(error) },
-              EMIT_FAILED_LOG,
-            );
+            this.logger.warn({ pattern }, EMIT_FAILED_LOG, error);
           },
         });
       },
       recordMetric: (key, value) => this.metricsService.recordMetric(key, value),
+      recordMetrics: (entries) => this.metricsService.recordMetrics(entries),
       recordImportStarted: (importId, source, startedAt) =>
         this.importRunTracker.recordStarted(importId, source, startedAt),
       recordImportCompleted: (importId, result, completedAt) =>
         this.importRunTracker.recordCompleted(importId, result, completedAt),
       recordImportFailed: (importId, reason, failedAt) =>
         this.importRunTracker.recordFailed(importId, reason, failedAt),
+      deleteArchive: (filePath) => this.deleteArchive(filePath),
     };
+  }
+
+  private async deleteArchive(filePath: string): Promise<void> {
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- filePath is the storage path this service just wrote or was handed by the gateway's validated upload flow, never raw external input.
+      await unlink(filePath);
+    } catch (error) {
+      this.logger.warn({ filePath }, DELETE_FAILED_LOG, error);
+    }
   }
 }

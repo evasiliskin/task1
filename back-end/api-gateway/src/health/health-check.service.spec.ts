@@ -6,12 +6,11 @@ import { RequestContextService } from '@task1/shared/request-context/request-con
 
 import { HealthCheckService } from './health-check.service.js';
 import { type GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
-import { type MongoHealthIndicator } from './indicators/mongo.health-indicator.js';
 import { type RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
 import { type RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 import { type RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
-const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'mongodb', 'redis'];
+const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'redis'];
 
 const ALL_UP_DETAILS = Object.fromEntries(ALL_KEYS.map((key) => [key, { status: 'up' }]));
 
@@ -35,7 +34,6 @@ function buildService(
     {} as GatewayHealthIndicator,
     {} as RabbitMqConnectionHealthIndicator,
     {} as RabbitMqPingHealthIndicator,
-    {} as MongoHealthIndicator,
     {} as RedisHealthIndicator,
     {} as ClientProxy,
     {} as ClientProxy,
@@ -77,7 +75,6 @@ describe('HealthCheckService', () => {
           rabbitmq: 'ok',
           serviceA: 'ok',
           serviceB: 'ok',
-          mongodb: 'ok',
           redis: 'ok',
         },
       });
@@ -95,7 +92,6 @@ describe('HealthCheckService', () => {
           rabbitmq: 'ok',
           serviceA: 'unavailable',
           serviceB: 'ok',
-          mongodb: 'ok',
           redis: 'ok',
         },
       });
@@ -111,7 +107,6 @@ describe('HealthCheckService', () => {
         rabbitmq: 'ok',
         serviceA: 'ok',
         serviceB: 'unavailable',
-        mongodb: 'ok',
         redis: 'ok',
       });
     });
@@ -126,22 +121,6 @@ describe('HealthCheckService', () => {
         rabbitmq: 'unavailable',
         serviceA: 'ok',
         serviceB: 'ok',
-        mongodb: 'ok',
-        redis: 'ok',
-      });
-    });
-
-    it('should mark mongodb as unavailable and report the rest as ok, when MongoDB is unreachable', async () => {
-      const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['mongodb']));
-
-      const result = await buildService(terminusCheck).getHealth();
-
-      expect(result.services).toEqual({
-        gateway: 'ok',
-        rabbitmq: 'ok',
-        serviceA: 'ok',
-        serviceB: 'ok',
-        mongodb: 'unavailable',
         redis: 'ok',
       });
     });
@@ -156,7 +135,6 @@ describe('HealthCheckService', () => {
         rabbitmq: 'ok',
         serviceA: 'ok',
         serviceB: 'ok',
-        mongodb: 'ok',
         redis: 'unavailable',
       });
     });
@@ -182,7 +160,6 @@ describe('HealthCheckService', () => {
           rabbitmq: 'ok',
           serviceA: 'ok',
           serviceB: 'unavailable',
-          mongodb: 'ok',
           redis: 'unavailable',
         },
       });

@@ -59,6 +59,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
   service-a:
     container_name: task1-service-a
@@ -83,6 +85,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
   api-gateway:
     container_name: task1-api-gateway
@@ -98,7 +102,6 @@ services:
       PORT: 3000
       RABBITMQ_SERVICE_B_QUEUE: service_b_queue
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue
-      MONGODB_URI: mongodb://mongodb:27017/gateway
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data/archives
       REPORT_DIR: /data/reports
@@ -108,10 +111,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
 volumes:
   archive-storage:

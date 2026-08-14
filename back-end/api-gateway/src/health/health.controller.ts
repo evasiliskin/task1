@@ -1,11 +1,11 @@
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import {
-  type ApiResponseSchemaHost,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { z } from 'zod';
 
@@ -13,15 +13,10 @@ import { Public } from '../auth/public.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
 import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
+import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
 
 import { type IAggregatedHealth, HealthCheckService } from './health-check.service.js';
 import { HealthResponseSchema, LivenessResponseSchema } from './schemas/health-response.schema.js';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 const DEGRADED_EXAMPLE = {
   status: 'SUCCESS',
@@ -35,7 +30,6 @@ const DEGRADED_EXAMPLE = {
         rabbitmq: 'ok',
         serviceA: 'ok',
         serviceB: 'unavailable',
-        mongodb: 'ok',
         redis: 'ok',
       },
     },
@@ -45,6 +39,7 @@ const DEGRADED_EXAMPLE = {
 
 @ApiTags('health')
 @Controller('health')
+@SkipThrottle()
 export class HealthController {
   public constructor(private readonly healthCheckService: HealthCheckService) {}
 
@@ -77,7 +72,7 @@ export class HealthController {
   @ApiOperation({
     summary: 'Readiness probe — can the gateway currently serve requests',
     description:
-      'Critical for readiness: rabbitmq, serviceA, serviceB. mongodb/redis are reported but never fail readiness.',
+      'Critical for readiness: rabbitmq, serviceA, serviceB. redis is reported but never fails readiness.',
   })
   @ApiOkResponse({
     schema: singleEnvelopeJsonSchema(z.toJSONSchema(HealthResponseSchema) as SwaggerSchema),

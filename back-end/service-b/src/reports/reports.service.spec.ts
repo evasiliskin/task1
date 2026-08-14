@@ -29,7 +29,11 @@ describe('ReportsService', () => {
       timeSeries: [],
     });
     const statsService = { getStats } as unknown as StatsService;
-    const reportConfiguration: ReportConfiguration = { dir: reportDirectory };
+    const reportConfiguration: ReportConfiguration = {
+      dir: reportDirectory,
+      retentionMs: 3_600_000,
+      sweepIntervalMs: 600_000,
+    };
     const service = new ReportsService(statsService, reportConfiguration);
 
     const result = await service.generateReport(importId);

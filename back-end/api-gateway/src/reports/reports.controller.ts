@@ -8,6 +8,7 @@ import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { type Response } from 'express';
@@ -17,13 +18,11 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { GetReportRequestSchema } from './schemas/get-report-request.schema.js';
 import { GetReportResponseSchema } from './schemas/get-report-response.schema.js';
-
-const REPORTS_PDF_GENERATE_PATTERN = 'reports.pdf.generate';
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `IGenerateReportResult`
 type GenerateReportRpcResult = { reportPath: string };
@@ -59,7 +58,7 @@ export class ReportsController {
 
     const result = await firstValueFrom(
       this.serviceBClient
-        .send<GenerateReportRpcResult>(REPORTS_PDF_GENERATE_PATTERN, record)
+        .send<GenerateReportRpcResult>(RPC_PATTERNS.REPORTS_PDF_GENERATE, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

@@ -1,4 +1,4 @@
-import { type INestMicroservice, ValidationPipe } from '@nestjs/common';
+import { type INestMicroservice } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   let app: INestMicroservice | undefined;
 
   try {
-    const { url, queue } = rabbitmqConfig();
+    const { url, queue, prefetchCount } = rabbitmqConfig();
 
     app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
       transport: Transport.RMQ,
@@ -21,6 +21,8 @@ async function bootstrap(): Promise<void> {
         urls: [url],
         queue,
         queueOptions: { durable: true },
+        noAck: false,
+        prefetchCount,
       },
       bufferLogs: true,
     });
@@ -28,14 +30,6 @@ async function bootstrap(): Promise<void> {
     const loggerService = app.get(LoggerService);
     const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
     app.useLogger(new NestLoggerBridge(bootstrapLogger));
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
 
     app.enableShutdownHooks();
 

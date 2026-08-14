@@ -1,14 +1,9 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import {
-  type ApiResponseSchemaHost,
-  ApiOkResponse,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { listResult } from '@task1/shared/exception-handling/http/list-result';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -18,8 +13,9 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { listEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
+import { type SwaggerSchema } from '../contract/schemas/swagger-schema.type.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { SearchLogsRequestSchema } from './schemas/search-logs-request.schema.js';
 import {
   type LogEntry,
@@ -30,14 +26,6 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- matches the RMQ reply shape of service-b's SearchLogsResult, same convention as EventsController's SearchEventsRpcResult.
 type SearchLogsRpcResult = { data: LogEntry[]; nextCursor?: string };
-
-const LOGS_SEARCH_PATTERN = 'logs.search';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 @ApiTags('logs')
 @Controller('logs')
@@ -81,7 +69,7 @@ export class LogsController {
 
     const result = await firstValueFrom(
       this.serviceBClient
-        .send<SearchLogsRpcResult>(LOGS_SEARCH_PATTERN, record)
+        .send<SearchLogsRpcResult>(RPC_PATTERNS.LOGS_SEARCH, record)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

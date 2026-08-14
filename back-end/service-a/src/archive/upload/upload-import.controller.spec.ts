@@ -1,8 +1,18 @@
+import { type RmqContext } from '@nestjs/microservices';
+import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
+import { ImportAlreadyClaimedError } from '../import-claim.error.js';
 import { type ImportOrchestrationService } from '../import-orchestration.service.js';
 
 import { UploadImportController } from './upload-import.controller.js';
+
+function buildRmqContext(): RmqContext {
+  return {
+    getChannelRef: () => ({ ack: vi.fn() }),
+    getMessage: () => ({ fields: { deliveryTag: 1 } }),
+  } as unknown as RmqContext;
+}
 
 describe('UploadImportController', () => {
   const validPayload = {
@@ -14,10 +24,19 @@ describe('UploadImportController', () => {
   function buildController(
     importUpload: ReturnType<typeof vi.fn>,
     requestContextService: RequestContextService,
-  ): UploadImportController {
+  ): { controller: UploadImportController; infoMock: ReturnType<typeof vi.fn> } {
     const importOrchestrationService = { importUpload } as unknown as ImportOrchestrationService;
+    const infoMock = vi.fn();
+    const loggerService = {
+      getLogger: vi.fn().mockReturnValue({ info: infoMock }),
+    } as unknown as LoggerService;
+    const controller = new UploadImportController(
+      importOrchestrationService,
+      requestContextService,
+      loggerService,
+    );
 
-    return new UploadImportController(importOrchestrationService, requestContextService);
+    return { controller, infoMock };
   }
 
   it('should call ImportOrchestrationService.importUpload with the validated filePath, importId, and correlationId, when the payload is valid', async () => {
@@ -29,10 +48,10 @@ describe('UploadImportController', () => {
       errorCount: 0,
     });
     const requestContextService = new RequestContextService();
-    const controller = buildController(importUpload, requestContextService);
+    const { controller } = buildController(importUpload, requestContextService);
 
     await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
-      await controller.handleUpload(validPayload);
+      await controller.handleUpload(validPayload, buildRmqContext());
     });
 
     expect(importUpload).toHaveBeenCalledWith(
@@ -42,14 +61,70 @@ describe('UploadImportController', () => {
     );
   });
 
+  it('should swallow ImportAlreadyClaimedError and not rethrow, when another consumer already claimed the import', async () => {
+    const importUpload = vi
+      .fn()
+      .mockRejectedValue(new ImportAlreadyClaimedError('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'));
+    const requestContextService = new RequestContextService();
+    const { controller } = buildController(importUpload, requestContextService);
+
+    await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
+      await expect(
+        controller.handleUpload(
+          {
+            importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            filePath: '/data/archives/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.json.gz',
+          },
+          buildRmqContext(),
+        ),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  it('should rethrow, when the import fails for any reason other than an existing claim', async () => {
+    const importUpload = vi.fn().mockRejectedValue(new Error('archive upload failed'));
+    const requestContextService = new RequestContextService();
+    const { controller } = buildController(importUpload, requestContextService);
+
+    await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
+      await expect(
+        controller.handleUpload(
+          {
+            importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            filePath: '/data/archives/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.json.gz',
+          },
+          buildRmqContext(),
+        ),
+      ).rejects.toThrow('archive upload failed');
+    });
+  });
+
   it('should throw and not call ImportOrchestrationService.importUpload, when the payload fails schema validation', async () => {
     const importUpload = vi.fn();
     const requestContextService = new RequestContextService();
-    const controller = buildController(importUpload, requestContextService);
+    const { controller } = buildController(importUpload, requestContextService);
 
     await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
-      await expect(controller.handleUpload({ importId: 'not-a-uuid' })).rejects.toThrow();
+      await expect(
+        controller.handleUpload({ importId: 'not-a-uuid' }, buildRmqContext()),
+      ).rejects.toThrow();
     });
     expect(importUpload).not.toHaveBeenCalled();
+  });
+
+  it('should ack the message, even when the handler throws', async () => {
+    const ack = vi.fn();
+    const context = {
+      getChannelRef: () => ({ ack }),
+      getMessage: () => ({ fields: { deliveryTag: 1 } }),
+    } as unknown as RmqContext;
+    const importUpload = vi.fn().mockRejectedValue(new Error('boom'));
+    const requestContextService = new RequestContextService();
+    const { controller } = buildController(importUpload, requestContextService);
+
+    await requestContextService.run({ correlationId, requestId: correlationId }, async () => {
+      await expect(controller.handleUpload(validPayload, context)).rejects.toThrow('boom');
+    });
+    expect(ack).toHaveBeenCalledTimes(1);
   });
 });

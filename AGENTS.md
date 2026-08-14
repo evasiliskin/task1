@@ -46,7 +46,6 @@ Run from the repo root — pnpm workspace filters apply automatically:
 | `pnpm check` | `lint` + `test` — also runs automatically on `git push` via Husky (`.husky/pre-push`) |
 | `pnpm dev:api-gateway` / `dev:service-a` / `dev:service-b` | Run one service in watch mode |
 | `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ + MongoDB + Redis + all three services |
-| `pnpm --filter service-a run bench:memory <dateHour>` | Manual memory-safety diagnostic against a running Docker stack — not part of `pnpm test` |
 
 Run a single package's suite directly with `pnpm --filter <package> run <script>`, e.g.
 `pnpm --filter api-gateway run test:cov`.
@@ -89,11 +88,14 @@ stack-specific examples.
 ## Current implementation state — read before assuming an endpoint "just works"
 
 - **Authentication is a stub.** `AuthGuard`
-  (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered globally and intentionally fails
-  closed: every endpoint except `GET /health`, `/health/live`, `/health/ready` currently returns
-  `403 Forbidden` until real credential verification is implemented. Integration tests override the
-  guard (`.overrideProvider(AuthGuard).useValue({ canActivate: () => true })`) — follow that
-  pattern in new integration tests instead of trying to satisfy the real guard.
+  (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered globally, but its
+  `isAuthenticated()` unconditionally returns `true` — every endpoint currently responds normally
+  with no credentials supplied. This is a deliberate placeholder: the seam (`canActivate`, the
+  `@Public()` override, `isAuthenticated`) exists so a real provider (Auth0, Passport.js, JWT/OIDC)
+  can be dropped in behind it. Do not replace the stub with real auth unless explicitly asked.
+  Integration tests still override the guard
+  (`.overrideProvider(AuthGuard).useValue({ canActivate: () => true })`) so they don't depend on
+  the stub's current behavior — follow that pattern in new integration tests.
 - **No general persistence layer.** The only MongoDB usage is the GH Archive pipeline's own
   collections (`events`, `imports` in service-a; `processing-logs` in service-b), accessed directly
   via the `mongodb` driver — no ORM, no Repository pattern. Don't introduce one without an explicit

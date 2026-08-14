@@ -28,10 +28,7 @@ export class ArchiveProcessingService {
       importId,
       { collection: this.collection, batchSize: this.mongodbConfiguration.batchSize },
       (rawLine, error) => {
-        this.logger.warn(
-          { importId, rawLine, error: error instanceof Error ? error.message : String(error) },
-          INVALID_LINE_LOG_MESSAGE,
-        );
+        this.logger.warn({ importId, rawLine }, INVALID_LINE_LOG_MESSAGE, error);
       },
     );
   }
