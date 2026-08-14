@@ -523,16 +523,54 @@ threading.
 **In logs.** Every service logs through a small `LoggerService`/`AppLogger` wrapper over
 `pino` (`back-end/libs/shared/src/logger/`, shared by all three services). Both `correlationId` and `requestId` are merged into
 every log line automatically via pino's `mixin` option, which reads the active request context —
-nothing needs to explicitly pass either ID to a log call. A single request produces log lines like:
+nothing needs to explicitly pass either ID to a log call. The shared `correlationId` lets you
+reconstruct the whole flow across all three services' logs, while each service's own `requestId`
+identifies exactly which hop each log line belongs to.
 
-```
-INFO [Gateway] Request started correlationId=c1 requestId=r1
-INFO [ServiceA] Processing request correlationId=c1 requestId=r2
-INFO [ServiceB] Processing request correlationId=c1 requestId=r3
+Every line also carries three fixed fields that say where it came from: `service` (the emitting
+service, from the `SERVICE_NAME` environment variable — set in each Dockerfile, in
+`docker-compose.yml` and in the `start*` scripts; required in production, falls back to
+`unknown-service` elsewhere), `source` (the class that logged it) and `channel` (`http`, `rmq`, or
+`bootstrap` for framework logs emitted before the app started listening — after that the framework
+switches to the service's runtime channel).
+
+**HTTP request logging.** The gateway logs every request twice —
+`HttpLoggingMiddleware` (`back-end/libs/shared/src/logger/http/http-logging.middleware.ts`) emits
+`request started` when the request enters the pipeline and `request completed` when the response
+finishes. One real `POST /imports?dryRun=false` (formatted here for readability, one JSON object
+per line in reality):
+
+```json
+{"level":30,"pid":8488,"hostname":"...","service":"api-gateway",
+ "correlationId":"62bfe171-...","requestId":"bf26a9ed-...",
+ "request":{"method":"POST","url":"/imports?dryRun=false","path":"/imports",
+            "query":{"dryRun":"false"},"body":{"dateHour":"2026-08-11-0"},
+            "headers":{"host":"127.0.0.1:55251","idempotency-key":"a0eebc99-...",
+                       "content-type":"application/json","content-length":"27"},
+            "ip":"::ffff:127.0.0.1"},
+ "source":"HttpLoggingMiddleware","channel":"http","msg":"request started"}
+
+{"level":30,"pid":8488,"hostname":"...","service":"api-gateway",
+ "correlationId":"62bfe171-...","requestId":"bf26a9ed-...",
+ "method":"POST","url":"/imports?dryRun=false","statusCode":202,
+ "contentLength":"192","durationMs":6,
+ "source":"HttpLoggingMiddleware","channel":"http","msg":"request completed"}
 ```
 
-— the shared `correlationId` lets you reconstruct the whole flow across all three services' logs,
-while each service's own `requestId` identifies exactly which hop each log line belongs to.
+Details:
+
+- The start line carries the whole request: method, URL, path, query, parsed body, headers and
+  client IP. Route parameters are not yet bound at middleware time — they are visible in `url`.
+  Multipart uploads are parsed later, inside the route handler, so file payloads never reach the
+  log.
+- Completion level follows the status: `info` below 400, `warn` for 4xx, `error` for 5xx
+  (a 5xx additionally produces `GlobalExceptionFilter`'s stack-trace line).
+- Sensitive keys (`authorization`, `cookie`, `password*`, `token`, `apiKey`, `secret` — see
+  `logger/redact-paths.ts`) are replaced with `[REDACTED]` at any depth of headers, query or body.
+- Health probes (`/health`, `/health/live`, `/health/ready`) and the Swagger UI (`/api-docs`) are
+  not logged at all — see `UNLOGGED_PATH_SEGMENTS` in the middleware.
+- `pino-http`'s own automatic request logging is switched off, so each request produces exactly
+  these two lines and no duplicates.
 
 **Errors.** If any service in the chain fails, the error still carries the same IDs: the gateway's
 HTTP error response includes both `X-Correlation-ID`/`X-Request-ID` response headers, and the error

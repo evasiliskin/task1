@@ -38,6 +38,7 @@ RUN pnpm deploy --filter api-gateway --prod /prod/api-gateway
 FROM base AS runtime
 
 ENV NODE_ENV=production
+ENV SERVICE_NAME=api-gateway
 ENV PORT=3000
 
 WORKDIR /app

@@ -26,6 +26,7 @@ export * from './logger/app-logger.js';
 export * from './logger/logger-aware.base.js';
 export * from './logger/nest-logger.bridge.js';
 export * from './logger/redact-paths.js';
+export * from './logger/redact-payload.js';
 export * from './logger/types.js';
 
 export * from './request-context/id-validation.util.js';

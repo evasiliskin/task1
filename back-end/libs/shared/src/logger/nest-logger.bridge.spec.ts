@@ -8,11 +8,19 @@ describe('NestLoggerBridge', () => {
     warn: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
     debug: ReturnType<typeof vi.fn>;
+    fatal: ReturnType<typeof vi.fn>;
   };
   let bridge: NestLoggerBridge;
 
   beforeEach(() => {
-    appLogger = { trace: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    appLogger = {
+      trace: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      fatal: vi.fn(),
+    };
     bridge = new NestLoggerBridge(appLogger as unknown as AppLogger);
   });
 
@@ -52,13 +60,11 @@ describe('NestLoggerBridge', () => {
     expect(appLogger.trace).toHaveBeenCalledWith({ context: 'SomeContext' }, 'verbose message');
   });
 
-  it('should route fatal() to AppLogger.error(), with fatal: true', () => {
+  it('should route fatal() to AppLogger.fatal(), so it lands on pino level 60', () => {
     bridge.fatal('fatal message', 'SomeContext');
 
-    expect(appLogger.error).toHaveBeenCalledWith(
-      { context: 'SomeContext', fatal: true },
-      'fatal message',
-    );
+    expect(appLogger.fatal).toHaveBeenCalledWith({ context: 'SomeContext' }, 'fatal message');
+    expect(appLogger.error).not.toHaveBeenCalled();
   });
 
   it('should not throw, when setLogLevels() is called', () => {

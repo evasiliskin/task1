@@ -46,6 +46,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: service-b
       RABBITMQ_QUEUE: service_b_queue
       MONGODB_URI: mongodb://mongodb:27017/service_b
       REDIS_URL: redis://redis:6379
@@ -71,6 +72,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: service-a
       RABBITMQ_QUEUE: service_a_queue
       MONGODB_URI: mongodb://mongodb:27017/service_a
       MONGO_BATCH_SIZE: 500
@@ -99,6 +101,7 @@ services:
       - "3000:3000"
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: api-gateway
       PORT: 3000
       RABBITMQ_SERVICE_B_QUEUE: service_b_queue
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue

@@ -9,8 +9,16 @@ export interface IAppLogger {
   fatal(fields: LogFields, message: string): void;
 }
 
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function buildErrorFields(error: unknown): LogFields {
+  if (!(error instanceof Error)) {
+    return { error: String(error) };
+  }
+
+  // The stack is what makes an error line actionable; without it the log only says what broke,
+  // never where.
+  return error.stack === undefined
+    ? { error: error.message }
+    : { error: error.message, stack: error.stack };
 }
 
 export class AppLogger {
@@ -45,8 +53,8 @@ export class AppLogger {
   }
 
   private buildFields(fields: LogFields, error: unknown): LogFields {
-    const errorField = error === undefined ? {} : { error: formatError(error) };
+    const errorFields = error === undefined ? {} : buildErrorFields(error);
 
-    return { ...fields, ...errorField, source: this.source, channel: this.channel };
+    return { ...fields, ...errorFields, source: this.source, channel: this.channel };
   }
 }

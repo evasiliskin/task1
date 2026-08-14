@@ -83,7 +83,13 @@ describe('AppLogger', () => {
     logger.warn({ key: 'x' }, 'warn message', new Error('boom'));
 
     expect(pinoLogger.warn).toHaveBeenCalledWith(
-      { key: 'x', error: 'boom', source: 'HealthController', channel: 'http' },
+      {
+        key: 'x',
+        error: 'boom',
+        stack: expect.stringContaining('Error: boom') as string,
+        source: 'HealthController',
+        channel: 'http',
+      },
       'warn message',
     );
   });
@@ -101,7 +107,13 @@ describe('AppLogger', () => {
     logger.error({ pattern: 'x.y' }, 'error message', new Error('kaboom'));
 
     expect(pinoLogger.error).toHaveBeenCalledWith(
-      { pattern: 'x.y', error: 'kaboom', source: 'HealthController', channel: 'http' },
+      {
+        pattern: 'x.y',
+        error: 'kaboom',
+        stack: expect.stringContaining('Error: kaboom') as string,
+        source: 'HealthController',
+        channel: 'http',
+      },
       'error message',
     );
   });
@@ -110,8 +122,22 @@ describe('AppLogger', () => {
     logger.fatal({}, 'fatal message', new Error('fatal boom'));
 
     expect(pinoLogger.fatal).toHaveBeenCalledWith(
-      { error: 'fatal boom', source: 'HealthController', channel: 'http' },
+      {
+        error: 'fatal boom',
+        stack: expect.stringContaining('Error: fatal boom') as string,
+        source: 'HealthController',
+        channel: 'http',
+      },
       'fatal message',
+    );
+  });
+
+  it('should omit the stack field, when the third argument is not an Error', () => {
+    logger.error({}, 'error message', 'not an Error instance');
+
+    expect(pinoLogger.error).toHaveBeenCalledWith(
+      { error: 'not an Error instance', source: 'HealthController', channel: 'http' },
+      'error message',
     );
   });
 

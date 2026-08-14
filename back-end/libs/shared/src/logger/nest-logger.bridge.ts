@@ -29,7 +29,7 @@ export class NestLoggerBridge implements LoggerService {
   }
 
   public fatal(message: unknown, ...optionalParameters: unknown[]): void {
-    this.logger.error({ context: optionalParameters[0], fatal: true }, String(message));
+    this.logger.fatal({ context: optionalParameters[0] }, String(message));
   }
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function -- the transport-specific logger (pino-http / raw pino) controls the active level; Nest's setLogLevels() has no effect here.

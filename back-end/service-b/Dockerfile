@@ -38,6 +38,7 @@ RUN pnpm deploy --filter service-b --prod /prod/service-b
 FROM base AS runtime
 
 ENV NODE_ENV=production
+ENV SERVICE_NAME=service-b
 
 WORKDIR /app
 

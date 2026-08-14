@@ -34,6 +34,11 @@ async function bootstrap(): Promise<void> {
     app.enableShutdownHooks();
 
     await app.listen();
+
+    // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
+    // RpcExceptionFilter, shutdown notices — belongs to message handling, not to startup, so it
+    // must not keep the "bootstrap" channel.
+    app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'rmq')));
   } catch (error) {
     if (app === undefined) {
       // eslint-disable-next-line n/no-process-exit -- no DI container available yet to resolve CentralizedErrorHandlerService

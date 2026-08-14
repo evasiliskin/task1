@@ -37,6 +37,11 @@ async function bootstrap(): Promise<void> {
 
     const { port } = appConfig();
     await app.listen(port);
+
+    // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
+    // GlobalExceptionFilter, shutdown notices — belongs to request handling, not to startup, so
+    // it must not keep the "bootstrap" channel.
+    app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'http')));
   } catch (error) {
     if (app === undefined) {
       // eslint-disable-next-line n/no-process-exit -- no DI container available yet to resolve CentralizedErrorHandlerService
