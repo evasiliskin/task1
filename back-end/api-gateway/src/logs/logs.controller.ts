@@ -1,23 +1,40 @@
-import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  type ApiResponseSchemaHost,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
+import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { Contract } from '../contract/decorators/contract.decorator.js';
+import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 
-import { type ILogEntryView, LogResponseDto } from './dto/log-response.dto.js';
-import { SearchLogsQueryDto } from './dto/search-logs-query.dto.js';
-import { SearchLogsResponseDto } from './dto/search-logs-response.dto.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
+import { SearchLogsRequestSchema } from './schemas/search-logs-request.schema.js';
+import {
+  type LogEntry,
+  type SearchLogsResponse,
+  SearchLogsResponseSchema,
+} from './schemas/search-logs-response.schema.js';
 
-type SearchLogsRpcEntry = Omit<ILogEntryView, 'timestamp'> & { timestamp: string };
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- matches the RMQ reply shape of service-b's SearchLogsResult, same convention as EventsController's SearchEventsRpcResult.
-type SearchLogsRpcResult = { data: SearchLogsRpcEntry[]; nextCursor?: string };
+type SearchLogsRpcResult = { data: LogEntry[]; nextCursor?: string };
 
 const LOGS_SEARCH_PATTERN = 'logs.search';
+
+// zod's z.toJSONSchema() return type isn't structurally identical to
+// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
+// so it needs an explicit cast at this doc-generation boundary only — the
+// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
+type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 @ApiTags('logs')
 @Controller('logs')
@@ -30,6 +47,7 @@ export class LogsController {
   ) {}
 
   @Get()
+  @Contract({ request: SearchLogsRequestSchema, response: SearchLogsResponseSchema })
   @ApiOperation({ summary: 'Search processing logs with filters and cursor pagination' })
   @ApiQuery({ name: 'importId', required: false, description: 'Import run UUID' })
   @ApiQuery({
@@ -49,10 +67,12 @@ export class LogsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({ type: SearchLogsResponseDto })
-  public async search(@Query() query: SearchLogsQueryDto): Promise<SearchLogsResponseDto> {
+  @ApiOkResponse({ schema: z.toJSONSchema(SearchLogsResponseSchema) as SwaggerSchema })
+  public async search(
+    @ModelBinder(SearchLogsRequestSchema) bound: BoundRequest<typeof SearchLogsRequestSchema>,
+  ): Promise<SearchLogsResponse> {
     const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(query).setOptions({ headers }).build();
+    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
 
     const result = await firstValueFrom(
       this.serviceBClient
@@ -60,8 +80,6 @@ export class LogsController {
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
-    const data = result.data.map((entry) => new LogResponseDto(entry));
-
-    return new SearchLogsResponseDto(data, result.nextCursor);
+    return { data: result.data, nextCursor: result.nextCursor };
   }
 }

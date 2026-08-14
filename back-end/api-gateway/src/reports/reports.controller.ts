@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-import { Controller, Get, Inject, Query, Res, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Inject, Res, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -15,10 +15,13 @@ import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
+import { Contract } from '../contract/decorators/contract.decorator.js';
+import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 
-import { GetReportQueryDto } from './dto/get-report-query.dto.js';
 import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
+import { GetReportRequestSchema } from './schemas/get-report-request.schema.js';
+import { GetReportResponseSchema } from './schemas/get-report-response.schema.js';
 
 const REPORTS_PDF_GENERATE_PATTERN = 'reports.pdf.generate';
 
@@ -40,6 +43,7 @@ export class ReportsController {
   }
 
   @Get('pdf')
+  @Contract({ request: GetReportRequestSchema, response: GetReportResponseSchema })
   @ApiOperation({
     summary: 'Generate and download a PDF processing report, optionally scoped to one import',
   })
@@ -47,11 +51,11 @@ export class ReportsController {
   @ApiProduces('application/pdf')
   @ApiOkResponse({ description: 'The generated PDF report' })
   public async getPdfReport(
-    @Query() query: GetReportQueryDto,
+    @ModelBinder(GetReportRequestSchema) bound: BoundRequest<typeof GetReportRequestSchema>,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(query).setOptions({ headers }).build();
+    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
 
     const result = await firstValueFrom(
       this.serviceBClient
@@ -98,7 +102,7 @@ export class ReportsController {
 
     return new StreamableFile(reportFileStream, {
       type: 'application/pdf',
-      disposition: `attachment; filename="report-${query.importId ?? 'aggregate'}.pdf"`,
+      disposition: `attachment; filename="report-${bound.data.importId ?? 'aggregate'}.pdf"`,
     });
   }
 

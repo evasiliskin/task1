@@ -1,24 +1,40 @@
-import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import {
+  type ApiResponseSchemaHost,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
+import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { Contract } from '../contract/decorators/contract.decorator.js';
+import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 
-import { EventResponseDto } from './dto/event-response.dto.js';
-import { SearchEventsQueryDto } from './dto/search-events-query.dto.js';
-import { SearchEventsResponseDto } from './dto/search-events-response.dto.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
+import { type EventView } from './schemas/event.schema.js';
+import { SearchEventsRequestSchema } from './schemas/search-events-request.schema.js';
+import {
+  type SearchEventsResponse,
+  SearchEventsResponseSchema,
+} from './schemas/search-events-response.schema.js';
 
-type SearchEventsRpcEvent = Omit<IGithubEventDocument, 'createdAt'> & { createdAt: string };
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `SearchEventsResult`
-type SearchEventsRpcResult = { data: SearchEventsRpcEvent[]; nextCursor?: string };
+type SearchEventsRpcResult = { data: EventView[]; nextCursor?: string };
 
 const EVENTS_SEARCH_PATTERN = 'events.search';
+
+// zod's z.toJSONSchema() return type isn't structurally identical to
+// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
+// so it needs an explicit cast at this doc-generation boundary only — the
+// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
+type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 @ApiTags('events')
 @Controller('events')
@@ -31,6 +47,7 @@ export class EventsController {
   ) {}
 
   @Get()
+  @Contract({ request: SearchEventsRequestSchema, response: SearchEventsResponseSchema })
   @ApiOperation({ summary: 'Search imported GitHub events with filters and cursor pagination' })
   @ApiQuery({ name: 'type', required: false, description: 'GitHub event type, e.g. PushEvent' })
   @ApiQuery({
@@ -51,10 +68,13 @@ export class EventsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({ type: SearchEventsResponseDto })
-  public async search(@Query() query: SearchEventsQueryDto): Promise<SearchEventsResponseDto> {
+  @ApiOkResponse({ schema: z.toJSONSchema(SearchEventsResponseSchema) as SwaggerSchema })
+  public async search(
+    @ModelBinder(SearchEventsRequestSchema)
+    bound: BoundRequest<typeof SearchEventsRequestSchema>,
+  ): Promise<SearchEventsResponse> {
     const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(query).setOptions({ headers }).build();
+    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
 
     const result = await firstValueFrom(
       this.serviceAClient
@@ -62,8 +82,6 @@ export class EventsController {
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
-    const data = result.data.map((event) => new EventResponseDto(event));
-
-    return new SearchEventsResponseDto(data, result.nextCursor);
+    return { data: result.data, nextCursor: result.nextCursor };
   }
 }

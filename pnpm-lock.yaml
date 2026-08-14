@@ -51,12 +51,6 @@ importers:
       amqplib:
         specifier: ^2.0.1
         version: 2.0.1
-      class-transformer:
-        specifier: ^0.5.1
-        version: 0.5.1
-      class-validator:
-        specifier: ^0.14.1
-        version: 0.14.4
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@8.1.1)

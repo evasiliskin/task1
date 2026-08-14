@@ -16,6 +16,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
+import { ContractModule } from '../contract/contract.module.js';
 
 import { ImportsModule } from './imports.module.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
@@ -46,6 +47,7 @@ describe('UploadImportController (HTTP Integration)', () => {
         RequestContextModule,
         ExceptionHandlingModule,
         AuthModule,
+        ContractModule,
         ImportsModule,
       ],
     })

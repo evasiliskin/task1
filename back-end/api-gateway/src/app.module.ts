@@ -13,6 +13,7 @@ import redisConfig from './config/redis.config.js';
 import reportConfig from './config/report.config.js';
 import storageConfig from './config/storage.config.js';
 import uploadConfig from './config/upload.config.js';
+import { ContractModule } from './contract/contract.module.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ImportsModule } from './imports/imports.module.js';
@@ -40,6 +41,7 @@ import { StatsModule } from './stats/stats.module.js';
     LoggerModule,
     ExceptionHandlingModule,
     AuthModule,
+    ContractModule,
     HealthModule,
     ImportsModule,
     EventsModule,

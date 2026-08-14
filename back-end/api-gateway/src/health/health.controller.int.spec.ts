@@ -11,6 +11,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import mongodbConfig from '../config/mongodb.config.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import redisConfig from '../config/redis.config.js';
+import { ContractModule } from '../contract/contract.module.js';
 
 import { type IAggregatedHealth } from './health-check.service.js';
 import { HealthModule } from './health.module.js';
@@ -48,6 +49,7 @@ describe('HealthController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         AuthModule,
+        ContractModule,
         HealthModule,
       ],
     })

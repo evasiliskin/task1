@@ -13,10 +13,11 @@ import { of } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config.js';
 import { type ReportConfiguration } from '../config/report.config.js';
+import { type BoundRequest } from '../contract/decorators/model-binder.decorator.js';
 
-import { type GetReportQueryDto } from './dto/get-report-query.dto.js';
 import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { ReportsController } from './reports.controller.js';
+import { type GetReportRequestSchema } from './schemas/get-report-request.schema.js';
 
 function buildController(
   sendMock: ReturnType<typeof vi.fn>,
@@ -91,7 +92,9 @@ describe('ReportsController', () => {
   });
 
   describe('getPdfReport', () => {
-    const query: GetReportQueryDto = { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' };
+    const bound: BoundRequest<typeof GetReportRequestSchema> = {
+      data: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+    };
 
     it('should delete the report file, when the response closes after finishing normally', async () => {
       const reportPath = join(reportDirectory, 'report.pdf');
@@ -110,7 +113,7 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(query, response),
+        () => controller.getPdfReport(bound, response),
       );
       response.emit('finish');
       response.emit('close');
@@ -138,7 +141,7 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(query, response),
+        () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
       await flushMicrotasks();
@@ -164,7 +167,7 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(query, response),
+        () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
       await flushMicrotasks();
@@ -189,7 +192,7 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(query, response),
+        () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
       await flushMicrotasks();
@@ -215,7 +218,7 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(query, response),
+        () => controller.getPdfReport(bound, response),
       );
       await waitFor(() => warn.mock.calls.length > 0, 'the delete-failure warning to be logged');
 
@@ -249,7 +252,7 @@ describe('ReportsController', () => {
         await expect(
           requestContextService.run(
             { correlationId: 'correlation-id', requestId: 'request-id' },
-            () => controller.getPdfReport(query, response),
+            () => controller.getPdfReport(bound, response),
           ),
         ).rejects.toThrow(ReportPathOutsideConfiguredDirectoryError);
       } finally {
@@ -276,7 +279,7 @@ describe('ReportsController', () => {
       try {
         await requestContextService
           .run({ correlationId: 'correlation-id', requestId: 'request-id' }, () =>
-            controller.getPdfReport(query, response),
+            controller.getPdfReport(bound, response),
           )
           .catch(() => undefined);
         await flushMicrotasks();

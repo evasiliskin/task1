@@ -12,22 +12,33 @@ import {
 } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import {
+  type ApiResponseSchemaHost,
+  ApiBody,
+  ApiConsumes,
+  ApiCreatedResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { z } from 'zod';
 
 import storageConfig from '../config/storage.config.js';
+import { Contract } from '../contract/decorators/contract.decorator.js';
+import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
 
-import { UploadImportResponseDto } from './dto/upload-import-response.dto.js';
 import {
   ArchiveUploadError,
   MissingUploadFileError,
   UnsupportedArchiveFormatError,
 } from './errors.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
+import { UploadImportResponseSchema } from './schemas/upload-import-response.schema.js';
 import {
   buildFinalArchiveFilename,
   isArchiveFilename,
   parseImportIdFromTemporaryFilename,
 } from './upload-storage.util.js';
+
+type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 const ARCHIVE_PROCESS_UPLOAD_PATTERN = 'archive.process.upload';
 
@@ -43,10 +54,9 @@ export class UploadImportController {
   @ApiBody({
     schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
   })
-  @ApiCreatedResponse({ type: UploadImportResponseDto })
-  public async upload(
-    @UploadedFile() file?: Express.Multer.File,
-  ): Promise<UploadImportResponseDto> {
+  @Contract({ request: EmptyRequestSchema, response: UploadImportResponseSchema })
+  @ApiCreatedResponse({ schema: z.toJSONSchema(UploadImportResponseSchema) as SwaggerSchema })
+  public async upload(@UploadedFile() file?: Express.Multer.File): Promise<{ importId: string }> {
     if (file === undefined) {
       throw new MissingUploadFileError();
     }
@@ -79,6 +89,6 @@ export class UploadImportController {
 
     this.serviceAClient.emit(ARCHIVE_PROCESS_UPLOAD_PATTERN, { importId, filePath: finalPath });
 
-    return new UploadImportResponseDto(importId);
+    return { importId };
   }
 }

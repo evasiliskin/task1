@@ -1,4 +1,4 @@
-import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import { type INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -12,6 +12,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
+import { ContractModule } from '../contract/contract.module.js';
 
 import { ImportsModule } from './imports.module.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
@@ -38,6 +39,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
         RequestContextModule,
         ExceptionHandlingModule,
         AuthModule,
+        ContractModule,
         ImportsModule,
       ],
     })
@@ -48,9 +50,6 @@ describe('TriggerImportController (HTTP Integration)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
-    );
     await app.init();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     httpServer = app.getHttpServer();

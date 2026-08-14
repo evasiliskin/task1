@@ -1,4 +1,4 @@
-import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import { type INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -11,6 +11,7 @@ import request from 'supertest';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { ContractModule } from '../contract/contract.module.js';
 
 import { LogsModule } from './logs.module.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
@@ -35,6 +36,7 @@ describe('LogsController (HTTP Integration)', () => {
         RequestContextModule,
         ExceptionHandlingModule,
         AuthModule,
+        ContractModule,
         LogsModule,
       ],
     })
@@ -45,9 +47,6 @@ describe('LogsController (HTTP Integration)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
-    );
     await app.init();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     httpServer = app.getHttpServer();

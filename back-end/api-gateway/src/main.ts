@@ -1,4 +1,4 @@
-import { type INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import { type INestApplication, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
@@ -28,14 +28,6 @@ async function bootstrap(): Promise<void> {
       type: VersioningType.URI,
       defaultVersion: '1',
     });
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
 
     app.enableShutdownHooks();
 
