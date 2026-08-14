@@ -12,7 +12,8 @@ import { resolveId } from '../../request-context/id-validation.util.js';
 import { RequestContextService } from '../../request-context/request-context.service.js';
 import { ErrorFormatService } from '../error-format.service.js';
 
-import { IApiErrorResponse } from './error-response.types.js';
+import { type IApiErrorResponse } from './api-response.types.js';
+import { buildErrorEnvelope } from './error-envelope.utility.js';
 
 @Catch()
 @Injectable()
@@ -31,7 +32,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // reach RequestContextMiddleware, so context can legitimately be absent here.
     const attributes = this.requestContextService.getAttributes();
     const correlationId = attributes.correlationId ?? resolveId(undefined);
-    const requestId = attributes.requestId ?? resolveId(undefined);
     const { statusCode, error } = this.errorFormatService.format(exception);
 
     if (statusCode >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
@@ -41,12 +41,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       );
     }
 
-    const body: IApiErrorResponse = {
-      statusCode,
-      error,
-      correlationId,
-      requestId,
-    };
+    const body: IApiErrorResponse = buildErrorEnvelope(statusCode, error, correlationId);
 
     response.status(statusCode).json(body);
   }

@@ -16,6 +16,7 @@ import { z } from 'zod';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import { ImportNotFoundError } from './errors.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
@@ -47,7 +48,9 @@ export class GetImportStatusController {
   @Contract({ request: GetImportStatusRequestSchema, response: ImportStatusResponseSchema })
   @ApiOperation({ summary: 'Get the status of one import run' })
   @ApiParam({ name: 'importId', description: 'Import run UUID' })
-  @ApiOkResponse({ schema: z.toJSONSchema(ImportStatusResponseSchema) as SwaggerSchema })
+  @ApiOkResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(ImportStatusResponseSchema) as SwaggerSchema),
+  })
   public async getStatus(
     @ModelBinder(GetImportStatusRequestSchema)
     bound: BoundRequest<typeof GetImportStatusRequestSchema>,

@@ -66,6 +66,26 @@ describe('bindRequest', () => {
 
     expect(() => bindRequest(schema, context)).toThrow(RequestContractViolationError);
   });
+
+  it('should attach field errors, when validation fails', () => {
+    const schema = z.object({ query: z.object({ limit: z.number() }) });
+    const context = makeContext({ query: { limit: 'ten' } });
+
+    try {
+      bindRequest(schema, context);
+      expect.unreachable('bindRequest should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RequestContractViolationError);
+      expect((error as RequestContractViolationError).fieldErrors).toEqual([
+        {
+          field: 'limit',
+          errorType: 'INVALID_TYPE',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+          message: expect.any(String),
+        },
+      ]);
+    }
+  });
 });
 
 describe('ModelBinder', () => {

@@ -4,6 +4,7 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import request from 'supertest';
 
@@ -20,6 +21,8 @@ import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 type App = Parameters<typeof request>[0];
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the mocked emit() call, not a domain interface.
 type EmittedMessage = { importId: string; dateHour: string };
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the enveloped response body, not a domain interface.
+type ImportIdEnvelope = { result: { data: { importId: string } } };
 
 describe('TriggerImportController (HTTP Integration)', () => {
   let app: INestApplication;
@@ -38,6 +41,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
         ImportsModule,
@@ -70,13 +74,14 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .send({ dateHour: '2026-08-11-0' });
 
       expect(response.status).toBe(202);
-      expect(typeof (response.body as { importId: string }).importId).toBe('string');
+      expect(response.body).toMatchObject({ status: 'SUCCESS', code: 202, message: 'OK' });
+      expect(typeof (response.body as ImportIdEnvelope).result.data.importId).toBe('string');
       expect(serviceAClient.emit).toHaveBeenCalledTimes(1);
 
       const [pattern, payload] = serviceAClient.emit.mock.calls[0] as [string, EmittedMessage];
 
       expect(pattern).toBe('archive.import.download');
-      expect(payload.importId).toBe((response.body as { importId: string }).importId);
+      expect(payload.importId).toBe((response.body as ImportIdEnvelope).result.data.importId);
       expect(payload.dateHour).toBe('2026-08-11-0');
     });
 
@@ -89,7 +94,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .send({ dateHour: '2026-08-11-0' });
 
       expect(response.status).toBe(202);
-      expect((response.body as { importId: string }).importId).toBe(idempotencyKey);
+      expect((response.body as ImportIdEnvelope).result.data.importId).toBe(idempotencyKey);
 
       const [, payload] = serviceAClient.emit.mock.calls[0] as [string, EmittedMessage];
 
@@ -108,8 +113,8 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .set('Idempotency-Key', idempotencyKey)
         .send({ dateHour: '2026-08-11-0' });
 
-      expect((first.body as { importId: string }).importId).toBe(idempotencyKey);
-      expect((second.body as { importId: string }).importId).toBe(idempotencyKey);
+      expect((first.body as ImportIdEnvelope).result.data.importId).toBe(idempotencyKey);
+      expect((second.body as ImportIdEnvelope).result.data.importId).toBe(idempotencyKey);
       expect(serviceAClient.emit).toHaveBeenCalledTimes(2);
       // Replay-safety itself (skipping a second real import) is enforced inside
       // service-a's DownloadImportController (Task 10) via the imports collection —

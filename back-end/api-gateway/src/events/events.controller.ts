@@ -8,6 +8,7 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { listResult } from '@task1/shared/exception-handling/http/list-result';
 import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -16,6 +17,7 @@ import { z } from 'zod';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { listEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { type EventView } from './schemas/event.schema.js';
@@ -23,6 +25,7 @@ import { SearchEventsRequestSchema } from './schemas/search-events-request.schem
 import {
   type SearchEventsResponse,
   SearchEventsResponseSchema,
+  SearchEventsResultShape,
 } from './schemas/search-events-response.schema.js';
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `SearchEventsResult`
@@ -68,7 +71,9 @@ export class EventsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({ schema: z.toJSONSchema(SearchEventsResponseSchema) as SwaggerSchema })
+  @ApiOkResponse({
+    schema: listEnvelopeJsonSchema(z.toJSONSchema(SearchEventsResultShape) as SwaggerSchema),
+  })
   public async search(
     @ModelBinder(SearchEventsRequestSchema)
     bound: BoundRequest<typeof SearchEventsRequestSchema>,
@@ -82,6 +87,6 @@ export class EventsController {
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
-    return { data: result.data, nextCursor: result.nextCursor };
+    return listResult(result.data, { nextCursor: result.nextCursor });
   }
 }

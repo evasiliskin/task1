@@ -1,6 +1,8 @@
 import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
 import { RequestContractViolationError } from '@task1/shared/errors/index';
-import { z, type ZodType } from 'zod';
+import { type z, type ZodType } from 'zod';
+
+import { toFieldErrors } from '../validators/zod-issues-to-field-errors.js';
 
 export interface IBoundRequest<TData> {
   readonly data: TData;
@@ -51,7 +53,7 @@ export function bindRequest(schema: ZodType, context: ExecutionContext): IBoundR
     throw new RequestContractViolationError({
       controllerName: context.getClass().name,
       methodName: context.getHandler().name,
-      errors: z.treeifyError(parsed.error),
+      fieldErrors: toFieldErrors(parsed.error.issues),
     });
   }
 

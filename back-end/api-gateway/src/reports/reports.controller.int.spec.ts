@@ -8,6 +8,7 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of } from 'rxjs';
 import request from 'supertest';
@@ -47,6 +48,7 @@ describe('ReportsController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
         ReportsModule,
@@ -89,6 +91,16 @@ describe('ReportsController (HTTP Integration)', () => {
       expect(response.headers['content-type']).toBe('application/pdf');
       expect(response.headers['content-disposition']).toContain('attachment');
       expect((response.body as Buffer).toString('utf8')).toBe(REPORT_BODY);
+    });
+
+    it('should stream the pdf unenveloped, when the report exists', async () => {
+      serviceBClient.send.mockReturnValue(of({ reportPath }));
+
+      const response = await request(httpServer).get('/reports/pdf').query({ importId });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBeInstanceOf(Buffer);
+      expect((response.body as Buffer).toString()).not.toContain('SUCCESS');
     });
 
     it('should forward importId inside the RMQ message, when provided', async () => {

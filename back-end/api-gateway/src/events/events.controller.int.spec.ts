@@ -4,6 +4,7 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of } from 'rxjs';
 import request from 'supertest';
@@ -35,6 +36,7 @@ describe('EventsController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
         EventsModule,
@@ -83,18 +85,25 @@ describe('EventsController (HTTP Integration)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        data: [
-          {
-            eventId: 'e1',
-            eventType: 'PushEvent',
-            createdAt: '2026-08-11T00:00:00.000Z',
-            actor: { id: 1, login: 'octocat' },
-            repo: { id: 2, name: 'octocat/hello-world' },
-            importId: 'import-1',
-            payload: { ref: 'refs/heads/main', commitCount: 1 },
-          },
-        ],
-        nextCursor: 'some-cursor',
+        status: 'SUCCESS',
+        code: 200,
+        message: 'OK',
+        result: {
+          items: [
+            {
+              eventId: 'e1',
+              eventType: 'PushEvent',
+              createdAt: '2026-08-11T00:00:00.000Z',
+              actor: { id: 1, login: 'octocat' },
+              repo: { id: 2, name: 'octocat/hello-world' },
+              importId: 'import-1',
+              payload: { ref: 'refs/heads/main', commitCount: 1 },
+            },
+          ],
+          pagination: { nextCursor: 'some-cursor' },
+        },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+        meta: { tracing: { correlationId: expect.any(String) } },
       });
     });
 

@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { Public } from '../auth/public.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
+import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import { type IAggregatedHealth, HealthCheckService } from './health-check.service.js';
 import { HealthResponseSchema, LivenessResponseSchema } from './schemas/health-response.schema.js';
@@ -23,15 +24,23 @@ import { HealthResponseSchema, LivenessResponseSchema } from './schemas/health-r
 type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 const DEGRADED_EXAMPLE = {
-  status: 'degraded',
-  services: {
-    gateway: 'ok',
-    rabbitmq: 'ok',
-    serviceA: 'ok',
-    serviceB: 'unavailable',
-    mongodb: 'ok',
-    redis: 'ok',
+  status: 'SUCCESS',
+  code: 503,
+  message: 'OK',
+  result: {
+    data: {
+      status: 'degraded',
+      services: {
+        gateway: 'ok',
+        rabbitmq: 'ok',
+        serviceA: 'ok',
+        serviceB: 'unavailable',
+        mongodb: 'ok',
+        redis: 'ok',
+      },
+    },
   },
+  meta: { tracing: { correlationId: '2f1fdc5d-4324-4f56-95ae-d25df842bd7b' } },
 };
 
 @ApiTags('health')
@@ -45,7 +54,7 @@ export class HealthController {
   @ApiOperation({ summary: 'Aggregated health of the gateway and all its dependencies' })
   @ApiOkResponse({
     description: 'Always returned; inspect `status` for overall health.',
-    schema: z.toJSONSchema(HealthResponseSchema) as SwaggerSchema,
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(HealthResponseSchema) as SwaggerSchema),
   })
   public async health(): Promise<IAggregatedHealth> {
     return await this.healthCheckService.getHealth();
@@ -55,7 +64,9 @@ export class HealthController {
   @Get('live')
   @Contract({ request: EmptyRequestSchema, response: LivenessResponseSchema })
   @ApiOperation({ summary: 'Liveness probe — is the gateway process running' })
-  @ApiOkResponse({ schema: z.toJSONSchema(LivenessResponseSchema) as SwaggerSchema })
+  @ApiOkResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(LivenessResponseSchema) as SwaggerSchema),
+  })
   public live(): { status: 'ok'; service: 'gateway' } {
     return this.healthCheckService.getLiveness();
   }
@@ -68,7 +79,9 @@ export class HealthController {
     description:
       'Critical for readiness: rabbitmq, serviceA, serviceB. mongodb/redis are reported but never fail readiness.',
   })
-  @ApiOkResponse({ schema: z.toJSONSchema(HealthResponseSchema) as SwaggerSchema })
+  @ApiOkResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(HealthResponseSchema) as SwaggerSchema),
+  })
   @ApiServiceUnavailableResponse({ schema: { example: DEGRADED_EXAMPLE } })
   public async ready(@Res({ passthrough: true }) response: Response): Promise<IAggregatedHealth> {
     const { ready, result } = await this.healthCheckService.getReadiness();

@@ -4,6 +4,7 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of } from 'rxjs';
 import request from 'supertest';
@@ -37,6 +38,7 @@ describe('GetImportStatusController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
         ImportsModule,
@@ -84,8 +86,15 @@ describe('GetImportStatusController (HTTP Integration)', () => {
       const response = await request(httpServer).get(`/imports/${importId}`);
 
       expect(response.status).toBe(200);
-      expect((response.body as { importId: string }).importId).toBe(importId);
-      expect((response.body as { status: string }).status).toBe('completed');
+      expect(response.body).toMatchObject({ status: 'SUCCESS', code: 200, message: 'OK' });
+      expect(
+        (response.body as { result: { data: { importId: string; status: string } } }).result.data
+          .importId,
+      ).toBe(importId);
+      expect(
+        (response.body as { result: { data: { importId: string; status: string } } }).result.data
+          .status,
+      ).toBe('completed');
     });
 
     it('should send the imports.status.get pattern with the importId, when called', async () => {
@@ -114,6 +123,12 @@ describe('GetImportStatusController (HTTP Integration)', () => {
       const response = await request(httpServer).get(`/imports/${importId}`);
 
       expect(response.status).toBe(404);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 404,
+        reason: 'IMPORT_NOT_FOUND',
+      });
+      expect((response.body as { details?: unknown }).details).toBeUndefined();
     });
 
     it('should return 400 and not call service-a, when importId is not a valid UUID', async () => {

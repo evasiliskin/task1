@@ -54,27 +54,44 @@ describe('GlobalExceptionFilter', () => {
     expect(response.setHeader).not.toHaveBeenCalled();
   });
 
-  it('should include correlationId and requestId in the JSON error body', () => {
+  it('should return the error envelope with correlationId in meta.tracing, when the formatter returns an error', () => {
     requestContextService.run({ correlationId: 'c-1', requestId: 'r-1' }, () => {
       filter.catch(new Error('boom'), host);
     });
 
-    expect(response.json).toHaveBeenCalledWith(
-      expect.objectContaining({ correlationId: 'c-1', requestId: 'r-1' }),
-    );
+    expect(response.json).toHaveBeenCalledWith({
+      status: 'FAILED',
+      code: HttpStatus.BAD_REQUEST,
+      reason: 'BAD_REQUEST',
+      message: 'invalid',
+      meta: { tracing: { correlationId: 'c-1' } },
+    });
   });
 
-  it('should fall back to generated ids instead of throwing, when called outside of any request context', () => {
+  it('should fall back to a generated correlationId instead of throwing, when called outside of any request context', () => {
     expect(() => {
       filter.catch(new Error('boom'), host);
     }).not.toThrow();
 
     expect(response.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        correlationId: expect.any(String),
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        requestId: expect.any(String),
+        meta: { tracing: { correlationId: expect.any(String) as unknown as string } },
+      }),
+    );
+  });
+
+  it('should return a sanitized envelope, when the formatted error is a 500', () => {
+    errorFormatService.format.mockReturnValue({
+      statusCode: 500,
+      error: { code: 'FATAL_BOOM', message: 'internal detail that must not leak' },
+    });
+
+    filter.catch(new Error('boom'), host);
+
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'INTERNAL_ERROR',
+        message: 'An unexpected error occurred',
       }),
     );
   });

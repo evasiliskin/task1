@@ -16,6 +16,7 @@ import { z } from 'zod';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { GetStatsRequestSchema } from './schemas/get-stats-request.schema.js';
@@ -43,7 +44,9 @@ export class StatsController {
   @Contract({ request: GetStatsRequestSchema, response: StatsResponseSchema })
   @ApiOperation({ summary: 'Get processing statistics, optionally scoped to one import' })
   @ApiQuery({ name: 'importId', required: false, description: 'Import run UUID' })
-  @ApiOkResponse({ schema: z.toJSONSchema(StatsResponseSchema) as SwaggerSchema })
+  @ApiOkResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(StatsResponseSchema) as SwaggerSchema),
+  })
   public async getStats(
     @ModelBinder(GetStatsRequestSchema) bound: BoundRequest<typeof GetStatsRequestSchema>,
   ): Promise<StatsResponse> {

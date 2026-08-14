@@ -16,6 +16,7 @@ task1/
 
 - Architecture
 - API reference
+  - Response format
 - Authentication
 - Health checks
 - Getting started
@@ -48,6 +49,65 @@ Every request through this chain carries a `correlationId` (stable for the whole
 All routes are served under a global `/api/v1` prefix (set in
 `back-end/api-gateway/src/main.ts`) with interactive Swagger docs at `/api-docs`. Full
 request/response DTOs live under each module's `dto/` folder; this table is the map, not the spec.
+
+### Response format
+
+Every JSON response is enveloped. `GET /reports/{importId}` is the one exception: it streams a
+PDF and is returned unwrapped.
+
+Success (single resource):
+
+```json
+{
+  "status": "SUCCESS",
+  "code": 200,
+  "message": "OK",
+  "result": { "data": { ... } },
+  "meta": { "tracing": { "correlationId": "2f1fdc5d-4324-4f56-95ae-d25df842bd7b" } }
+}
+```
+
+Success (collection):
+
+```json
+{
+  "status": "SUCCESS",
+  "code": 200,
+  "message": "OK",
+  "result": {
+    "items": [ ... ],
+    "pagination": { "nextCursor": "..." }
+  },
+  "meta": { "tracing": { "correlationId": "2f1fdc5d-4324-4f56-95ae-d25df842bd7b" } }
+}
+```
+
+Error:
+
+```json
+{
+  "status": "FAILED",
+  "code": 400,
+  "reason": "REQUEST_CONTRACT_VIOLATION",
+  "message": "Request validation failed",
+  "details": {
+    "checksFailed": [
+      { "field": "limit", "errorType": "TOO_BIG", "message": "...", "constraints": { "max": 200 } }
+    ]
+  },
+  "meta": { "tracing": { "correlationId": "2f1fdc5d-4324-4f56-95ae-d25df842bd7b" } }
+}
+```
+
+- `"reason"` is the `AppError` code.
+- `"details"` is present only for field-level validation failures.
+- All 5xx responses are sanitized to reason `"INTERNAL_ERROR"` with a generic message; the real
+  error is logged server-side against the `correlationId`.
+- `"requestId"` is not part of any response body. Both ids remain available as the
+  `x-correlation-id` and `x-request-id` response headers.
+
+`GET /health/ready` returns `"status": "SUCCESS"` with `"code": 503` when degraded: the handler
+completes normally and sets the status code, so no error envelope is produced.
 
 | Method | Path | Purpose | Auth | RabbitMQ pattern → service |
 | --- | --- | --- | --- | --- |
@@ -117,19 +177,27 @@ know. Instead, the gateway sends a dedicated `health.check` RabbitMQ message to 
 waits (with a timeout) for a reply — the same transport and pattern used for every other
 inter-service call, exercising the actual path a real request would take.
 
-Example — `GET /health`, everything healthy:
+Example — `GET /health`, everything healthy (see "Response format" above for the envelope shape):
 
 ```json
 {
-  "status": "ok",
-  "services": {
-    "gateway": "ok",
-    "rabbitmq": "ok",
-    "serviceA": "ok",
-    "serviceB": "ok",
-    "mongodb": "ok",
-    "redis": "ok"
-  }
+  "status": "SUCCESS",
+  "code": 200,
+  "message": "OK",
+  "result": {
+    "data": {
+      "status": "ok",
+      "services": {
+        "gateway": "ok",
+        "rabbitmq": "ok",
+        "serviceA": "ok",
+        "serviceB": "ok",
+        "mongodb": "ok",
+        "redis": "ok"
+      }
+    }
+  },
+  "meta": { "tracing": { "correlationId": "2f1fdc5d-4324-4f56-95ae-d25df842bd7b" } }
 }
 ```
 
@@ -321,7 +389,7 @@ pnpm docker:up
 # trigger a download import for a real GH Archive hour
 curl -s -X POST http://localhost:3000/api/v1/imports -H 'Content-Type: application/json' \
   -d '{"dateHour": "2026-08-11-0"}'
-# => {"importId": "..."}
+# => {"status":"SUCCESS","code":201,"message":"OK","result":{"data":{"importId":"..."}},"meta":{"tracing":{"correlationId":"..."}}}
 
 # poll status until it reaches "completed"
 curl -s http://localhost:3000/api/v1/imports/<importId>
@@ -407,9 +475,10 @@ INFO [ServiceB] Processing request correlationId=c1 requestId=r3
 while each service's own `requestId` identifies exactly which hop each log line belongs to.
 
 **Errors.** If any service in the chain fails, the error still carries the same IDs: the gateway's
-HTTP error response includes both `X-Correlation-ID`/`X-Request-ID` response headers and a JSON
-body with `correlationId`/`requestId` fields, sourced from the same request context - not
-re-derived - so they always match what was logged for that request.
+HTTP error response includes both `X-Correlation-ID`/`X-Request-ID` response headers, and the error
+envelope's `meta.tracing.correlationId` field (see "Response format" above) is sourced from the
+same request context - not re-derived - so it always matches what was logged for that request.
+`requestId` is not part of the response body; it's only available via the `x-request-id` header.
 
 ### Testing it locally
 

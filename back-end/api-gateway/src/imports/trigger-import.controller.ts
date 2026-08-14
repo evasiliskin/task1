@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import { InvalidIdempotencyKeyError } from './errors.js';
 import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
@@ -46,7 +47,9 @@ export class TriggerImportController {
       'Client-supplied UUID. Replaying the same key returns the same importId and does not start a second import.',
   })
   @ApiBody({ schema: z.toJSONSchema(TriggerImportRequestSchema.shape.body) as SwaggerSchema })
-  @ApiAcceptedResponse({ schema: z.toJSONSchema(TriggerImportResponseSchema) as SwaggerSchema })
+  @ApiAcceptedResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(TriggerImportResponseSchema) as SwaggerSchema),
+  })
   public trigger(
     @ModelBinder(TriggerImportRequestSchema)
     bound: BoundRequest<typeof TriggerImportRequestSchema>,

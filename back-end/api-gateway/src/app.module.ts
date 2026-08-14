@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { LoggerModule } from '@task1/shared/logger/http/logger.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 
@@ -40,6 +41,7 @@ import { StatsModule } from './stats/stats.module.js';
     RequestContextModule,
     LoggerModule,
     ExceptionHandlingModule,
+    ResponseEnvelopeModule,
     AuthModule,
     ContractModule,
     HealthModule,

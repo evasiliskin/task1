@@ -3,7 +3,7 @@ import { SearchLogsResponseSchema } from './search-logs-response.schema.js';
 describe('SearchLogsResponseSchema', () => {
   it('should accept a payload with one entry and no errorInfo, when parsed', () => {
     const result = SearchLogsResponseSchema.safeParse({
-      data: [
+      items: [
         {
           importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
           eventType: 'github.import.completed',
@@ -15,7 +15,7 @@ describe('SearchLogsResponseSchema', () => {
           metadata: { eventsProcessed: 10, validEvents: 8 },
         },
       ],
-      nextCursor: 'some-cursor',
+      pagination: { nextCursor: 'some-cursor' },
     });
 
     expect(result.success).toBe(true);
@@ -23,7 +23,7 @@ describe('SearchLogsResponseSchema', () => {
 
   it('should accept an entry with errorInfo, when parsed', () => {
     const result = SearchLogsResponseSchema.safeParse({
-      data: [
+      items: [
         {
           importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
           eventType: 'github.import.failed',
@@ -36,6 +36,7 @@ describe('SearchLogsResponseSchema', () => {
           errorInfo: { reason: 'download failed: 404 Not Found' },
         },
       ],
+      pagination: {},
     });
 
     expect(result.success).toBe(true);

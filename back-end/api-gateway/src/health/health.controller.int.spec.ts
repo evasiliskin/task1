@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
 import loggerConfig from '@task1/shared/config/logger.config';
+import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
+import { ResponseEnvelopeModule } from '@task1/shared/exception-handling/http/response-envelope.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of, throwError } from 'rxjs';
 import request from 'supertest';
@@ -48,6 +50,8 @@ describe('HealthController (HTTP Integration)', () => {
           load: [rabbitmqConfig, loggerConfig, mongodbConfig, redisConfig],
         }),
         RequestContextModule,
+        ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
         HealthModule,
@@ -91,15 +95,24 @@ describe('HealthController (HTTP Integration)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        status: 'ok',
-        services: {
-          gateway: 'ok',
-          rabbitmq: 'ok',
-          serviceA: 'ok',
-          serviceB: 'ok',
-          mongodb: 'ok',
-          redis: 'ok',
+        status: 'SUCCESS',
+        code: 200,
+        message: 'OK',
+        result: {
+          data: {
+            status: 'ok',
+            services: {
+              gateway: 'ok',
+              rabbitmq: 'ok',
+              serviceA: 'ok',
+              serviceB: 'ok',
+              mongodb: 'ok',
+              redis: 'ok',
+            },
+          },
         },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+        meta: { tracing: { correlationId: expect.any(String) } },
       });
     });
 
@@ -110,15 +123,24 @@ describe('HealthController (HTTP Integration)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        status: 'degraded',
-        services: {
-          gateway: 'ok',
-          rabbitmq: 'ok',
-          serviceA: 'ok',
-          serviceB: 'unavailable',
-          mongodb: 'ok',
-          redis: 'ok',
+        status: 'SUCCESS',
+        code: 200,
+        message: 'OK',
+        result: {
+          data: {
+            status: 'degraded',
+            services: {
+              gateway: 'ok',
+              rabbitmq: 'ok',
+              serviceA: 'ok',
+              serviceB: 'unavailable',
+              mongodb: 'ok',
+              redis: 'ok',
+            },
+          },
         },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+        meta: { tracing: { correlationId: expect.any(String) } },
       });
     });
   });
@@ -128,7 +150,14 @@ describe('HealthController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/health/live');
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual({ status: 'ok', service: 'gateway' });
+      expect(response.body).toEqual({
+        status: 'SUCCESS',
+        code: 200,
+        message: 'OK',
+        result: { data: { status: 'ok', service: 'gateway' } },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+        meta: { tracing: { correlationId: expect.any(String) } },
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
   });
@@ -140,7 +169,9 @@ describe('HealthController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/health/ready');
 
       expect(response.status).toBe(200);
-      expect((response.body as IAggregatedHealth).services.redis).toBe('unavailable');
+      expect(
+        (response.body as { result: { data: IAggregatedHealth } }).result.data.services.redis,
+      ).toBe('unavailable');
     });
 
     it('should return 503, when service-a is unavailable', async () => {
@@ -149,7 +180,25 @@ describe('HealthController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/health/ready');
 
       expect(response.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
-      expect((response.body as IAggregatedHealth).services.serviceA).toBe('unavailable');
+      expect(
+        (response.body as { result: { data: IAggregatedHealth } }).result.data.services.serviceA,
+      ).toBe('unavailable');
+    });
+
+    it('should return a SUCCESS envelope with code 503, when a critical dependency is down', async () => {
+      serviceAClient.send.mockReturnValue(throwError(() => new Error('connection refused')));
+
+      const response = await request(httpServer).get('/health/ready');
+
+      expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({
+        status: 'SUCCESS',
+        code: 503,
+        message: 'OK',
+      });
+      expect((response.body as { result: { data: IAggregatedHealth } }).result.data.status).toBe(
+        'degraded',
+      );
     });
   });
 });

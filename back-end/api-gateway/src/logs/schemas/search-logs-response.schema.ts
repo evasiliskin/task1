@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { listResponseSchema } from '../../contract/schemas/list-response.schema.js';
+
 const LogEntrySchema = z.object({
   importId: z.string(),
   eventType: z.string(),
@@ -12,10 +14,10 @@ const LogEntrySchema = z.object({
   errorInfo: z.object({ reason: z.string() }).optional(),
 });
 
-export const SearchLogsResponseSchema = z.object({
-  data: z.array(LogEntrySchema),
-  nextCursor: z.string().optional(),
-});
+const { shape, schema } = listResponseSchema(LogEntrySchema);
+
+export const SearchLogsResultShape = shape;
+export const SearchLogsResponseSchema = schema;
 
 export type SearchLogsResponse = z.infer<typeof SearchLogsResponseSchema>;
 export type LogEntry = z.infer<typeof LogEntrySchema>;

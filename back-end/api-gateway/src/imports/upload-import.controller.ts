@@ -24,6 +24,7 @@ import { z } from 'zod';
 import storageConfig from '../config/storage.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
+import { singleEnvelopeJsonSchema } from '../contract/schemas/envelope-json-schema.js';
 
 import {
   ArchiveUploadError,
@@ -55,7 +56,9 @@ export class UploadImportController {
     schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
   })
   @Contract({ request: EmptyRequestSchema, response: UploadImportResponseSchema })
-  @ApiCreatedResponse({ schema: z.toJSONSchema(UploadImportResponseSchema) as SwaggerSchema })
+  @ApiCreatedResponse({
+    schema: singleEnvelopeJsonSchema(z.toJSONSchema(UploadImportResponseSchema) as SwaggerSchema),
+  })
   public async upload(@UploadedFile() file?: Express.Multer.File): Promise<{ importId: string }> {
     if (file === undefined) {
       throw new MissingUploadFileError();
