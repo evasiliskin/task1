@@ -22,13 +22,10 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((payload: unknown) => {
-        // A binary stream cannot be wrapped in JSON — /reports/:id returns one.
         if (payload instanceof StreamableFile) {
           return payload;
         }
 
-        // statusCode is read here, not above: handlers such as /health/ready set it
-        // via @Res({ passthrough: true }) while executing.
         const statusCode = response.statusCode ?? Number(HttpStatus.OK);
         const correlationId = this.requestContextService.getCorrelationId() ?? resolveId(undefined);
 
