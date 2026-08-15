@@ -3,7 +3,11 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthCheckService as TerminusHealthCheckService } from '@nestjs/terminus';
 import { type LoggerService } from '@task1/shared/logger/logger.service';
 
-import { HealthCheckService } from './health-check.service.js';
+import {
+  HEALTH_CHECK_FAILED_LOG,
+  HEALTH_CHECK_RECOVERED_LOG,
+  HealthCheckService,
+} from './health-check.service.js';
 import { type GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
 import { type RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
 import { type RedisHealthIndicator } from './indicators/redis.health-indicator.js';
@@ -13,20 +17,48 @@ const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'redis'];
 
 const ALL_UP_DETAILS = Object.fromEntries(ALL_KEYS.map((key) => [key, { status: 'up' }]));
 
+function downResult(key: string) {
+  return {
+    status: 'error' as const,
+    info: Object.fromEntries(ALL_KEYS.filter((k) => k !== key).map((k) => [k, { status: 'up' }])),
+    error: { [key]: { status: 'down' as const, message: 'connection refused' } },
+    details: Object.fromEntries(
+      ALL_KEYS.map((k) =>
+        k === key
+          ? [k, { status: 'down' as const, message: 'connection refused' }]
+          : [k, { status: 'up' }],
+      ),
+    ),
+  };
+}
+
+function allUpResult() {
+  return {
+    status: 'ok' as const,
+    info: ALL_UP_DETAILS,
+    error: {},
+    details: ALL_UP_DETAILS,
+  };
+}
+
 function buildService(
   overrides: {
     terminusCheck?: ReturnType<typeof vi.fn>;
     error?: ReturnType<typeof vi.fn>;
+    info?: ReturnType<typeof vi.fn>;
   } = {},
 ): HealthCheckService {
-  const { terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis'])), error = vi.fn() } =
-    overrides;
+  const {
+    terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis'])),
+    error = vi.fn(),
+    info = vi.fn(),
+  } = overrides;
   const terminus = { check: terminusCheck } as unknown as TerminusHealthCheckService;
   const loggerService = {
     getLogger: vi.fn().mockReturnValue({
       error,
       warn: vi.fn(),
-      info: vi.fn(),
+      info,
       debug: vi.fn(),
       trace: vi.fn(),
     }),
@@ -175,12 +207,12 @@ describe('HealthCheckService', () => {
 
       expect(loggerErrorMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          service: 'serviceB',
+          dependency: 'serviceB',
           errorMessage: 'connection refused',
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           responseTimeMs: expect.any(Number),
         }),
-        expect.stringContaining('serviceB'),
+        expect.any(String),
       );
     });
 
@@ -193,11 +225,53 @@ describe('HealthCheckService', () => {
       const [fields] = error.mock.calls[0] as [Record<string, unknown>];
 
       expect(fields).toMatchObject({
-        service: 'redis',
+        dependency: 'redis',
         responseTimeMs: expect.any(Number) as number,
       });
       expect(fields).not.toHaveProperty('correlationId');
       expect(fields).not.toHaveProperty('requestId');
+    });
+
+    it('should log a down dependency once, not on every poll', async () => {
+      const terminusCheck = vi.fn().mockResolvedValue(downResult('redis'));
+      const error = vi.fn();
+      const service = buildService({ terminusCheck, error });
+
+      await service.getHealth();
+      await service.getHealth();
+      await service.getHealth();
+
+      const errorLines = (error.mock.calls as [Record<string, unknown>, string][]).map(
+        ([fields, message]) => ({
+          message,
+          fields,
+        }),
+      );
+
+      expect(errorLines).toHaveLength(1);
+      expect(errorLines[0]).toMatchObject({
+        message: HEALTH_CHECK_FAILED_LOG,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        fields: expect.objectContaining({ dependency: 'redis' }),
+      });
+    });
+
+    it('should log recovery, when a previously down dependency comes back', async () => {
+      const terminusCheck = vi.fn();
+      const error = vi.fn();
+      const info = vi.fn();
+
+      terminusCheck.mockResolvedValueOnce(downResult('redis'));
+      const service = buildService({ terminusCheck, error, info });
+      await service.getHealth();
+
+      terminusCheck.mockResolvedValueOnce(allUpResult());
+      await service.getHealth();
+
+      expect(info).toHaveBeenCalledWith(
+        expect.objectContaining({ dependency: 'redis' }),
+        HEALTH_CHECK_RECOVERED_LOG,
+      );
     });
   });
 

@@ -73,4 +73,15 @@ export const REDACT_PATHS: readonly string[] = [
   '*.clientSecret',
   '*.privateKey',
   '*.sessionId',
+
+  // Belt-and-braces for the error subtree. `appErrorFields` already deep-redacts `err.params`;
+  // these cover an error object that reaches pino by some other route.
+  'err.params.password',
+  'err.params.token',
+  'err.params.apiKey',
+  'err.params.secret',
+  'err.cause.params.password',
+  'err.cause.params.token',
+  'err.cause.params.apiKey',
+  'err.cause.params.secret',
 ];

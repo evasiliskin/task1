@@ -67,7 +67,7 @@ describe('HttpLoggingMiddleware', () => {
     requestContextService.run(
       { correlationId: CORRELATION_ID, requestId: REQUEST_ID, correlationIdSource: 'inbound' },
       () => {
-        middleware.use(request, response as unknown as Response, next);
+        middleware.use(request, response as unknown as Response, next as unknown as NextFunction);
       },
     );
   }

@@ -71,7 +71,7 @@ export async function importArchive(
   // importId without any call site having to remember it.
   const logger = dependencies.logger.with({ importId, archive: archiveLabel });
 
-  logger.info({ source: sourceRecord.type }, IMPORT_STARTED_LOG);
+  logger.info({ importSource: sourceRecord.type }, IMPORT_STARTED_LOG);
 
   await dependencies.recordImportStarted(importId, sourceRecord, startedAt);
   dependencies.emitEvent(EVENT_PATTERNS.IMPORT_STARTED, startedEvent);

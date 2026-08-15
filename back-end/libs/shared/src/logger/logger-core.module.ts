@@ -49,7 +49,7 @@ export class LoggerCoreModule {
         { provide: LOGGER_FACTORY, useExisting: LoggerService },
         LoggerFlushService,
       ],
-      exports: [LoggerService, LOGGER_FACTORY, PINO_LOGGER, LOG_CHANNEL],
+      exports: [LoggerService, LOGGER_FACTORY, PINO_LOGGER, PINO_DESTINATION, LOG_CHANNEL],
     };
   }
 }

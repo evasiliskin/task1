@@ -16,6 +16,17 @@ export function buildRequestContextExpressMiddleware(
   requestContextService: RequestContextService,
 ): (request: Request, response: Response, next: NextFunction) => void {
   return (request, response, next) => {
+    // Production mounts this twice: once via `applyRequestContext` (ahead of body parsing) and
+    // once via `LoggerModule`'s RequestContextMiddleware, which is the fallback for hosts that
+    // skip the adapter-level mount. Re-resolving here would mint a second correlation id for any
+    // request that did not supply one, silently splitting the trace at whatever point the second
+    // mount runs. An established context is authoritative.
+    if (requestContextService.getCorrelationId() !== undefined) {
+      next();
+
+      return;
+    }
+
     const context = resolveRequestContext(request.headers);
 
     response.setHeader(CORRELATION_ID_HEADER, context.correlationId);

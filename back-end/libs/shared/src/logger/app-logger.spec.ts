@@ -117,4 +117,36 @@ describe('AppLogger', () => {
       false,
     );
   });
+
+  it('should emit each pino binding key exactly once, so no parser silently drops one', () => {
+    const rawLines: string[] = [];
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        rawLines.push(chunk.toString());
+        callback();
+      },
+    });
+    const root = pino({ level: 'trace', base: { service: 'service-a' } }, stream);
+    const logger = AppLogger.create(root, 'ImportOrchestrationService', 'rmq');
+
+    logger.info({ importSource: 'download', dependency: 'rabbitmq' }, 'import started');
+
+    const line = rawLines[0] ?? '';
+
+    expect(line.match(/"source":/g)).toHaveLength(1);
+    expect(line.match(/"service":/g)).toHaveLength(1);
+    expect(line.match(/"channel":/g)).toHaveLength(1);
+  });
+
+  it('should reject pino binding keys at the type level', () => {
+    const { root } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'rmq');
+
+    // @ts-expect-error -- `source` is a child-logger binding; a field of the same name emits a duplicate JSON key.
+    logger.info({ source: 'download' }, 'import started');
+    // @ts-expect-error -- `service` is a `base` binding; a field of the same name emits a duplicate JSON key.
+    logger.info({ service: 'rabbitmq' }, 'health check failed');
+    // @ts-expect-error -- `msg` is pino's message key.
+    logger.info({ msg: 'shadowed' }, 'shadowed');
+  });
 });

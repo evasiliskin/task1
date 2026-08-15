@@ -120,6 +120,40 @@ describe('ArchiveProcessingService', () => {
     );
   });
 
+  it('should log the write-error sample, when a batch reports non-duplicate errors', async () => {
+    const validLine = JSON.stringify({
+      id: '1',
+      type: 'WatchEvent',
+      created_at: '2026-08-11T00:00:00Z',
+      actor: { id: 1, login: 'octocat' },
+      repo: { id: 2, name: 'octocat/hello-world' },
+      payload: {},
+    });
+    const filePath = writeGzippedArchive([validLine]);
+    const insertMany = vi.fn().mockRejectedValue(
+      Object.assign(new Error('bulk write failed'), {
+        name: 'MongoBulkWriteError',
+        insertedCount: 0,
+        writeErrors: [{ code: 121, errmsg: 'Document failed validation' }],
+      }),
+    );
+    const collection = { insertMany } as unknown as Collection<IGithubEventDocument>;
+    const warnMock = vi.fn();
+    const service = buildService(collection, warnMock);
+
+    await service.process(filePath, 'import-1');
+
+    expect(warnMock).toHaveBeenCalledWith(
+      {
+        importId: 'import-1',
+        errorCount: 1,
+        errorSample: [{ code: 121, message: 'Document failed validation' }],
+        suppressingFurtherLines: false,
+      },
+      'Batch insert reported non-duplicate write errors',
+    );
+  });
+
   it('should propagate ArchiveProcessingError, when the archive file does not exist', async () => {
     const missingPath = join(storageDirectory, 'does-not-exist.json.gz');
     const collection = { insertMany: vi.fn() } as unknown as Collection<IGithubEventDocument>;

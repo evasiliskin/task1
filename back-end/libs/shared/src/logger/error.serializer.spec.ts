@@ -1,7 +1,7 @@
-import { ErrorCategory } from '../errors/error-category.enum.js';
-import { InternalError } from '../errors/internal/internal-error.js';
+import { ErrorCategory, InternalError, ValidationError } from '../errors/index.js';
 
 import { serializeError } from './error.serializer.js';
+import { REDACT_CENSOR } from './redact-paths.js';
 
 class TestError extends InternalError {
   public constructor(message: string, cause?: unknown) {
@@ -100,5 +100,45 @@ describe('serializeError', () => {
 
   it('should stringify the value, when given a non-Error', () => {
     expect(serializeError('plain string')).toEqual({ message: 'plain string' });
+  });
+
+  it('should redact sensitive keys inside AppError params', () => {
+    class TestValidationError extends ValidationError {
+      public constructor() {
+        super('bad credentials supplied', {
+          code: 'BAD_CREDENTIALS',
+          category: ErrorCategory.VALIDATION,
+          params: { username: 'ada', password: 'hunter2', nested: { apiKey: 'sk-live-123' } },
+        });
+      }
+    }
+
+    const serialized = serializeError(new TestValidationError()) as {
+      params: Record<string, unknown>;
+    };
+
+    expect(serialized.params.username).toBe('ada');
+    expect(serialized.params.password).toBe(REDACT_CENSOR);
+    expect(serialized.params.nested).toMatchObject({ apiKey: REDACT_CENSOR });
+  });
+
+  it('should replace oversized AppError params with a truncation marker', () => {
+    class TestInternalError extends InternalError {
+      public constructor() {
+        super('response failed contract validation', {
+          code: 'RESPONSE_CONTRACT_VIOLATION',
+          category: ErrorCategory.INTERNAL,
+          params: {
+            errors: Array.from({ length: 500 }, (_, index) => `issue-${index}-padding-text`),
+          },
+        });
+      }
+    }
+
+    const serialized = serializeError(new TestInternalError()) as {
+      params: Record<string, unknown>;
+    };
+
+    expect(serialized.params).toMatchObject({ truncated: true });
   });
 });

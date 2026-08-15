@@ -11,7 +11,7 @@ function readResponses(
   handler: unknown,
 ): Record<string, { schema?: unknown; description?: string }> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- Reflect.getMetadata is typed as `any`; the shape is asserted by the tests below.
-  return Reflect.getMetadata(API_RESPONSE_METADATA, handler);
+  return Reflect.getMetadata(API_RESPONSE_METADATA, handler as object);
 }
 
 describe('ApiSingleResponse', () => {

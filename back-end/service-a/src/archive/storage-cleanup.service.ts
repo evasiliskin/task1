@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
 
@@ -15,12 +16,19 @@ const SWEEP_FAILED_LOG = 'Could not sweep the archive storage directory';
 export class StorageCleanupService implements OnModuleInit {
   public constructor(
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
+    private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(StorageCleanupService.name);
   }
 
   public async onModuleInit(): Promise<void> {
+    await this.requestContextService.runAsRoot('archive-storage-sweep', () => this.sweep());
+  }
+
+  private readonly logger: AppLogger;
+
+  private async sweep(): Promise<void> {
     let entries: string[];
 
     try {
@@ -43,6 +51,4 @@ export class StorageCleanupService implements OnModuleInit {
       this.logger.info({ count: staleFiles.length }, SWEPT_LOG);
     }
   }
-
-  private readonly logger: AppLogger;
 }

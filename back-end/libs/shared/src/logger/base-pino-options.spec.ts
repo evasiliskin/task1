@@ -1,3 +1,5 @@
+import { Writable } from 'node:stream';
+
 import { pino } from 'pino';
 
 import { RequestContextService } from '../request-context/request-context.service.js';
@@ -58,5 +60,73 @@ describe('buildBasePinoOptions', () => {
     );
 
     expect(attributes).toMatchObject({ correlationId: 'c-1', requestId: 'r-1' });
+  });
+
+  it('should emit the level as a label rather than a number', () => {
+    const lines: Record<string, unknown>[] = [];
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        lines.push(JSON.parse(chunk.toString()) as Record<string, unknown>);
+        callback();
+      },
+    });
+    const options = buildBasePinoOptions(
+      { level: 'info', transport: 'json', serviceName: 'api-gateway' },
+      new RequestContextService(),
+    );
+
+    pino(options, stream).error({ statusCode: 500 }, 'unhandled error');
+
+    expect(lines[0]).toMatchObject({ level: 'error' });
+  });
+
+  it('should still stamp correlationId and requestId on a line logged with no extra fields', () => {
+    const lines: Record<string, unknown>[] = [];
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        lines.push(JSON.parse(chunk.toString()) as Record<string, unknown>);
+        callback();
+      },
+    });
+    const requestContextService = new RequestContextService();
+    const options = buildBasePinoOptions(
+      { level: 'info', transport: 'json', serviceName: 'svc' },
+      requestContextService,
+    );
+    const logger = pino(options, stream);
+
+    requestContextService.run(
+      { correlationId: 'c-2', requestId: 'r-2', correlationIdSource: 'inbound' },
+      () => logger.info('message with no fields'),
+    );
+
+    expect(lines[0]).toMatchObject({ correlationId: 'c-2', requestId: 'r-2' });
+  });
+
+  it('should not leak per-line log fields into the live request-context store', () => {
+    const stream = new Writable({
+      write(_chunk: Buffer, _encoding, callback) {
+        callback();
+      },
+    });
+    const requestContextService = new RequestContextService();
+    const options = buildBasePinoOptions(
+      { level: 'info', transport: 'json', serviceName: 'svc' },
+      requestContextService,
+    );
+    const logger = pino(options, stream);
+    const context = {
+      correlationId: 'c-3',
+      requestId: 'r-3',
+      correlationIdSource: 'inbound',
+    } as const;
+
+    const attributesAfterLogging = requestContextService.run(context, () => {
+      logger.info({ statusCode: 500, extra: 'field' }, 'message with fields');
+
+      return requestContextService.getAttributes();
+    });
+
+    expect(attributesAfterLogging).toEqual(context);
   });
 });

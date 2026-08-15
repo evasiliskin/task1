@@ -102,4 +102,19 @@ describe('redactLogPayload', () => {
 
     expect(result).toEqual({ passwordPolicyEnabled: true });
   });
+
+  it('should return the original reference, when nothing needs redacting', () => {
+    const payload = { importId: 'i-1', nested: { durationMs: 12, items: [1, 2, 3] } };
+
+    expect(redactLogPayload(payload)).toBe(payload);
+  });
+
+  it('should still clone and redact, when a sensitive key is present at depth', () => {
+    const payload = { user: { name: 'ada', credentials: { password: 'hunter2' } } };
+    const result = redactLogPayload(payload) as typeof payload;
+
+    expect(result).not.toBe(payload);
+    expect(result.user.credentials.password).toBe(REDACT_CENSOR);
+    expect(payload.user.credentials.password).toBe('hunter2');
+  });
 });

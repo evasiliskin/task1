@@ -1,6 +1,7 @@
 import { resolveId, resolveIdWithSource } from './id-validation.util.js';
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('resolveId', () => {
   it('should return the trimmed value, when given a valid header value with surrounding whitespace', () => {
@@ -27,18 +28,10 @@ describe('resolveId', () => {
     expect(result).toMatch(UUID_V4_PATTERN);
   });
 
-  it('should return a generated UUID v4, when the header exceeds the max length', () => {
+  it('should return a generated UUID v4, when the header is an overlong non-UUID string', () => {
     const result = resolveId('a'.repeat(201));
 
     expect(result).toMatch(UUID_V4_PATTERN);
-  });
-
-  it('should accept a value at exactly the max length', () => {
-    const value = 'a'.repeat(200);
-
-    const result = resolveId(value);
-
-    expect(result).toBe(value);
   });
 
   it('should return a generated UUID v4, when the header contains a control character', () => {
@@ -67,10 +60,13 @@ describe('resolveId', () => {
 });
 
 describe('resolveIdWithSource', () => {
-  it('should report "inbound", when a valid id is supplied', () => {
-    const resolved = resolveIdWithSource('abc-123');
+  it('should report "inbound", when a valid UUID is supplied', () => {
+    const resolved = resolveIdWithSource('11111111-1111-4111-8111-111111111111');
 
-    expect(resolved).toEqual({ value: 'abc-123', source: 'inbound' });
+    expect(resolved).toEqual({
+      value: '11111111-1111-4111-8111-111111111111',
+      source: 'inbound',
+    });
   });
 
   it('should report "generated", when no id is supplied', () => {
@@ -84,5 +80,28 @@ describe('resolveIdWithSource', () => {
     const resolved = resolveIdWithSource('bad id\nwith newline');
 
     expect(resolved.source).toBe('generated');
+  });
+
+  it('should adopt a well-formed UUID from the wire', () => {
+    const resolved = resolveIdWithSource('f47ac10b-58cc-4372-a567-0e02b2c3d479');
+
+    expect(resolved).toEqual({
+      value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      source: 'inbound',
+    });
+  });
+
+  it.each([
+    ['not-a-uuid'],
+    ['f47ac10b58cc4372a5670e02b2c3d479'],
+    ['f47ac10b-58cc-4372-a567-0e02b2c3d479-extra'],
+    ['../../etc/passwd'],
+    ['a'.repeat(200)],
+  ])('should replace a non-UUID inbound id (%s) with a generated one', (raw) => {
+    const resolved = resolveIdWithSource(raw);
+
+    expect(resolved.source).toBe('generated');
+    expect(resolved.value).not.toBe(raw);
+    expect(resolved.value).toMatch(UUID_PATTERN);
   });
 });

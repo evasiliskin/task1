@@ -2,7 +2,18 @@ import { stdSerializers } from 'pino';
 
 import { AppError } from '../errors/index.js';
 
+import { redactLogPayload } from './redact-payload.js';
+import { truncateForLog } from './truncate.util.js';
+
 export const MAX_CAUSE_DEPTH = 5;
+
+/**
+ * `AppError.params` is the one part of a log record that reaches pino outside `AppLogger.write`'s
+ * redaction pass, and it is caller-supplied. `redact.paths` cannot reach it (`err.params.x` is
+ * deeper than the one-level `*` wildcard), so it is redacted and capped here instead. Unlike the
+ * `Error` itself, `params` is plain data, so deep-cloning it is safe.
+ */
+const MAX_ERROR_PARAMS_BYTES = 2048;
 
 /**
  * Pino's `err` serializer. Registered under `serializers.err` so the standard `errorKey` ('err')
@@ -15,7 +26,9 @@ function appErrorFields(error: Error): Record<string, unknown> {
         code: error.code,
         category: error.category,
         ...(error.path !== undefined && { path: [...error.path] }),
-        ...(error.params !== undefined && { params: { ...error.params } }),
+        ...(error.params !== undefined && {
+          params: truncateForLog(redactLogPayload({ ...error.params }), MAX_ERROR_PARAMS_BYTES),
+        }),
       }
     : {};
 }

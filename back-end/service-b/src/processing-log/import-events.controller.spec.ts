@@ -10,7 +10,11 @@ import { type RequestContextService } from '@task1/shared/request-context/reques
 
 import { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
 
-import { ImportEventsController } from './import-events.controller.js';
+import {
+  DEAD_LETTERED_LOG,
+  ImportEventsController,
+  REPUBLISH_FAILED_LOG,
+} from './import-events.controller.js';
 import { type ProcessingLogTracker } from './processing-log-tracker.service.js';
 import { type IProcessingLogDocument } from './processing-log.types.js';
 
@@ -28,21 +32,45 @@ describe('ImportEventsController', () => {
     retryDelayMs: 5000,
   };
 
-  function buildController(upsertLog: ReturnType<typeof vi.fn>): ImportEventsController {
+  afterEach(() => {
+    rabbitmqConfiguration.maxRetries = 5;
+  });
+
+  interface ICapturedLogLine {
+    fields: Record<string, unknown>;
+    message: string;
+    error?: unknown;
+  }
+
+  function buildController(upsertLog: ReturnType<typeof vi.fn>): {
+    controller: ImportEventsController;
+    errorLines: ICapturedLogLine[];
+  } {
     const tracker = { upsertLog } as unknown as ProcessingLogTracker;
+    const errorLines: ICapturedLogLine[] = [];
+    const logger = {
+      info: () => undefined,
+      warn: (fields: Record<string, unknown>, message: string, error?: unknown) =>
+        errorLines.push({ fields, message, error }),
+      error: (fields: Record<string, unknown>, message: string, error?: unknown) =>
+        errorLines.push({ fields, message, error }),
+    };
     const loggerService = {
-      getLogger: vi.fn().mockReturnValue({ warn: vi.fn(), error: vi.fn() }),
+      getLogger: vi.fn().mockReturnValue(logger),
     } as unknown as LoggerService;
     const requestContextService = {
       requireContext: () => ({ correlationId, requestId: 'r', correlationIdSource: 'inbound' }),
     } as unknown as RequestContextService;
 
-    return new ImportEventsController(
-      tracker,
-      rabbitmqConfiguration,
-      requestContextService,
-      loggerService,
-    );
+    return {
+      controller: new ImportEventsController(
+        tracker,
+        rabbitmqConfiguration,
+        requestContextService,
+        loggerService,
+      ),
+      errorLines,
+    };
   }
 
   function buildContext(headers: Record<string, unknown> = {}): {
@@ -75,7 +103,7 @@ describe('ImportEventsController', () => {
 
     it('should upsert a started log entry and ack the message, when the payload is valid', async () => {
       const upsertLog = vi.fn().mockResolvedValue(undefined);
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, sendToQueue } = buildContext();
 
       await controller.handleImportStarted(validPayload, context);
@@ -98,7 +126,7 @@ describe('ImportEventsController', () => {
 
     it('should ack the message without upserting, when the payload fails validation', async () => {
       const upsertLog = vi.fn();
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack } = buildContext();
 
       await controller.handleImportStarted({ importId: 'not-a-uuid' }, context);
@@ -109,7 +137,7 @@ describe('ImportEventsController', () => {
 
     it('should republish to the retry queue with an incremented retry header and ack the original, when the repository write fails below maxRetries', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, sendToQueue, assertQueue } = buildContext({
         'x-retry-count': 2,
       });
@@ -132,7 +160,7 @@ describe('ImportEventsController', () => {
 
     it('should publish to the retry queue rather than the working queue, when the log write fails below maxRetries', async () => {
       const upsertLog = vi.fn().mockRejectedValueOnce(new Error('mongo down'));
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, sendToQueue, assertQueue } = buildContext();
 
       await controller.handleImportStarted(validPayload, context);
@@ -154,7 +182,7 @@ describe('ImportEventsController', () => {
 
     it('should nack-requeue the original and never ack it, when the retry publish is refused by channel backpressure', async () => {
       const upsertLog = vi.fn().mockRejectedValueOnce(new Error('mongo down'));
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, nack, sendToQueue } = buildContext();
       sendToQueue.mockReturnValue(false);
 
@@ -164,12 +192,31 @@ describe('ImportEventsController', () => {
       expect(ack).not.toHaveBeenCalled();
     });
 
+    it('should attach the underlying error to the dead-letter line, so the cause chain survives', async () => {
+      const cause = new Error('connection reset by peer');
+      const writeFailure = new Error('processing-log upsert failed', { cause });
+
+      const upsertLog = vi.fn().mockRejectedValueOnce(writeFailure);
+      const { controller, errorLines } = buildController(upsertLog);
+      const { context, sendToQueue } = buildContext();
+      sendToQueue.mockReturnValue(true);
+      rabbitmqConfiguration.maxRetries = 0;
+
+      await controller.handleImportStarted(validPayload, context);
+
+      const line = errorLines.find((candidate) => candidate.message === DEAD_LETTERED_LOG);
+
+      expect(line).toBeDefined();
+      expect(line?.error).toBe(writeFailure);
+      expect(line?.fields).not.toHaveProperty('reason');
+    });
+
     it('should dead-letter the message and record a queryable dead-lettered log entry, when the repository write fails at maxRetries', async () => {
       const upsertLog = vi
         .fn()
         .mockRejectedValueOnce(new Error('connection refused'))
         .mockResolvedValueOnce(undefined);
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, sendToQueue, assertQueue } = buildContext({
         'x-retry-count': 5,
       });
@@ -192,9 +239,38 @@ describe('ImportEventsController', () => {
       expect(ack).toHaveBeenCalledWith(message);
     });
 
+    it('should persist the String(...)-converted reason, when the retry is exhausted and the original write rejects with a non-Error value', async () => {
+      const upsertLog = vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'ECONNREFUSED' })
+        .mockResolvedValueOnce(undefined);
+      const { controller } = buildController(upsertLog);
+      const { context, message, ack, sendToQueue, assertQueue } = buildContext({
+        'x-retry-count': 5,
+      });
+
+      await controller.handleImportStarted(validPayload, context);
+
+      expect(assertQueue).toHaveBeenCalledWith('service_b_queue.dlq', { durable: true });
+      expect(sendToQueue).toHaveBeenCalledWith('service_b_queue.dlq', message.content, {
+        headers: { 'x-retry-count': 6 },
+      });
+      expect(upsertLog).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          importId,
+          status: 'dead-lettered',
+          // The controller does `String(reason)` on a non-Error rejection value; a plain object's
+          // default stringification is always '[object Object]'.
+          errorInfo: { reason: '[object Object]' },
+        }),
+      );
+      expect(ack).toHaveBeenCalledWith(message);
+    });
+
     it('should still ack the original message without throwing, when both the original write and the dead-letter log write fail', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack } = buildContext({ 'x-retry-count': 5 });
 
       await expect(controller.handleImportStarted(validPayload, context)).resolves.toBeUndefined();
@@ -203,8 +279,9 @@ describe('ImportEventsController', () => {
     });
 
     it('should nack-requeue the original message without acking, when republishing to the retry queue throws', async () => {
-      const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
-      const controller = buildController(upsertLog);
+      const originalFailure = new Error('connection refused');
+      const upsertLog = vi.fn().mockRejectedValue(originalFailure);
+      const { controller, errorLines } = buildController(upsertLog);
       const { context, message, ack, nack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
       sendToQueue.mockImplementation(() => {
         throw new Error('channel closed: PRECONDITION_FAILED');
@@ -214,11 +291,21 @@ describe('ImportEventsController', () => {
 
       expect(nack).toHaveBeenCalledWith(message, false, true);
       expect(ack).not.toHaveBeenCalled();
+
+      const line = errorLines.find((candidate) => candidate.message === REPUBLISH_FAILED_LOG);
+
+      expect(line).toBeDefined();
+      // The original write failure (why we were retrying) is the logged error, so it still
+      // reaches the `err` serializer instead of being silently dropped.
+      expect(line?.error).toBe(originalFailure);
+      // The republish failure itself (a distinct, second error) must also be visible, so the
+      // repeated nack-requeue loop is diagnosable instead of repeating an uninformative line.
+      expect(line?.fields.republishError).toBe('channel closed: PRECONDITION_FAILED');
     });
 
     it('should nack-requeue the original message without acking, when asserting the dead-letter queue throws at maxRetries', async () => {
       const upsertLog = vi.fn().mockRejectedValue(new Error('connection refused'));
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack, nack, assertQueue } = buildContext({ 'x-retry-count': 5 });
       assertQueue.mockRejectedValue(new Error('channel closed: PRECONDITION_FAILED'));
 
@@ -230,7 +317,7 @@ describe('ImportEventsController', () => {
 
     it('should nack-requeue the original message without acking, when the upsert and republish failures are non-Error values', async () => {
       const upsertLog = vi.fn().mockRejectedValue('connection refused');
-      const controller = buildController(upsertLog);
+      const { controller, errorLines } = buildController(upsertLog);
       const { context, message, ack, nack, sendToQueue } = buildContext({ 'x-retry-count': 2 });
       sendToQueue.mockImplementation(() => {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error branch of the error-message formatting
@@ -241,13 +328,19 @@ describe('ImportEventsController', () => {
 
       expect(nack).toHaveBeenCalledWith(message, false, true);
       expect(ack).not.toHaveBeenCalled();
+
+      const line = errorLines.find((candidate) => candidate.message === REPUBLISH_FAILED_LOG);
+
+      expect(line).toBeDefined();
+      expect(line?.error).toBe('connection refused');
+      expect(line?.fields.republishError).toBe('channel closed: PRECONDITION_FAILED');
     });
   });
 
   describe('handleImportCompleted', () => {
     it('should upsert a completed log entry with the result counters as metadata and ack the message, when the payload is valid', async () => {
       const upsertLog = vi.fn().mockResolvedValue(undefined);
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack } = buildContext();
       const validPayload: ImportCompletedEvent = {
         importId,
@@ -282,7 +375,7 @@ describe('ImportEventsController', () => {
   describe('handleImportFailed', () => {
     it('should upsert a failed log entry with errorInfo and ack the message, when the payload is valid', async () => {
       const upsertLog = vi.fn().mockResolvedValue(undefined);
-      const controller = buildController(upsertLog);
+      const { controller } = buildController(upsertLog);
       const { context, message, ack } = buildContext();
       const validPayload: ImportFailedEvent = {
         importId,

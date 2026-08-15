@@ -1,8 +1,24 @@
+import { Writable } from 'node:stream';
+
 import { type LogLevel } from '@nestjs/common';
 import { pino } from 'pino';
 
 import { AppLogger } from './app-logger.js';
 import { NestLoggerBridge } from './nest-logger.bridge.js';
+
+function buildBridge(): { bridge: NestLoggerBridge; lines: Record<string, unknown>[] } {
+  const lines: Record<string, unknown>[] = [];
+  const stream = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      lines.push(JSON.parse(chunk.toString()) as Record<string, unknown>);
+      callback();
+    },
+  });
+  const root = pino({ level: 'trace' }, stream);
+  const bridge = new NestLoggerBridge(AppLogger.create(root, 'Nest', 'http'));
+
+  return { bridge, lines };
+}
 
 describe('NestLoggerBridge', () => {
   let appLogger: {
@@ -31,16 +47,16 @@ describe('NestLoggerBridge', () => {
     bridge.log('Nest application started', 'NestFactory');
 
     expect(appLogger.info).toHaveBeenCalledWith(
-      { context: 'NestFactory' },
+      { nestContext: 'NestFactory' },
       'Nest application started',
     );
   });
 
-  it('should route error() to AppLogger.error(), with the stack trace and context', () => {
+  it('should route error() to AppLogger.error(), with the stack and nestContext', () => {
     bridge.error('boom', 'stack trace here', 'SomeContext');
 
     expect(appLogger.error).toHaveBeenCalledWith(
-      { context: 'SomeContext', trace: 'stack trace here' },
+      { nestContext: 'SomeContext', stack: 'stack trace here' },
       'boom',
     );
   });
@@ -48,26 +64,45 @@ describe('NestLoggerBridge', () => {
   it('should route warn() to AppLogger.warn()', () => {
     bridge.warn('careful', 'SomeContext');
 
-    expect(appLogger.warn).toHaveBeenCalledWith({ context: 'SomeContext' }, 'careful');
+    expect(appLogger.warn).toHaveBeenCalledWith({ nestContext: 'SomeContext' }, 'careful');
   });
 
   it('should route debug() to AppLogger.debug()', () => {
     bridge.debug('debugging', 'SomeContext');
 
-    expect(appLogger.debug).toHaveBeenCalledWith({ context: 'SomeContext' }, 'debugging');
+    expect(appLogger.debug).toHaveBeenCalledWith({ nestContext: 'SomeContext' }, 'debugging');
   });
 
   it('should route verbose() to AppLogger.trace()', () => {
     bridge.verbose('verbose message', 'SomeContext');
 
-    expect(appLogger.trace).toHaveBeenCalledWith({ context: 'SomeContext' }, 'verbose message');
+    expect(appLogger.trace).toHaveBeenCalledWith({ nestContext: 'SomeContext' }, 'verbose message');
   });
 
   it('should route fatal() to AppLogger.fatal(), so it lands on pino level 60', () => {
     bridge.fatal('fatal message', 'SomeContext');
 
-    expect(appLogger.fatal).toHaveBeenCalledWith({ context: 'SomeContext' }, 'fatal message');
+    expect(appLogger.fatal).toHaveBeenCalledWith({ nestContext: 'SomeContext' }, 'fatal message');
     expect(appLogger.error).not.toHaveBeenCalled();
+  });
+
+  it("should name Nest's context field nestContext, not context", () => {
+    const { bridge: realBridge, lines } = buildBridge();
+
+    realBridge.log('Mapped {/health, GET} route', 'RouterExplorer');
+
+    expect(lines[0]).toMatchObject({ source: 'Nest', nestContext: 'RouterExplorer' });
+    expect(lines[0]).not.toHaveProperty('context');
+  });
+
+  it('should name the stack field stack, not trace', () => {
+    const { bridge: realBridge, lines } = buildBridge();
+    const stack = 'Error: boom\n    at handler (app.ts:1:1)';
+
+    realBridge.error('boom', stack, 'ExceptionsHandler');
+
+    expect(lines[0]).toMatchObject({ stack, nestContext: 'ExceptionsHandler' });
+    expect(lines[0]).not.toHaveProperty('trace');
   });
 
   it('should not throw, when setLogLevels() is called', () => {

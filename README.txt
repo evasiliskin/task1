@@ -527,12 +527,18 @@ header from the current request context; calling a raw `ClientProxy` instead sil
 header, and the next consumer mints a fresh id, breaking the trace chain at that hop.
 
 **`correlationIdSource`.** Every log line also carries `correlationIdSource`, either `"inbound"`
-(the id came from an incoming `X-Correlation-ID` header or `x-correlation-id` AMQP header) or
-`"generated"` (no id was supplied, so one was minted locally). On the `rmq` channel specifically,
-`correlationIdSource: "generated"` is the signal that a hop lost the incoming id — it means some
-publish site emitted without going through `ContextPropagatingClient`. There should be no
-`"generated"` values on the `rmq` channel in normal operation; any occurrence is a propagation bug
-at that publish site.
+(the id came from an incoming `X-Correlation-ID` header or `x-correlation-id` AMQP header and
+passed validation) or `"generated"` (no id was supplied, *or* one was supplied but rejected by
+validation — see "Validation" above — so one was minted locally). On the `rmq` channel
+specifically, `correlationIdSource: "generated"` is the signal that a hop lost the incoming id —
+it means some publish site emitted without going through `ContextPropagatingClient`, or a
+downstream service sent a malformed id. There should be no `"generated"` values on the `rmq`
+channel in normal operation; any occurrence is a propagation bug at that publish site.
+
+Background sweeps that run outside of any inbound request (e.g. `service-b`'s `report-sweep`,
+`service-a`'s `archive-storage-sweep` — see `RequestContextService.runAsRoot`) mint their own root
+context and add an `operation` field (e.g. `"report-sweep"`) so every line one sweep emits can be
+grouped and followed, even though there is no client request behind it.
 
 **In logs.** Every service logs through a small `LoggerService`/`AppLogger` wrapper over
 `pino` (`back-end/libs/shared/src/logger/`, shared by all three services). Both `correlationId` and `requestId` are merged into
@@ -548,6 +554,16 @@ service, from the `SERVICE_NAME` environment variable — set in each Dockerfile
 `bootstrap` for framework logs emitted before the app started listening — after that the framework
 switches to the service's runtime channel).
 
+A few more fields show up on specific lines rather than every line: `operation` on background-sweep
+root contexts (see `correlationIdSource` above); `dependency` on the gateway's health-check
+up/down/recovery lines (`back-end/api-gateway/src/health/health-check.service.ts`) — the name of
+the checked dependency (`rabbitmq`, `serviceA`, `serviceB`, `redis`); `importSource` on
+service-a's `import started` line — the archive source type (e.g. `download`); and, on lines
+written by Nest's own framework logger (`source:"Nest"`, bridged via `NestLoggerBridge`),
+`nestContext` (the Nest-supplied logging context, e.g. the module/class name) and `stack` (a
+pre-formatted stack-trace string Nest hands in on `logger.error()`, not an `Error` object — it does
+not go through the `err` serializer).
+
 **HTTP request logging.** The gateway logs every request twice —
 `HttpLoggingMiddleware` (`back-end/libs/shared/src/logger/http/http-logging.middleware.ts`) emits
 `request started` when the request enters the pipeline and `request completed` when the response
@@ -555,7 +571,7 @@ finishes. One real `POST /imports?dryRun=false` (formatted here for readability,
 per line in reality):
 
 ```json
-{"level":30,"pid":8488,"hostname":"...","service":"api-gateway",
+{"level":"info","pid":8488,"hostname":"...","service":"api-gateway",
  "correlationId":"62bfe171-...","requestId":"bf26a9ed-...",
  "request":{"method":"POST","url":"/imports?dryRun=false","path":"/imports",
             "query":{"dryRun":"false"},"body":{"dateHour":"2026-08-11-0"},
@@ -564,7 +580,7 @@ per line in reality):
             "ip":"::ffff:127.0.0.1"},
  "source":"HttpLoggingMiddleware","channel":"http","msg":"request started"}
 
-{"level":30,"pid":8488,"hostname":"...","service":"api-gateway",
+{"level":"info","pid":8488,"hostname":"...","service":"api-gateway",
  "correlationId":"62bfe171-...","requestId":"bf26a9ed-...",
  "method":"POST","url":"/imports?dryRun=false","statusCode":202,
  "contentLength":"192","durationMs":6,

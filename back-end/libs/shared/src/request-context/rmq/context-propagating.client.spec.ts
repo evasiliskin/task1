@@ -31,8 +31,7 @@ describe('ContextPropagatingClient', () => {
       propagatingClient.emit(client as unknown as ClientProxy, 'pattern', { importId: 'i-1' });
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const [pattern, record] = client.emit.mock.calls[0] as [string, RmqRecordBuilder];
+    const [pattern, record] = client.emit.mock.calls[0] as [string, RmqRecordBuilder<unknown>];
     const { data, options } = record as unknown as {
       data: unknown;
       options: { headers: Record<string, string> };

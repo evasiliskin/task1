@@ -108,10 +108,6 @@ export class ReportsController {
 
   private readonly logger: AppLogger;
 
-  // Defense in depth: reportPath comes from service-b's RPC reply, which is a trusted internal
-  // source, but we still verify it resolves inside the configured report directory before using
-  // it to read/delete a file. This guards against a compromised or misbehaving service-b (or a
-  // future bug) from causing us to touch arbitrary paths on the shared volume.
   private assertReportPathIsContained(reportPath: string): void {
     const reportDirectory = resolve(this.reportConfiguration.dir);
     const resolvedReportPath = resolve(reportPath);

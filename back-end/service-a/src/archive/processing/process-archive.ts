@@ -6,7 +6,7 @@ import { type Collection } from 'mongodb';
 
 import { batchEvents } from './batch-events.js';
 import { ArchiveProcessingError } from './errors.js';
-import { insertBatch } from './insert-batch.js';
+import { insertBatch, type IWriteErrorSample } from './insert-batch.js';
 import { parseAndValidate, type OnInvalidLine } from './parse-and-validate.js';
 import { type RawGithubEvent } from './raw-github-event.schema.js';
 import { splitLines } from './split-lines.js';
@@ -26,6 +26,9 @@ export type ImportResult = {
   errorCount: number;
 };
 
+/** Called once per batch that produced non-duplicate write errors. */
+export type OnBatchErrors = (errorCount: number, errorSample: readonly IWriteErrorSample[]) => void;
+
 async function* transformEvents(
   rawEvents: AsyncIterable<RawGithubEvent>,
   importId: string,
@@ -40,6 +43,7 @@ export async function processArchive(
   importId: string,
   options: IProcessArchiveOptions,
   onInvalidLine?: OnInvalidLine,
+  onBatchErrors?: OnBatchErrors,
 ): Promise<ImportResult> {
   let invalidEvents = 0;
   let validEvents = 0;
@@ -63,6 +67,10 @@ export async function processArchive(
       validEvents += result.insertedCount;
       duplicateEvents += result.duplicateCount;
       errorCount += result.errorCount;
+
+      if (result.errorCount > 0) {
+        onBatchErrors?.(result.errorCount, result.errorSample);
+      }
     }
   } catch (error) {
     const cause = error instanceof Error ? error : undefined;

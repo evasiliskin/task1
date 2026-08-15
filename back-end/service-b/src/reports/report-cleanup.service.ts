@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
 import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
 
@@ -15,16 +16,19 @@ const SWEEP_FAILED_LOG = 'Could not sweep the report directory';
 export class ReportCleanupService implements OnModuleInit, OnModuleDestroy {
   public constructor(
     @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
+    private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(ReportCleanupService.name);
   }
 
   public async onModuleInit(): Promise<void> {
-    await this.sweep();
+    await this.requestContextService.runAsRoot('report-sweep', () => this.sweep());
 
     this.timer = setInterval(() => {
-      this.sweep().catch(() => undefined);
+      this.requestContextService
+        .runAsRoot('report-sweep', () => this.sweep())
+        .catch(() => undefined);
     }, this.reportConfiguration.sweepIntervalMs);
     this.timer.unref();
   }

@@ -14,6 +14,9 @@ import { RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connect
 import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
+export const HEALTH_CHECK_FAILED_LOG = 'health check failed';
+export const HEALTH_CHECK_RECOVERED_LOG = 'health check recovered';
+
 export type ServiceStatus = 'ok' | 'unavailable';
 
 export interface IAggregatedHealth {
@@ -66,6 +69,13 @@ export class HealthCheckService {
 
   private readonly logger: AppLogger;
 
+  /**
+   * Which dependencies were down at the last poll. Health endpoints are polled continuously, so
+   * logging the current state every time turns one outage into hundreds of identical lines. The
+   * transition is the event; the state is already in the response body.
+   */
+  private readonly downDependencies = new Set<string>();
+
   private async runAllChecks(): Promise<IAggregatedHealth> {
     const startedAt = Date.now();
     const raw = await this.executeIndicators();
@@ -115,13 +125,25 @@ export class HealthCheckService {
 
   private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
     // correlationId and requestId are stamped on every line by pino's mixin — repeating them here
-    // would model a pattern that hides the fact that context is automatic.
-    Object.entries(details).forEach(([service, detail]) => {
-      if (detail.status === 'down') {
+    // would model a pattern that hides the fact that context is automatic. `dependency`, not
+    // `service`: `service` is a pino `base` binding naming *this* process.
+    Object.entries(details).forEach(([dependency, detail]) => {
+      const isDown = detail.status === 'down';
+      const wasDown = this.downDependencies.has(dependency);
+
+      if (isDown && !wasDown) {
+        this.downDependencies.add(dependency);
         this.logger.error(
-          { service, errorMessage: detail.message, responseTimeMs },
-          `health check failed for ${service}`,
+          { dependency, errorMessage: detail.message, responseTimeMs },
+          HEALTH_CHECK_FAILED_LOG,
         );
+
+        return;
+      }
+
+      if (!isDown && wasDown) {
+        this.downDependencies.delete(dependency);
+        this.logger.info({ dependency, responseTimeMs }, HEALTH_CHECK_RECOVERED_LOG);
       }
     });
   }
