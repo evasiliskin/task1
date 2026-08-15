@@ -15,11 +15,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === null || prototype === Object.prototype;
 }
 
-/**
- * Deep-copies `value`, replacing every sensitive key with the shared censor. Cycles and
- * pathological nesting are collapsed into placeholders so a malicious payload cannot turn a
- * log call into an infinite loop.
- */
 export function redactLogPayload(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
   if (value === null || value === undefined) {
     return value;
