@@ -4,13 +4,12 @@ import { resolve, sep } from 'node:path';
 
 import { Controller, Get, Inject, Res, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
-import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { type Response } from 'express';
 import { firstValueFrom, timeout } from 'rxjs';
 
@@ -29,16 +28,16 @@ type GenerateReportRpcResult = { reportPath: string };
 
 @ApiTags('reports')
 @Controller('reports')
-export class ReportsController extends LoggerAware {
+export class ReportsController {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
+    private readonly propagatingClient: ContextPropagatingClient,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
     @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(ReportsController.name);
   }
 
   @Get('pdf')
@@ -53,12 +52,13 @@ export class ReportsController extends LoggerAware {
     @ModelBinder(GetReportRequestSchema) bound: BoundRequest<typeof GetReportRequestSchema>,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
-
     const result = await firstValueFrom(
-      this.serviceBClient
-        .send<GenerateReportRpcResult>(RPC_PATTERNS.REPORTS_PDF_GENERATE, record)
+      this.propagatingClient
+        .send<GenerateReportRpcResult>(
+          this.serviceBClient,
+          RPC_PATTERNS.REPORTS_PDF_GENERATE,
+          bound.data,
+        )
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
@@ -76,25 +76,26 @@ export class ReportsController extends LoggerAware {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
       unlink(result.reportPath).catch((error: unknown) => {
         this.logger.warn(
-          { reportPath: result.reportPath, error },
+          { reportPath: result.reportPath },
           'failed to delete generated PDF report file',
+          error,
         );
       });
     };
 
-    // 'close' fires once the response has fully finished sending (after
-    // 'finish') AND when the underlying connection is terminated
-    // prematurely (client-aborted download) — a single listener covers
-    // both the happy path and an aborted download.
+    // A single 'close' listener covers both outcomes: the happy-path completion of a fully
+    // streamed download, and a client-aborted/interrupted download that also fires 'close' on
+    // the response — either way the generated report file is no longer needed and can be cleaned up.
     response.on('close', deleteReportFile);
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
     const reportFileStream = createReadStream(result.reportPath);
 
     reportFileStream.on('error', (error) => {
       this.logger.error(
-        { reportPath: result.reportPath, error },
+        { reportPath: result.reportPath },
         'failed to stream generated PDF report file',
+        error,
       );
       deleteReportFile();
     });
@@ -105,11 +106,12 @@ export class ReportsController extends LoggerAware {
     });
   }
 
-  // Defense-in-depth: the RMQ reply is internal (service-b's own generated
-  // path, already UUID-constrained upstream), but this refuses to read or
-  // delete anything outside the shared report-storage directory this
-  // gateway process is configured for, rather than trusting the reply path
-  // unconditionally.
+  private readonly logger: AppLogger;
+
+  // Defense in depth: reportPath comes from service-b's RPC reply, which is a trusted internal
+  // source, but we still verify it resolves inside the configured report directory before using
+  // it to read/delete a file. This guards against a compromised or misbehaving service-b (or a
+  // future bug) from causing us to touch arbitrary paths on the shared volume.
   private assertReportPathIsContained(reportPath: string): void {
     const reportDirectory = resolve(this.reportConfiguration.dir);
     const resolvedReportPath = resolve(reportPath);

@@ -5,7 +5,8 @@ import {
   type ImportFailedEvent,
   type ImportStartedEvent,
 } from '@task1/shared/github-archive/index';
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
+import { type RequestContextService } from '@task1/shared/request-context/request-context.service';
 
 import { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
 
@@ -32,8 +33,16 @@ describe('ImportEventsController', () => {
     const loggerService = {
       getLogger: vi.fn().mockReturnValue({ warn: vi.fn(), error: vi.fn() }),
     } as unknown as LoggerService;
+    const requestContextService = {
+      requireContext: () => ({ correlationId, requestId: 'r', correlationIdSource: 'inbound' }),
+    } as unknown as RequestContextService;
 
-    return new ImportEventsController(tracker, rabbitmqConfiguration, loggerService);
+    return new ImportEventsController(
+      tracker,
+      rabbitmqConfiguration,
+      requestContextService,
+      loggerService,
+    );
   }
 
   function buildContext(headers: Record<string, unknown> = {}): {
@@ -62,7 +71,6 @@ describe('ImportEventsController', () => {
       importId,
       archive,
       startedAt: '2026-08-11T00:00:00.000Z',
-      correlationId,
     };
 
     it('should upsert a started log entry and ack the message, when the payload is valid', async () => {
@@ -251,7 +259,6 @@ describe('ImportEventsController', () => {
         invalidEvents: 1,
         duplicateEvents: 1,
         errorCount: 0,
-        correlationId,
       };
 
       await controller.handleImportCompleted(validPayload, context);
@@ -283,7 +290,6 @@ describe('ImportEventsController', () => {
         startedAt: '2026-08-11T00:00:00.000Z',
         failedAt: '2026-08-11T00:02:00.000Z',
         reason: 'download failed: 404 Not Found',
-        correlationId,
       };
 
       await controller.handleImportFailed(validPayload, context);

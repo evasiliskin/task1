@@ -4,9 +4,8 @@ import {
   HealthCheckService as TerminusHealthCheckService,
   type HealthCheckResult,
 } from '@nestjs/terminus';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 
 import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
@@ -29,7 +28,7 @@ export interface IAggregatedHealth {
 }
 
 @Injectable()
-export class HealthCheckService extends LoggerAware {
+export class HealthCheckService {
   public constructor(
     private readonly terminus: TerminusHealthCheckService,
     private readonly gatewayIndicator: GatewayHealthIndicator,
@@ -38,10 +37,9 @@ export class HealthCheckService extends LoggerAware {
     private readonly redisIndicator: RedisHealthIndicator,
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(HealthCheckService.name);
   }
 
   public async getHealth(): Promise<IAggregatedHealth> {
@@ -65,6 +63,8 @@ export class HealthCheckService extends LoggerAware {
 
     return { ready, result };
   }
+
+  private readonly logger: AppLogger;
 
   private async runAllChecks(): Promise<IAggregatedHealth> {
     const startedAt = Date.now();
@@ -114,13 +114,12 @@ export class HealthCheckService extends LoggerAware {
   }
 
   private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
-    const correlationId = this.requestContextService.getCorrelationId();
-    const requestId = this.requestContextService.getRequestId();
-
+    // correlationId and requestId are stamped on every line by pino's mixin — repeating them here
+    // would model a pattern that hides the fact that context is automatic.
     Object.entries(details).forEach(([service, detail]) => {
       if (detail.status === 'down') {
         this.logger.error(
-          { service, correlationId, requestId, error: detail.message, responseTimeMs },
+          { service, errorMessage: detail.message, responseTimeMs },
           `health check failed for ${service}`,
         );
       }

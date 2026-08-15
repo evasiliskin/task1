@@ -11,6 +11,7 @@ const ERROR_REASON_MAX_LENGTH = 500;
 export function toStartedLogEntry(
   event: ImportStartedEvent,
   eventType: string,
+  correlationId: string,
 ): IProcessingLogDocument {
   return {
     importId: event.importId,
@@ -18,7 +19,7 @@ export function toStartedLogEntry(
     service: 'service-a',
     status: 'started',
     timestamp: new Date(event.startedAt),
-    correlationId: event.correlationId,
+    correlationId,
     archive: event.archive,
     metadata: {},
   };
@@ -27,6 +28,7 @@ export function toStartedLogEntry(
 export function toCompletedLogEntry(
   event: ImportCompletedEvent,
   eventType: string,
+  correlationId: string,
 ): IProcessingLogDocument {
   return {
     importId: event.importId,
@@ -34,7 +36,7 @@ export function toCompletedLogEntry(
     service: 'service-a',
     status: 'completed',
     timestamp: new Date(event.completedAt),
-    correlationId: event.correlationId,
+    correlationId,
     archive: event.archive,
     metadata: {
       eventsProcessed: event.eventsProcessed,
@@ -49,6 +51,7 @@ export function toCompletedLogEntry(
 export function toFailedLogEntry(
   event: ImportFailedEvent,
   eventType: string,
+  correlationId: string,
 ): IProcessingLogDocument {
   return {
     importId: event.importId,
@@ -56,7 +59,7 @@ export function toFailedLogEntry(
     service: 'service-a',
     status: 'failed',
     timestamp: new Date(event.failedAt),
-    correlationId: event.correlationId,
+    correlationId,
     archive: event.archive,
     metadata: {},
     errorInfo: { reason: event.reason.slice(0, ERROR_REASON_MAX_LENGTH) },

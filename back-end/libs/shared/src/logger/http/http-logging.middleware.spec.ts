@@ -5,14 +5,15 @@ import type { Mock } from 'vitest';
 
 import { RequestContextService } from '../../request-context/request-context.service.js';
 import { type AppLogger } from '../app-logger.js';
-import { REDACT_CENSOR } from '../redact-paths.js';
+import { type LoggerService } from '../logger.service.js';
 
 import {
   HttpLoggingMiddleware,
+  isUnloggedPath,
   REQUEST_COMPLETED_LOG,
+  REQUEST_DETAIL_LOG,
   REQUEST_STARTED_LOG,
 } from './http-logging.middleware.js';
-import { type LoggerService } from './logger.service.js';
 
 const CORRELATION_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const REQUEST_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
@@ -44,45 +45,72 @@ const fixture = {
   },
 };
 
+describe('isUnloggedPath', () => {
+  it('should skip logging, when the path is a health probe', () => {
+    expect(isUnloggedPath('/health/ready')).toBe(true);
+  });
+
+  it('should not skip logging, when "health" is a nested resource segment', () => {
+    expect(isUnloggedPath('/api/v1/imports/health')).toBe(false);
+  });
+});
+
 describe('HttpLoggingMiddleware', () => {
-  let logger: { info: Mock; warn: Mock; error: Mock };
+  let logger: { info: Mock; debug: Mock; warn: Mock; error: Mock; isLevelEnabled: Mock };
   let loggerService: LoggerService;
   let requestContextService: RequestContextService;
   let middleware: HttpLoggingMiddleware;
   let next: Mock<NextFunction>;
+  let messages: string[];
 
   function handle(request: Request, response: IFakeResponse): void {
-    requestContextService.run({ correlationId: CORRELATION_ID, requestId: REQUEST_ID }, () => {
-      middleware.use(request, response as unknown as Response, next);
-    });
-  }
-
-  function loggedMessages(): string[] {
-    return [...logger.info.mock.calls, ...logger.warn.mock.calls, ...logger.error.mock.calls].map(
-      ([, message]: [unknown, string]) => message,
+    requestContextService.run(
+      { correlationId: CORRELATION_ID, requestId: REQUEST_ID, correlationIdSource: 'inbound' },
+      () => {
+        middleware.use(request, response as unknown as Response, next);
+      },
     );
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  function loggedMessages(): string[] {
+    return messages;
+  }
 
-    logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  function setUp(debugEnabled: boolean): void {
+    messages = [];
+
+    const record = (): Mock =>
+      vi.fn((...args: unknown[]) => {
+        messages.push(args[1] as string);
+      });
+
+    logger = {
+      info: record(),
+      debug: record(),
+      warn: record(),
+      error: record(),
+      isLevelEnabled: vi.fn(() => debugEnabled),
+    };
     loggerService = {
       getLogger: vi.fn(() => logger as unknown as AppLogger),
     } as unknown as LoggerService;
     requestContextService = new RequestContextService();
     middleware = new HttpLoggingMiddleware(loggerService, requestContextService);
     next = vi.fn<NextFunction>();
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setUp(true);
   });
 
   describe('request start', () => {
-    it('should log the whole request at info level, when the request enters the pipeline', () => {
+    it('should log method, url, path, ip and user-agent at info level, when the request enters the pipeline', () => {
       const request = fixture.request({
         method: 'POST',
         originalUrl: '/api/v1/imports?dryRun=false',
         path: '/api/v1/imports',
-        query: { dryRun: 'false' },
-        body: { dateHour: '2026-08-11-0' },
+        headers: { 'user-agent': 'curl/8.7.1' },
       });
 
       handle(request, fixture.response());
@@ -91,50 +119,106 @@ describe('HttpLoggingMiddleware', () => {
         {
           correlationId: CORRELATION_ID,
           requestId: REQUEST_ID,
+          correlationIdSource: 'inbound',
           request: {
             method: 'POST',
             url: '/api/v1/imports?dryRun=false',
             path: '/api/v1/imports',
-            query: { dryRun: 'false' },
-            body: { dateHour: '2026-08-11-0' },
-            headers: { 'user-agent': 'curl/8.7.1' },
             ip: '127.0.0.1',
+            userAgent: 'curl/8.7.1',
           },
         },
         REQUEST_STARTED_LOG,
       );
     });
 
-    it('should censor the value, when a header or a body field is sensitive', () => {
-      const request = fixture.request({
-        headers: { authorization: 'Bearer gha-1', 'user-agent': 'curl/8.7.1' },
-        body: { name: 'ok', password: 'hunter2' },
-      });
+    it('should not include the request body or headers in the start line, when the request enters the pipeline', () => {
+      const request = fixture.request({ body: { name: 'ok', password: 'hunter2' } });
 
       handle(request, fixture.response());
 
       const [fields] = logger.info.mock.calls[0] as [{ request: Record<string, unknown> }];
 
-      expect(fields.request).toMatchObject({
-        headers: { authorization: REDACT_CENSOR, 'user-agent': 'curl/8.7.1' },
-        body: { name: 'ok', password: REDACT_CENSOR },
-      });
-    });
-
-    it('should log an empty body, when the request carries no payload', () => {
-      handle(fixture.request(), fixture.response());
-
-      const [fields] = logger.info.mock.calls[0] as [
-        { request: { body: unknown; query: unknown } },
-      ];
-
-      expect(fields.request.body).toEqual({});
+      expect(fields.request).not.toHaveProperty('body');
+      expect(fields.request).not.toHaveProperty('headers');
     });
 
     it('should pass the request on, when it has been logged', () => {
       handle(fixture.request(), fixture.response());
 
       expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('request detail', () => {
+    it('should log the parsed body, query and allowlisted headers at debug level, when debug is enabled', () => {
+      const request = fixture.request({
+        method: 'POST',
+        originalUrl: '/api/v1/imports?dryRun=false',
+        query: { dryRun: 'false' },
+        body: { dateHour: '2026-08-11-0' },
+        headers: { 'user-agent': 'curl/8.7.1', authorization: 'Bearer gha-1' },
+      });
+
+      handle(request, fixture.response());
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        {
+          correlationId: CORRELATION_ID,
+          requestId: REQUEST_ID,
+          correlationIdSource: 'inbound',
+          request: {
+            method: 'POST',
+            url: '/api/v1/imports?dryRun=false',
+            query: { dryRun: 'false' },
+            body: { dateHour: '2026-08-11-0' },
+            headers: { 'user-agent': 'curl/8.7.1' },
+          },
+        },
+        REQUEST_DETAIL_LOG,
+      );
+    });
+
+    it('should omit a header entirely, when it is not on the allowlist', () => {
+      const request = fixture.request({
+        headers: { authorization: 'Bearer gha-1', 'user-agent': 'curl/8.7.1' },
+      });
+
+      handle(request, fixture.response());
+
+      const [fields] = logger.debug.mock.calls[0] as [{ request: { headers: unknown } }];
+
+      expect(fields.request.headers).not.toHaveProperty('authorization');
+    });
+
+    it('should truncate an oversized body, when it exceeds the byte cap', () => {
+      const request = fixture.request({ body: { blob: 'x'.repeat(5000) } });
+
+      handle(request, fixture.response());
+
+      const [fields] = logger.debug.mock.calls[0] as [{ request: { body: unknown } }];
+
+      expect(fields.request.body).toEqual({
+        truncated: true,
+        approximateBytes: expect.any(Number) as number,
+      });
+    });
+
+    it('should not log the detail line, when debug is disabled', () => {
+      setUp(false);
+
+      handle(fixture.request(), fixture.response());
+
+      expect(logger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should not build the detail payload, when debug is disabled', () => {
+      setUp(false);
+
+      handle(fixture.request({ body: { blob: 'x'.repeat(5000) } }), fixture.response());
+
+      expect(logger.isLevelEnabled).toHaveBeenCalledWith('debug');
+      expect(logger.debug).not.toHaveBeenCalled();
     });
   });
 
@@ -149,6 +233,7 @@ describe('HttpLoggingMiddleware', () => {
         {
           correlationId: CORRELATION_ID,
           requestId: REQUEST_ID,
+          correlationIdSource: 'inbound',
           method: 'GET',
           url: '/api/v1/events?limit=10',
           statusCode: 202,
@@ -190,7 +275,11 @@ describe('HttpLoggingMiddleware', () => {
       response.emit('finish');
       response.emit('close');
 
-      expect(loggedMessages()).toEqual([REQUEST_STARTED_LOG, REQUEST_COMPLETED_LOG]);
+      expect(loggedMessages()).toEqual([
+        REQUEST_STARTED_LOG,
+        REQUEST_DETAIL_LOG,
+        REQUEST_COMPLETED_LOG,
+      ]);
     });
 
     it('should log the outcome, when the client aborts and only close fires', () => {
@@ -234,7 +323,10 @@ describe('HttpLoggingMiddleware', () => {
     });
 
     it('should log nothing, when the request targets a nested health probe', () => {
-      const request = fixture.request({ path: '/api/v1/health/ready' });
+      const request = fixture.request({
+        path: '/api/v1/health/live',
+        originalUrl: '/api/v1/health/live',
+      });
       const response = fixture.response();
 
       handle(request, response);
@@ -264,15 +356,29 @@ describe('HttpLoggingMiddleware', () => {
     });
 
     it('should pass the request on, when the path is excluded from logging', () => {
-      handle(fixture.request({ path: '/api/v1/health' }), fixture.response());
+      handle(fixture.request({ path: '/health' }), fixture.response());
 
       expect(next).toHaveBeenCalledTimes(1);
     });
 
     it('should log the request, when a path segment merely starts with "health"', () => {
-      handle(fixture.request({ path: '/api/v1/health-report' }), fixture.response());
+      handle(
+        fixture.request({ path: '/health-report', originalUrl: '/health-report' }),
+        fixture.response(),
+      );
 
-      expect(loggedMessages()).toEqual([REQUEST_STARTED_LOG]);
+      expect(loggedMessages()).toEqual([REQUEST_STARTED_LOG, REQUEST_DETAIL_LOG]);
+    });
+
+    it('should log the request, when "health" is a nested resource segment', () => {
+      const request = fixture.request({
+        path: '/api/v1/imports/health',
+        originalUrl: '/api/v1/imports/health',
+      });
+
+      handle(request, fixture.response());
+
+      expect(loggedMessages()).toEqual([REQUEST_STARTED_LOG, REQUEST_DETAIL_LOG]);
     });
   });
 });

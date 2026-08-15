@@ -1,25 +1,9 @@
-import { REDACT_CENSOR, REDACT_PATHS } from './redact-paths.js';
+import { isSensitiveKey, REDACT_CENSOR } from './redact-paths.js';
 
 const MAX_DEPTH = 10;
 
 const CIRCULAR_PLACEHOLDER = '[Circular]' as const;
 const MAX_DEPTH_PLACEHOLDER = '[MaxDepthExceeded]' as const;
-
-/**
- * Pino's `redact.paths` only censors the exact paths it is given, which is enough for the
- * fixed shape of a log line but not for free-form payloads such as a request body. The leaf
- * key of every configured path is reused here as a "this key is sensitive wherever it appears"
- * rule, so `REDACT_PATHS` stays the single source of truth for both mechanisms.
- */
-const SENSITIVE_KEYS: ReadonlySet<string> = new Set(
-  REDACT_PATHS.map((path) => path.split('.').at(-1)?.toLowerCase()).filter(
-    (key): key is string => key !== undefined && key !== '',
-  ),
-);
-
-function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEYS.has(key.toLowerCase());
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) {

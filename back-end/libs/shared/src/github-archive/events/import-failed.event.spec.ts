@@ -7,7 +7,6 @@ describe('importFailedEventSchema', () => {
     startedAt: '2026-08-11T00:00:00.000Z',
     failedAt: '2026-08-11T00:02:00.000Z',
     reason: 'download failed: 404 Not Found',
-    correlationId: 'c1',
   };
 
   it('should accept a valid payload, when all fields are present and well-formed', () => {

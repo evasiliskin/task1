@@ -4,12 +4,50 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
 import { type MongodbConfiguration } from '../../config/mongodb.config.js';
+import type * as processArchiveModule from '../processing/process-archive.js';
+import { processArchive } from '../processing/process-archive.js';
 
 import { ArchiveProcessingService } from './archive-processing.service.js';
+
+vi.mock('../processing/process-archive.js', async () => {
+  const actual = await vi.importActual<typeof processArchiveModule>(
+    '../processing/process-archive.js',
+  );
+
+  return { ...actual, processArchive: vi.fn(actual.processArchive) };
+});
+
+const IMPORT_ID = 'import-1';
+const INVALID_LINE_COUNT = 50;
+const LONG_LINE = 'x'.repeat(5000);
+
+function buildCappedService(warn: ReturnType<typeof vi.fn>): ArchiveProcessingService {
+  // The existing module-level `processArchive` mock is redirected to drive the invalid-line
+  // callback INVALID_LINE_COUNT times, which is what the cap has to survive.
+  vi.mocked(processArchive).mockImplementation((_filePath, _importId, _options, onInvalidLine) => {
+    for (let index = 0; index < INVALID_LINE_COUNT; index += 1) {
+      onInvalidLine?.(LONG_LINE, new Error('unparseable'));
+    }
+
+    return Promise.resolve({
+      eventsProcessed: INVALID_LINE_COUNT,
+      validEvents: 0,
+      invalidEvents: INVALID_LINE_COUNT,
+      duplicateEvents: 0,
+      errorCount: 0,
+    });
+  });
+
+  return new ArchiveProcessingService(
+    {} as never,
+    { batchSize: 500 } as never,
+    { getLogger: () => ({ warn }) } as never,
+  );
+}
 
 describe('ArchiveProcessingService', () => {
   let storageDirectory: string;
@@ -76,7 +114,7 @@ describe('ArchiveProcessingService', () => {
       { ordered: false },
     );
     expect(warnMock).toHaveBeenCalledWith(
-      { importId: 'import-1', rawLine: 'not valid json' },
+      { importId: 'import-1', rawLinePreview: 'not valid json', suppressingFurtherLines: false },
       'Skipped invalid archive line',
       expect.anything(),
     );
@@ -89,5 +127,26 @@ describe('ArchiveProcessingService', () => {
     const service = buildService(collection, warnMock);
 
     await expect(service.process(missingPath, 'import-1')).rejects.toThrow();
+  });
+
+  it('should stop logging after the cap, when an archive is entirely invalid', async () => {
+    const warn = vi.fn();
+
+    await buildCappedService(warn).process('/tmp/archive.json.gz', IMPORT_ID);
+
+    expect(warn).toHaveBeenCalledTimes(10);
+    expect((warn.mock.calls.at(-1) as [Record<string, unknown>])[0]).toMatchObject({
+      suppressingFurtherLines: true,
+    });
+  });
+
+  it('should truncate the raw line, when it is longer than the preview length', async () => {
+    const warn = vi.fn();
+
+    await buildCappedService(warn).process('/tmp/archive.json.gz', IMPORT_ID);
+
+    const [fields] = warn.mock.calls[0] as [{ rawLinePreview: string }];
+
+    expect(fields.rawLinePreview).toHaveLength(200);
   });
 });

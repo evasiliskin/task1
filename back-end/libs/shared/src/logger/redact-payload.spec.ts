@@ -51,6 +51,15 @@ describe('redactLogPayload', () => {
     expect(result).toEqual({ name: 'root', self: '[Circular]' });
   });
 
+  it('should replace the reference with a placeholder, when an array is circular', () => {
+    const items: unknown[] = ['a'];
+    items.push(items);
+
+    const result = redactLogPayload({ items }) as { items: unknown[] };
+
+    expect(result.items).toEqual(['a', '[Circular]']);
+  });
+
   it('should stop descending, when the payload nests deeper than the maximum depth', () => {
     let payload: Record<string, unknown> = { leaf: true };
 
@@ -80,5 +89,17 @@ describe('redactLogPayload', () => {
     const result = redactLogPayload(query);
 
     expect(result).toEqual({ limit: '10', token: REDACT_CENSOR });
+  });
+
+  it('should censor a hyphenated header key, when it is sensitive', () => {
+    const result = redactLogPayload({ headers: { 'x-api-key': 'gha-1' } });
+
+    expect(result).toEqual({ headers: { 'x-api-key': '[REDACTED]' } });
+  });
+
+  it('should not censor a key that merely contains a sensitive substring', () => {
+    const result = redactLogPayload({ passwordPolicyEnabled: true });
+
+    expect(result).toEqual({ passwordPolicyEnabled: true });
   });
 });

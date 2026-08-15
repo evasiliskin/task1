@@ -25,7 +25,7 @@ describe('ResponseEnvelopeInterceptor', () => {
 
   it('should wrap the payload in a success envelope, when the handler returns an object', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1' },
+      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(200), { handle: () => of({ importId: 'abc' }) }),
@@ -43,7 +43,7 @@ describe('ResponseEnvelopeInterceptor', () => {
 
   it('should emit items and pagination, when the handler returns a list result', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1' },
+      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(200), {
@@ -62,7 +62,7 @@ describe('ResponseEnvelopeInterceptor', () => {
     const file = new StreamableFile(Buffer.from('pdf'));
 
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1' },
+      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(200), { handle: () => of(file) }),
@@ -74,7 +74,7 @@ describe('ResponseEnvelopeInterceptor', () => {
 
   it('should report the status the handler set, when it overrode it to 503', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1' },
+      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(503), {
@@ -84,6 +84,22 @@ describe('ResponseEnvelopeInterceptor', () => {
     );
 
     expect(result).toMatchObject({ status: 'SUCCESS', code: 503 });
+  });
+
+  it('should default to 200, when the response has no statusCode set', async () => {
+    const contextWithNoStatus = {
+      switchToHttp: () => ({ getResponse: () => ({}) }),
+    } as unknown as ExecutionContext;
+
+    const result = await requestContextService.run(
+      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      async () =>
+        await firstValueFrom(
+          interceptor.intercept(contextWithNoStatus, { handle: () => of({ ok: true }) }),
+        ),
+    );
+
+    expect(result).toMatchObject({ status: 'SUCCESS', code: 200 });
   });
 
   it('should still produce a correlationId, when no request context is active', async () => {

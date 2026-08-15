@@ -2,16 +2,17 @@ import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@ne
 import { type Redis } from 'ioredis';
 
 import { REDIS_CLIENT } from '../infra/client-tokens.js';
-import { LoggerAware } from '../logger/logger-aware.base.js';
-import { LoggerService } from '../logger/rmq/logger.service.js';
+import { type AppLogger } from '../logger/app-logger.js';
+import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
+import { LOGGER_FACTORY } from '../logger/logger.tokens.js';
 
 @Injectable()
-export class RedisConnectionService extends LoggerAware implements OnModuleInit, OnModuleDestroy {
+export class RedisConnectionService implements OnModuleInit, OnModuleDestroy {
   public constructor(
     @Inject(REDIS_CLIENT) private readonly client: Redis,
-    loggerService: LoggerService,
+    @Inject(LOGGER_FACTORY) loggerFactory: ILoggerFactory,
   ) {
-    super(loggerService);
+    this.logger = loggerFactory.getLogger(RedisConnectionService.name);
   }
 
   public async onModuleInit(): Promise<void> {
@@ -23,4 +24,6 @@ export class RedisConnectionService extends LoggerAware implements OnModuleInit,
   public async onModuleDestroy(): Promise<void> {
     await this.client.quit();
   }
+
+  private readonly logger: AppLogger;
 }

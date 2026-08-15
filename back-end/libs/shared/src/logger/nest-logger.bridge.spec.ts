@@ -1,4 +1,7 @@
-import { type AppLogger } from './app-logger.js';
+import { type LogLevel } from '@nestjs/common';
+import { pino } from 'pino';
+
+import { AppLogger } from './app-logger.js';
 import { NestLoggerBridge } from './nest-logger.bridge.js';
 
 describe('NestLoggerBridge', () => {
@@ -69,5 +72,29 @@ describe('NestLoggerBridge', () => {
 
   it('should not throw, when setLogLevels() is called', () => {
     expect(() => bridge.setLogLevels(['log', 'error'])).not.toThrow();
+  });
+
+  it('should leave the pino level unchanged, when none of the requested levels map to a known pino level', () => {
+    const pinoLogger = pino({ level: 'info' });
+    const bridgeWithPino = new NestLoggerBridge(
+      AppLogger.create(pinoLogger, 'Nest', 'http'),
+      pinoLogger,
+    );
+
+    bridgeWithPino.setLogLevels(['unknown-level'] as unknown as LogLevel[]);
+
+    expect(pinoLogger.level).toBe('info');
+  });
+
+  it('should apply the highest requested level to the underlying pino logger', () => {
+    const pinoLogger = pino({ level: 'info' });
+    const bridgeWithPino = new NestLoggerBridge(
+      AppLogger.create(pinoLogger, 'Nest', 'http'),
+      pinoLogger,
+    );
+
+    bridgeWithPino.setLogLevels(['warn', 'error']);
+
+    expect(pinoLogger.level).toBe('warn');
   });
 });

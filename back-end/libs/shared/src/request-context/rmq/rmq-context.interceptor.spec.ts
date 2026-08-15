@@ -44,7 +44,30 @@ describe('RmqContextInterceptor', () => {
     expect(observedContext).toEqual({
       correlationId: '11111111-1111-4111-8111-111111111111',
       requestId: '22222222-2222-4222-8222-222222222222',
+      correlationIdSource: 'inbound',
     });
+  });
+
+  it('should generate valid UUID v4 ids, when the headers property is missing entirely', async () => {
+    const rmqContext = {
+      getMessage: () => ({ properties: {} }),
+    } as unknown as RmqContext;
+    const executionContext = {
+      switchToRpc: () => ({ getContext: <T>() => rmqContext as T }),
+    } as unknown as ExecutionContext;
+    let observedContext: Partial<{ correlationId: string; requestId: string }> = {};
+    const callHandler: CallHandler = {
+      handle: () => {
+        observedContext = requestContextService.getAttributes();
+
+        return of(null);
+      },
+    };
+
+    await firstValueFrom(interceptor.intercept(executionContext, callHandler));
+
+    expect(observedContext.correlationId).toMatch(UUID_V4_PATTERN);
+    expect(observedContext.requestId).toMatch(UUID_V4_PATTERN);
   });
 
   it('should generate valid UUID v4 ids, when headers are absent', async () => {

@@ -1,4 +1,4 @@
-import { resolveId } from './id-validation.util.js';
+import { resolveId, resolveIdWithSource } from './id-validation.util.js';
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -63,5 +63,26 @@ describe('resolveId', () => {
     const result = resolveId([]);
 
     expect(result).toMatch(UUID_V4_PATTERN);
+  });
+});
+
+describe('resolveIdWithSource', () => {
+  it('should report "inbound", when a valid id is supplied', () => {
+    const resolved = resolveIdWithSource('abc-123');
+
+    expect(resolved).toEqual({ value: 'abc-123', source: 'inbound' });
+  });
+
+  it('should report "generated", when no id is supplied', () => {
+    const resolved = resolveIdWithSource(undefined);
+
+    expect(resolved.source).toBe('generated');
+    expect(resolved.value).toHaveLength(36);
+  });
+
+  it('should report "generated", when the supplied id is rejected as unsafe', () => {
+    const resolved = resolveIdWithSource('bad id\nwith newline');
+
+    expect(resolved.source).toBe('generated');
   });
 });

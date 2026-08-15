@@ -1,5 +1,5 @@
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
 import { EnsureEventIndexesInitializer } from './ensure-event-indexes-initializer.service.js';

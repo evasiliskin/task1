@@ -1,12 +1,11 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { listResult } from '@task1/shared/pagination/list-result';
-import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -28,7 +27,7 @@ import {
 export class LogsController {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
+    private readonly propagatingClient: ContextPropagatingClient,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
   ) {}
@@ -58,12 +57,9 @@ export class LogsController {
   public async search(
     @ModelBinder(SearchLogsRequestSchema) bound: BoundRequest<typeof SearchLogsRequestSchema>,
   ): Promise<SearchLogsResponse> {
-    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
-
     const result = await firstValueFrom(
-      this.serviceBClient
-        .send<ICursorPage<LogEntry>>(RPC_PATTERNS.LOGS_SEARCH, record)
+      this.propagatingClient
+        .send<ICursorPage<LogEntry>>(this.serviceBClient, RPC_PATTERNS.LOGS_SEARCH, bound.data)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

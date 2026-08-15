@@ -1,152 +1,120 @@
-import type { Mock } from 'vitest';
+import { Writable } from 'node:stream';
 
-import { AppLogger, type IAppLogger } from './app-logger.js';
+import { pino, type Logger } from 'pino';
+
+import { AppLogger } from './app-logger.js';
+
+function captureLogger(): { root: Logger; lines: Record<string, unknown>[] } {
+  const lines: Record<string, unknown>[] = [];
+  const stream = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      lines.push(JSON.parse(chunk.toString()) as Record<string, unknown>);
+      callback();
+    },
+  });
+
+  return { root: pino({ level: 'trace' }, stream), lines };
+}
 
 describe('AppLogger', () => {
-  let pinoLogger: {
-    trace: Mock<IAppLogger['trace']>;
-    debug: Mock<IAppLogger['debug']>;
-    info: Mock<IAppLogger['info']>;
-    warn: Mock<IAppLogger['warn']>;
-    error: Mock<IAppLogger['error']>;
-    fatal: Mock<IAppLogger['fatal']>;
-  };
-  let logger: AppLogger;
+  it('should bind source and channel once via a child logger', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'HealthController', 'http');
 
-  beforeEach(() => {
-    pinoLogger = {
-      trace: vi.fn(),
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      fatal: vi.fn(),
-    };
-    logger = new AppLogger(pinoLogger, 'HealthController', 'http');
-  });
-
-  it('should forward info() to the underlying pino logger with source and channel bound', () => {
     logger.info({ statusCode: 200 }, 'request handled');
 
-    expect(pinoLogger.info).toHaveBeenCalledWith(
-      { statusCode: 200, source: 'HealthController', channel: 'http' },
-      'request handled',
-    );
+    expect(lines[0]).toMatchObject({
+      source: 'HealthController',
+      channel: 'http',
+      statusCode: 200,
+      msg: 'request handled',
+    });
   });
 
-  it('should forward trace()', () => {
-    logger.trace({}, 'trace message');
+  it('should serialize the error under the standard err key, when one is supplied', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'rmq');
 
-    expect(pinoLogger.trace).toHaveBeenCalledWith(
-      { source: 'HealthController', channel: 'http' },
-      'trace message',
-    );
+    logger.error({ importId: 'i-1' }, 'import failed', new Error('disk full'));
+
+    expect(lines[0].err).toMatchObject({ type: 'Error', message: 'disk full' });
+    expect(String((lines[0].err as { stack: string }).stack)).toContain('disk full');
   });
 
-  it('should forward debug()', () => {
-    logger.debug({}, 'debug message');
+  it('should include the cause chain, when the error wraps another', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'rmq');
 
-    expect(pinoLogger.debug).toHaveBeenCalledWith(
-      { source: 'HealthController', channel: 'http' },
-      'debug message',
-    );
+    logger.error({}, 'failed', new Error('outer', { cause: new Error('inner') }));
+
+    // pino-std-serializers@7 does not emit a nested `cause` object — it folds the cause chain
+    // into `message`/`stack` instead (see its err.js: causes are appended, not nested), so this
+    // asserts on that actual, verified shape rather than a `{ cause: { message } }` structure.
+    const err = lines[0].err as { message: string; stack: string };
+
+    expect(err.message).toContain('inner');
+    expect(err.stack).toContain('caused by: Error: inner');
   });
 
-  it('should forward warn()', () => {
-    logger.warn({}, 'warn message');
+  it('should redact a sensitive key nested anywhere in the fields', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'http');
 
-    expect(pinoLogger.warn).toHaveBeenCalledWith(
-      { source: 'HealthController', channel: 'http' },
-      'warn message',
-    );
+    logger.info({ payload: { nested: { apiKey: 'gha-1' } } }, 'published');
+
+    expect(lines[0].payload).toEqual({ nested: { apiKey: '[REDACTED]' } });
   });
 
-  it('should forward error()', () => {
-    logger.error({}, 'error message');
+  it('should carry the bindings of a derived logger onto every line', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'rmq').with({ importId: 'i-1' });
 
-    expect(pinoLogger.error).toHaveBeenCalledWith(
-      { source: 'HealthController', channel: 'http' },
-      'error message',
-    );
+    logger.info({}, 'stage one');
+    logger.info({}, 'stage two');
+
+    expect(lines.map((line) => line.importId)).toEqual(['i-1', 'i-1']);
   });
 
-  it('should forward fatal()', () => {
-    logger.fatal({}, 'fatal message');
+  it('should write at trace, debug and warn level, when those methods are called', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'http');
 
-    expect(pinoLogger.fatal).toHaveBeenCalledWith(
-      { source: 'HealthController', channel: 'http' },
-      'fatal message',
-    );
+    logger.trace({}, 'trace line');
+    logger.debug({}, 'debug line');
+    logger.warn({}, 'warn line');
+
+    expect(lines.map((line) => line.msg)).toEqual(['trace line', 'debug line', 'warn line']);
   });
 
-  it('should include a normalized error field on warn(), when a real Error is passed as the third argument', () => {
-    logger.warn({ key: 'x' }, 'warn message', new Error('boom'));
+  it('should serialize the error under the standard err key, when fatal is called with one', () => {
+    const { root, lines } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'rmq');
 
-    expect(pinoLogger.warn).toHaveBeenCalledWith(
-      {
-        key: 'x',
-        error: 'boom',
-        stack: expect.stringContaining('Error: boom') as string,
-        source: 'HealthController',
-        channel: 'http',
-      },
-      'warn message',
-    );
+    logger.fatal({ importId: 'i-1' }, 'unrecoverable', new Error('disk full'));
+
+    expect(lines[0]).toMatchObject({ msg: 'unrecoverable', importId: 'i-1' });
+    expect(lines[0].err).toMatchObject({ message: 'disk full' });
   });
 
-  it('should stringify a non-Error value passed as the third argument to warn()', () => {
-    logger.warn({}, 'warn message', 'not an Error instance');
+  it('should not write a line, when the level is disabled', () => {
+    const writeSpy = vi.fn((_chunk: Buffer, _encoding: string, callback: () => void) => {
+      callback();
+    });
+    const stream = new Writable({ write: writeSpy });
+    const logger = AppLogger.create(pino({ level: 'error' }, stream), 'Svc', 'http');
 
-    expect(pinoLogger.warn).toHaveBeenCalledWith(
-      { error: 'not an Error instance', source: 'HealthController', channel: 'http' },
-      'warn message',
-    );
+    logger.info({}, 'should be skipped');
+
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 
-  it('should include a normalized error field on error()', () => {
-    logger.error({ pattern: 'x.y' }, 'error message', new Error('kaboom'));
+  it('should report the active level, when asked whether debug is enabled', () => {
+    const { root } = captureLogger();
+    const logger = AppLogger.create(root, 'Svc', 'http');
 
-    expect(pinoLogger.error).toHaveBeenCalledWith(
-      {
-        pattern: 'x.y',
-        error: 'kaboom',
-        stack: expect.stringContaining('Error: kaboom') as string,
-        source: 'HealthController',
-        channel: 'http',
-      },
-      'error message',
-    );
-  });
-
-  it('should include a normalized error field on fatal()', () => {
-    logger.fatal({}, 'fatal message', new Error('fatal boom'));
-
-    expect(pinoLogger.fatal).toHaveBeenCalledWith(
-      {
-        error: 'fatal boom',
-        stack: expect.stringContaining('Error: fatal boom') as string,
-        source: 'HealthController',
-        channel: 'http',
-      },
-      'fatal message',
-    );
-  });
-
-  it('should omit the stack field, when the third argument is not an Error', () => {
-    logger.error({}, 'error message', 'not an Error instance');
-
-    expect(pinoLogger.error).toHaveBeenCalledWith(
-      { error: 'not an Error instance', source: 'HealthController', channel: 'http' },
-      'error message',
-    );
-  });
-
-  it('should not add an error field, when the third argument is omitted (backward compatible)', () => {
-    logger.warn({ key: 'x' }, 'warn message');
-
-    expect(pinoLogger.warn).toHaveBeenCalledWith(
-      { key: 'x', source: 'HealthController', channel: 'http' },
-      'warn message',
+    expect(logger.isLevelEnabled('debug')).toBe(true);
+    expect(AppLogger.create(pino({ level: 'warn' }), 'Svc', 'http').isLevelEnabled('debug')).toBe(
+      false,
     );
   });
 });

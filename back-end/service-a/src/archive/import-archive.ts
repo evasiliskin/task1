@@ -6,6 +6,7 @@ import {
   type ImportFailedEvent,
   type ImportStartedEvent,
 } from '@task1/shared/github-archive/index';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
 
 import { type ImportSourceRecord } from './import-run.types.js';
 import { type ImportResult } from './processing/process-archive.js';
@@ -15,6 +16,12 @@ const METRIC_PROCESSING_DURATION = 'service_a.archive.processing.duration';
 const METRIC_EVENTS_PROCESSED = 'service_a.archive.events.processed';
 const METRIC_EVENTS_INVALID = 'service_a.archive.events.invalid';
 const METRIC_PROCESSING_ERRORS = 'service_a.archive.processing.errors';
+
+const IMPORT_STARTED_LOG = 'import started';
+const ARCHIVE_DOWNLOADED_LOG = 'archive downloaded';
+const ARCHIVE_PROCESSED_LOG = 'archive processed';
+const IMPORT_COMPLETED_LOG = 'import completed';
+const IMPORT_FAILED_LOG = 'import failed';
 
 export type ImportSourceInput =
   | { readonly type: 'download'; readonly dateHour: string }
@@ -38,12 +45,12 @@ export interface IImportArchiveDependencies {
   ) => Promise<void>;
   recordImportFailed: (importId: string, reason: string, failedAt: Date) => Promise<void>;
   deleteArchive: (filePath: string) => Promise<void>;
+  logger: AppLogger;
 }
 
 export async function importArchive(
   source: ImportSourceInput,
   importId: string,
-  correlationId: string,
   dependencies: IImportArchiveDependencies,
 ): Promise<ImportResult> {
   const startedAt = new Date();
@@ -58,8 +65,13 @@ export async function importArchive(
     importId,
     archive: archiveLabel,
     startedAt: startedAt.toISOString(),
-    correlationId,
   };
+
+  // Bound once: every line below — and every warning the injected dependencies emit — carries
+  // importId without any call site having to remember it.
+  const logger = dependencies.logger.with({ importId, archive: archiveLabel });
+
+  logger.info({ source: sourceRecord.type }, IMPORT_STARTED_LOG);
 
   await dependencies.recordImportStarted(importId, sourceRecord, startedAt);
   dependencies.emitEvent(EVENT_PATTERNS.IMPORT_STARTED, startedEvent);
@@ -76,7 +88,10 @@ export async function importArchive(
 
       filePath = downloadResult.filePath;
 
-      await dependencies.recordMetric(METRIC_DOWNLOAD_DURATION, Date.now() - downloadStartedAt);
+      const downloadDurationMs = Date.now() - downloadStartedAt;
+
+      logger.info({ durationMs: downloadDurationMs }, ARCHIVE_DOWNLOADED_LOG);
+      await dependencies.recordMetric(METRIC_DOWNLOAD_DURATION, downloadDurationMs);
     } else {
       filePath = source.filePath;
     }
@@ -85,9 +100,22 @@ export async function importArchive(
 
     const processingStartedAt = Date.now();
     const result = await dependencies.processArchive(filePath, importId);
+    const processingDurationMs = Date.now() - processingStartedAt;
+
+    logger.info(
+      {
+        durationMs: processingDurationMs,
+        eventsProcessed: result.eventsProcessed,
+        validEvents: result.validEvents,
+        invalidEvents: result.invalidEvents,
+        duplicateEvents: result.duplicateEvents,
+        errorCount: result.errorCount,
+      },
+      ARCHIVE_PROCESSED_LOG,
+    );
 
     const completionMetrics: [string, number][] = [
-      [METRIC_PROCESSING_DURATION, Date.now() - processingStartedAt],
+      [METRIC_PROCESSING_DURATION, processingDurationMs],
       [METRIC_EVENTS_PROCESSED, result.eventsProcessed],
       [METRIC_EVENTS_INVALID, result.invalidEvents],
     ];
@@ -109,11 +137,18 @@ export async function importArchive(
       invalidEvents: result.invalidEvents,
       duplicateEvents: result.duplicateEvents,
       errorCount: result.errorCount,
-      correlationId,
     };
 
     dependencies.emitEvent(EVENT_PATTERNS.IMPORT_COMPLETED, completedEvent);
     await dependencies.recordImportCompleted(importId, result, completedAt);
+
+    logger.info(
+      {
+        eventsProcessed: result.eventsProcessed,
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+      },
+      IMPORT_COMPLETED_LOG,
+    );
 
     return result;
   } catch (error) {
@@ -127,11 +162,16 @@ export async function importArchive(
       startedAt: startedAt.toISOString(),
       failedAt: failedAt.toISOString(),
       reason,
-      correlationId,
     };
 
     dependencies.emitEvent(EVENT_PATTERNS.IMPORT_FAILED, failedEvent);
     await dependencies.recordImportFailed(importId, reason, failedAt);
+
+    logger.error(
+      { durationMs: failedAt.getTime() - startedAt.getTime() },
+      IMPORT_FAILED_LOG,
+      error,
+    );
 
     throw error;
   } finally {

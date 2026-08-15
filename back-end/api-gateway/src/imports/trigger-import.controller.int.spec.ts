@@ -5,7 +5,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { ResponseEnvelopeModule } from '@task1/shared/api-response/response-envelope.module';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { of, throwError } from 'rxjs';
 import request from 'supertest';
@@ -22,8 +22,8 @@ import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 import { ImportsModule } from './imports.module.js';
 
 type App = Parameters<typeof request>[0];
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the mocked emit() call, not a domain interface.
-type EmittedMessage = { importId: string; dateHour: string };
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the mocked emit() call's RmqRecord, not a domain interface.
+type EmittedRecord = { data: { importId: string; dateHour: string } };
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the enveloped response body, not a domain interface.
 type ImportIdEnvelope = { result: { data: { importId: string } } };
 
@@ -35,11 +35,17 @@ describe('TriggerImportController (HTTP Integration)', () => {
     error: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
     info: ReturnType<typeof vi.fn>;
+    isLevelEnabled: ReturnType<typeof vi.fn>;
   };
 
   beforeAll(async () => {
     serviceAClient = { emit: vi.fn(() => of(undefined)) };
-    loggerSpy = { error: vi.fn(), warn: vi.fn(), info: vi.fn() };
+    loggerSpy = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      isLevelEnabled: vi.fn(() => false),
+    };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -90,11 +96,11 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(typeof (response.body as ImportIdEnvelope).result.data.importId).toBe('string');
       expect(serviceAClient.emit).toHaveBeenCalledTimes(1);
 
-      const [pattern, payload] = serviceAClient.emit.mock.calls[0] as [string, EmittedMessage];
+      const [pattern, record] = serviceAClient.emit.mock.calls[0] as [string, EmittedRecord];
 
       expect(pattern).toBe('archive.import.download');
-      expect(payload.importId).toBe((response.body as ImportIdEnvelope).result.data.importId);
-      expect(payload.dateHour).toBe('2026-08-11-0');
+      expect(record.data.importId).toBe((response.body as ImportIdEnvelope).result.data.importId);
+      expect(record.data.dateHour).toBe('2026-08-11-0');
     });
 
     it('should use the Idempotency-Key as the importId, when a valid UUID key is supplied', async () => {
@@ -108,9 +114,9 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(response.status).toBe(202);
       expect((response.body as ImportIdEnvelope).result.data.importId).toBe(idempotencyKey);
 
-      const [, payload] = serviceAClient.emit.mock.calls[0] as [string, EmittedMessage];
+      const [, record] = serviceAClient.emit.mock.calls[0] as [string, EmittedRecord];
 
-      expect(payload.importId).toBe(idempotencyKey);
+      expect(record.data.importId).toBe(idempotencyKey);
     });
 
     it('should return the same importId and emit again with the same importId, when the same Idempotency-Key is replayed', async () => {

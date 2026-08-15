@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { Controller, Headers, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { z } from 'zod';
 
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
@@ -26,12 +27,13 @@ function isValidIdempotencyKey(value: string): boolean {
 
 @ApiTags('imports')
 @Controller('imports')
-export class TriggerImportController extends LoggerAware {
+export class TriggerImportController {
   public constructor(
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
+    private readonly propagatingClient: ContextPropagatingClient,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(TriggerImportController.name);
   }
 
   @Post()
@@ -64,10 +66,12 @@ export class TriggerImportController extends LoggerAware {
     return { importId };
   }
 
+  private readonly logger: AppLogger;
+
   private publish(pattern: string, payload: Record<string, unknown>): void {
-    this.serviceAClient.emit(pattern, payload).subscribe({
+    this.propagatingClient.emit(this.serviceAClient, pattern, payload).subscribe({
       error: (error: unknown) => {
-        this.logger.error({ pattern, payload }, PUBLISH_FAILED_LOG, error);
+        this.logger.error({ pattern }, PUBLISH_FAILED_LOG, error);
       },
     });
   }

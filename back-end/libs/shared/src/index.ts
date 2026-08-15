@@ -22,18 +22,26 @@ export * from './pagination/cursor-page.types.js';
 export * from './pagination/list-result.js';
 export * from './pagination/pagination.const.js';
 
+export * from './redis/create-redis-client.js';
+
 export * from './logger/app-logger.js';
-export * from './logger/logger-aware.base.js';
+export * from './logger/logger-factory.interface.js';
+export * from './logger/logger.service.js';
+export * from './logger/logger.tokens.js';
+export * from './logger/logger-core.module.js';
 export * from './logger/nest-logger.bridge.js';
 export * from './logger/redact-paths.js';
 export * from './logger/redact-payload.js';
 export * from './logger/types.js';
+export * from './logger/error.serializer.js';
 
 export * from './request-context/id-validation.util.js';
 export * from './request-context/missing-request-context.error.js';
 export * from './request-context/propagation.util.js';
 export * from './request-context/request-context.service.js';
 export * from './request-context/request-context.types.js';
+export * from './request-context/resolve-request-context.util.js';
+export * from './request-context/rmq/context-propagating.client.js';
 
 export * from './config/environment.helper.js';
 export * from './config/logger.config.js';

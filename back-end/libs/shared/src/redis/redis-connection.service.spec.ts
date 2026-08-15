@@ -1,18 +1,18 @@
 import { type Redis } from 'ioredis';
 
-import { type LoggerService } from '../logger/rmq/logger.service.js';
+import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
 
 import { RedisConnectionService } from './redis-connection.service.js';
 
 describe('RedisConnectionService', () => {
   let infoMock: ReturnType<typeof vi.fn>;
-  let loggerService: LoggerService;
+  let loggerFactory: ILoggerFactory;
 
   beforeEach(() => {
     infoMock = vi.fn();
-    loggerService = {
+    loggerFactory = {
       getLogger: vi.fn().mockReturnValue({ info: infoMock }),
-    } as unknown as LoggerService;
+    };
   });
 
   describe('onModuleInit', () => {
@@ -21,7 +21,7 @@ describe('RedisConnectionService', () => {
         connect: vi.fn().mockResolvedValue(undefined),
         quit: vi.fn(),
       } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+      const service = new RedisConnectionService(client, loggerFactory);
 
       await service.onModuleInit();
 
@@ -35,7 +35,7 @@ describe('RedisConnectionService', () => {
         connect: vi.fn().mockRejectedValue(new Error('connection refused')),
         quit: vi.fn(),
       } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+      const service = new RedisConnectionService(client, loggerFactory);
 
       await expect(service.onModuleInit()).rejects.toThrow('connection refused');
     });
@@ -47,7 +47,7 @@ describe('RedisConnectionService', () => {
         connect: vi.fn(),
         quit: vi.fn().mockResolvedValue('OK'),
       } as unknown as Redis;
-      const service = new RedisConnectionService(client, loggerService);
+      const service = new RedisConnectionService(client, loggerFactory);
 
       await service.onModuleDestroy();
 

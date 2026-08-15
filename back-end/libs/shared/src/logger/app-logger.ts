@@ -1,60 +1,70 @@
-import { type LogChannel, type LogFields } from './types.js';
+import { type Logger } from 'pino';
 
-export interface IAppLogger {
-  trace(fields: LogFields, message: string): void;
-  debug(fields: LogFields, message: string): void;
-  info(fields: LogFields, message: string): void;
-  warn(fields: LogFields, message: string): void;
-  error(fields: LogFields, message: string): void;
-  fatal(fields: LogFields, message: string): void;
-}
-
-function buildErrorFields(error: unknown): LogFields {
-  if (!(error instanceof Error)) {
-    return { error: String(error) };
-  }
-
-  // The stack is what makes an error line actionable; without it the log only says what broke,
-  // never where.
-  return error.stack === undefined
-    ? { error: error.message }
-    : { error: error.message, stack: error.stack };
-}
+import { redactLogPayload } from './redact-payload.js';
+import { type LogChannel, type LogFields, type LogLevelName } from './types.js';
 
 export class AppLogger {
-  public constructor(
-    private readonly pinoLogger: IAppLogger,
-    private readonly source: string,
-    private readonly channel: LogChannel,
-  ) {}
+  /**
+   * Derives an operation-scoped logger. Every line from the result carries `bindings`, which is
+   * how a whole business operation becomes followable by e.g. `importId` without threading the
+   * value through every call site.
+   */
+  public with(bindings: LogFields): AppLogger {
+    return new AppLogger(this.pinoLogger.child(redactLogPayload(bindings) as LogFields));
+  }
+
+  public isLevelEnabled(level: LogLevelName): boolean {
+    return this.pinoLogger.isLevelEnabled(level);
+  }
 
   public trace(fields: LogFields, message: string): void {
-    this.pinoLogger.trace({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('trace', fields, message);
   }
 
   public debug(fields: LogFields, message: string): void {
-    this.pinoLogger.debug({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('debug', fields, message);
   }
 
   public info(fields: LogFields, message: string): void {
-    this.pinoLogger.info({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('info', fields, message);
   }
 
   public warn(fields: LogFields, message: string, error?: unknown): void {
-    this.pinoLogger.warn(this.buildFields(fields, error), message);
+    this.write('warn', fields, message, error);
   }
 
   public error(fields: LogFields, message: string, error?: unknown): void {
-    this.pinoLogger.error(this.buildFields(fields, error), message);
+    this.write('error', fields, message, error);
   }
 
   public fatal(fields: LogFields, message: string, error?: unknown): void {
-    this.pinoLogger.fatal(this.buildFields(fields, error), message);
+    this.write('fatal', fields, message, error);
   }
 
-  private buildFields(fields: LogFields, error: unknown): LogFields {
-    const errorFields = error === undefined ? {} : buildErrorFields(error);
+  /**
+   * Binds `source` and `channel` once, via a pino child logger, rather than re-spreading them onto
+   * every call's merge object.
+   */
+  public static create(root: Logger, source: string, channel: LogChannel): AppLogger {
+    return new AppLogger(root.child({ source, channel }));
+  }
 
-    return { ...fields, ...errorFields, source: this.source, channel: this.channel };
+  private constructor(private readonly pinoLogger: Logger) {}
+
+  /**
+   * Redaction happens here, not at the call site, so no caller can forget it — but it is a deep
+   * clone, so it must never run for a line that will be discarded. The level check comes first:
+   * raising the level under load then sheds the serialization cost, not just the output. `err` is
+   * attached after redaction; pino's `err` serializer handles it and it must not be deep-cloned.
+   */
+  private write(level: LogLevelName, fields: LogFields, message: string, error?: unknown): void {
+    if (!this.pinoLogger.isLevelEnabled(level)) {
+      return;
+    }
+
+    const redacted = redactLogPayload(fields) as Record<string, unknown>;
+
+    // eslint-disable-next-line security/detect-object-injection -- level is a constrained LogLevelName, not user input
+    this.pinoLogger[level](error === undefined ? redacted : { ...redacted, err: error }, message);
   }
 }

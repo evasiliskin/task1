@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// `correlationId` is deliberately absent: it travels on the AMQP `x-correlation-id` header and is
+// read from RequestContextService by the consumer. Carrying it in the payload as well produced two
+// divergent values for the same operation.
 export const importCompletedEventSchema = z.object({
   importId: z.uuid(),
   archive: z.string().min(1),
@@ -10,7 +13,6 @@ export const importCompletedEventSchema = z.object({
   invalidEvents: z.coerce.number().int().nonnegative(),
   duplicateEvents: z.coerce.number().int().nonnegative(),
   errorCount: z.coerce.number().int().nonnegative(),
-  correlationId: z.string().min(1),
 });
 
 export type ImportCompletedEvent = z.infer<typeof importCompletedEventSchema>;

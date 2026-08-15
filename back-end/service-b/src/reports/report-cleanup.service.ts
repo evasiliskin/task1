@@ -2,8 +2,8 @@ import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 
 import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
 
@@ -12,12 +12,12 @@ const SWEPT_LOG = 'Removed orphaned report files past their retention window';
 const SWEEP_FAILED_LOG = 'Could not sweep the report directory';
 
 @Injectable()
-export class ReportCleanupService extends LoggerAware implements OnModuleInit, OnModuleDestroy {
+export class ReportCleanupService implements OnModuleInit, OnModuleDestroy {
   public constructor(
     @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(ReportCleanupService.name);
   }
 
   public async onModuleInit(): Promise<void> {
@@ -35,6 +35,8 @@ export class ReportCleanupService extends LoggerAware implements OnModuleInit, O
       this.timer = undefined;
     }
   }
+
+  private readonly logger: AppLogger;
 
   private timer?: NodeJS.Timeout;
 

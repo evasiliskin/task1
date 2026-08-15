@@ -1,10 +1,9 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
-import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -21,7 +20,7 @@ import { type StatsResponse, StatsResponseSchema } from './schemas/stats-respons
 export class StatsController {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
+    private readonly propagatingClient: ContextPropagatingClient,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
   ) {}
@@ -34,12 +33,9 @@ export class StatsController {
   public async getStats(
     @ModelBinder(GetStatsRequestSchema) bound: BoundRequest<typeof GetStatsRequestSchema>,
   ): Promise<StatsResponse> {
-    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
-
     return await firstValueFrom(
-      this.serviceBClient
-        .send<StatsResponse>(RPC_PATTERNS.STATS_GET, record)
+      this.propagatingClient
+        .send<StatsResponse>(this.serviceBClient, RPC_PATTERNS.STATS_GET, bound.data)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
   }

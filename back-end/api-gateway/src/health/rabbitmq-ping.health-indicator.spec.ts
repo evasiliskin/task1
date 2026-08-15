@@ -2,6 +2,7 @@ import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthIndicatorService } from '@nestjs/terminus';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { NEVER, of, throwError } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -11,6 +12,7 @@ import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js
 describe('RabbitMqPingHealthIndicator', () => {
   let indicator: RabbitMqPingHealthIndicator;
   let requestContextService: RequestContextService;
+  let propagatingClient: ContextPropagatingClient;
   let upMock: ReturnType<typeof vi.fn>;
   let downMock: ReturnType<typeof vi.fn>;
 
@@ -25,14 +27,18 @@ describe('RabbitMqPingHealthIndicator', () => {
     } as unknown as HealthIndicatorService;
 
     requestContextService = new RequestContextService();
+    propagatingClient = new ContextPropagatingClient(requestContextService);
 
-    indicator = new RabbitMqPingHealthIndicator(healthIndicatorService, requestContextService, {
+    indicator = new RabbitMqPingHealthIndicator(healthIndicatorService, propagatingClient, {
       pingTimeoutMs: 3000,
     } as ConfigType<typeof rabbitmqConfig>);
   });
 
   const runWithinContext = <T>(callback: () => T): T =>
-    requestContextService.run({ correlationId: 'c-123', requestId: 'r-inbound' }, callback);
+    requestContextService.run(
+      { correlationId: 'c-123', requestId: 'r-inbound', correlationIdSource: 'inbound' },
+      callback,
+    );
 
   it('should report the indicator as up, when the target service replies to health.check', async () => {
     const expectedResult = { 'service-b': { status: 'up' } };
@@ -127,7 +133,7 @@ describe('RabbitMqPingHealthIndicator', () => {
 
     const shortTimeoutIndicator = new RabbitMqPingHealthIndicator(
       healthIndicatorService,
-      requestContextService,
+      propagatingClient,
       {
         pingTimeoutMs: 10,
       } as ConfigType<typeof rabbitmqConfig>,

@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 
+import { LoggerService } from '../../logger/logger.service.js';
 import { LoggerModule } from '../../logger/rmq/logger.module.js';
-import { LoggerService } from '../../logger/rmq/logger.service.js';
 import { CentralizedErrorHandlerService } from '../centralized-error-handler.service.js';
 import { CENTRALIZED_ERROR_LOGGER } from '../centralized-error-handler.tokens.js';
 import { ErrorFormatService } from '../error-format.service.js';

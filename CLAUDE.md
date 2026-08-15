@@ -31,6 +31,23 @@ Ground truth before applying the policies below — keep this section in sync wi
   already in place so real credential verification (Auth0/Passport.js/JWT/OIDC or similar) can be
   dropped into `isAuthenticated()` later. Do not implement a real provider, and do not change the
   stub's behavior, unless explicitly asked to.
+- **Logging**: pino via `@task1/shared/logger`. One `LoggerService` (`logger/logger.service.ts`)
+  builds `AppLogger`s from a single process-wide pino instance provided by
+  `LoggerCoreModule.forChannel('http' | 'rmq')`. `nestjs-pino` is **not** used. `AppLogger` binds
+  `source`/`channel` via a pino child logger, exposes `with(bindings)` for operation-scoped
+  context (e.g. `importId`), redacts every field object through `redactLogPayload`, and routes
+  errors to pino's `err` serializer — **never** pass an `Error` as a field, the `LogFields` type
+  rejects it. `correlationId`, `requestId` and `correlationIdSource` are stamped on every line by
+  the pino `mixin` reading `RequestContextService`'s AsyncLocalStorage store.
+- **Correlation across RabbitMQ**: every `ClientProxy.emit`/`.send` must go through
+  `ContextPropagatingClient` (`@task1/shared/request-context/rmq/context-propagating.client`).
+  Calling a raw client directly drops `x-correlation-id`; the consumer then mints a new id and the
+  trace chain breaks silently. `correlationIdSource: "generated"` on the `rmq` channel is the
+  alert condition for exactly that.
+- **Request logging**: `HttpLoggingMiddleware` owns `request started`/`request completed`;
+  `RmqLoggingInterceptor` owns `message received`/`message handled`/`message failed`. Request
+  bodies and headers appear only in the `debug`-level `request detail` line, behind an
+  `isLevelEnabled` guard, with an allowlisted header set and a 2 KB payload cap.
 - Full endpoint list, RabbitMQ message-pattern names, and the correlation-ID/request-ID system:
   see [README.txt](README.txt).
 

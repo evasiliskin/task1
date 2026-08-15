@@ -15,9 +15,10 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { type Request } from 'express';
 
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
@@ -43,13 +44,14 @@ const UNLINK_REJECTED_UPLOAD_FAILED_LOG = 'Failed to remove an upload rejected a
 
 @ApiTags('imports')
 @Controller('imports')
-export class UploadImportController extends LoggerAware {
+export class UploadImportController {
   public constructor(
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
+    private readonly propagatingClient: ContextPropagatingClient,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(UploadImportController.name);
   }
 
   // Tighter than the global default (100/min) — literal here must be kept in
@@ -111,10 +113,12 @@ export class UploadImportController extends LoggerAware {
     return { importId };
   }
 
+  private readonly logger: AppLogger;
+
   private publish(pattern: string, payload: Record<string, unknown>): void {
-    this.serviceAClient.emit(pattern, payload).subscribe({
+    this.propagatingClient.emit(this.serviceAClient, pattern, payload).subscribe({
       error: (error: unknown) => {
-        this.logger.error({ pattern, payload }, PUBLISH_FAILED_LOG, error);
+        this.logger.error({ pattern }, PUBLISH_FAILED_LOG, error);
       },
     });
   }

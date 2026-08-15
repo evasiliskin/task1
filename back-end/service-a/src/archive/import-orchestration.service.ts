@@ -2,8 +2,9 @@ import { unlink } from 'node:fs/promises';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 
 import { MetricsService } from '../infra/redis/metrics.service.js';
 
@@ -18,43 +19,28 @@ const EMIT_FAILED_LOG = 'Failed to publish lifecycle event';
 const DELETE_FAILED_LOG = 'Failed to delete processed archive';
 
 @Injectable()
-export class ImportOrchestrationService extends LoggerAware {
+export class ImportOrchestrationService {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
     private readonly metricsService: MetricsService,
     private readonly importRunTracker: ImportRunTracker,
     private readonly archiveDownloadService: ArchiveDownloadService,
     private readonly archiveProcessingService: ArchiveProcessingService,
+    private readonly propagatingClient: ContextPropagatingClient,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(ImportOrchestrationService.name);
   }
 
-  public importDownload(
-    dateHour: string,
-    importId: string,
-    correlationId: string,
-  ): Promise<ImportResult> {
-    return importArchive(
-      { type: 'download', dateHour },
-      importId,
-      correlationId,
-      this.buildDependencies(),
-    );
+  public importDownload(dateHour: string, importId: string): Promise<ImportResult> {
+    return importArchive({ type: 'download', dateHour }, importId, this.buildDependencies());
   }
 
-  public importUpload(
-    filePath: string,
-    importId: string,
-    correlationId: string,
-  ): Promise<ImportResult> {
-    return importArchive(
-      { type: 'upload', filePath },
-      importId,
-      correlationId,
-      this.buildDependencies(),
-    );
+  public importUpload(filePath: string, importId: string): Promise<ImportResult> {
+    return importArchive({ type: 'upload', filePath }, importId, this.buildDependencies());
   }
+
+  private readonly logger: AppLogger;
 
   private buildDependencies(): IImportArchiveDependencies {
     return {
@@ -62,7 +48,7 @@ export class ImportOrchestrationService extends LoggerAware {
       processArchive: (filePath, importId) =>
         this.archiveProcessingService.process(filePath, importId),
       emitEvent: (pattern, payload) => {
-        this.serviceBClient.emit(pattern, payload).subscribe({
+        this.propagatingClient.emit(this.serviceBClient, pattern, payload).subscribe({
           error: (error: unknown) => {
             this.logger.warn({ pattern }, EMIT_FAILED_LOG, error);
           },
@@ -77,6 +63,7 @@ export class ImportOrchestrationService extends LoggerAware {
       recordImportFailed: (importId, reason, failedAt) =>
         this.importRunTracker.recordFailed(importId, reason, failedAt),
       deleteArchive: (filePath) => this.deleteArchive(filePath),
+      logger: this.logger,
     };
   }
 

@@ -3,23 +3,28 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
 import { CentralizedErrorHandlerService } from '@task1/shared/exception-handling/centralized-error-handler.service';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { PINO_LOGGER } from '@task1/shared/logger/logger.tokens';
 import { NestLoggerBridge } from '@task1/shared/logger/nest-logger.bridge';
 import { createHelmetMiddleware } from '@task1/shared/security/helmet.config';
+import { type Logger } from 'pino';
 
 import { AppModule } from './app.module.js';
 import appConfig from './config/app.config.js';
+import { applyRequestContext } from './request-context.setup.js';
 
 async function bootstrap(): Promise<void> {
   let app: INestApplication | undefined;
 
   try {
-    app = await NestFactory.create(AppModule, { bufferLogs: true });
+    app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
 
     const loggerService = app.get(LoggerService);
+    const pinoLogger = app.get<Logger>(PINO_LOGGER);
     const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
-    app.useLogger(new NestLoggerBridge(bootstrapLogger));
+    app.useLogger(new NestLoggerBridge(bootstrapLogger, pinoLogger));
 
+    applyRequestContext(app);
     app.use(createHelmetMiddleware());
 
     app.setGlobalPrefix('api');
@@ -41,7 +46,7 @@ async function bootstrap(): Promise<void> {
     // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
     // GlobalExceptionFilter, shutdown notices — belongs to request handling, not to startup, so
     // it must not keep the "bootstrap" channel.
-    app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'http')));
+    app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'http'), pinoLogger));
   } catch (error) {
     if (app === undefined) {
       // eslint-disable-next-line n/no-process-exit -- no DI container available yet to resolve CentralizedErrorHandlerService

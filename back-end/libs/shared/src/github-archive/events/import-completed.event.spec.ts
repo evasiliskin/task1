@@ -11,7 +11,6 @@ describe('importCompletedEventSchema', () => {
     invalidEvents: 5,
     duplicateEvents: 5,
     errorCount: 0,
-    correlationId: 'c1',
   };
 
   it('should accept a valid payload, when all fields are present and well-formed', () => {

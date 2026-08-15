@@ -2,8 +2,8 @@ import { readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
 
@@ -12,12 +12,12 @@ const SWEPT_LOG = 'Removed stale temporary archive files left by an interrupted 
 const SWEEP_FAILED_LOG = 'Could not sweep the archive storage directory';
 
 @Injectable()
-export class StorageCleanupService extends LoggerAware implements OnModuleInit {
+export class StorageCleanupService implements OnModuleInit {
   public constructor(
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(StorageCleanupService.name);
   }
 
   public async onModuleInit(): Promise<void> {
@@ -43,4 +43,6 @@ export class StorageCleanupService extends LoggerAware implements OnModuleInit {
       this.logger.info({ count: staleFiles.length }, SWEPT_LOG);
     }
   }
+
+  private readonly logger: AppLogger;
 }

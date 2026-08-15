@@ -9,8 +9,9 @@ import {
   type ImportFailedEvent,
   type ImportStartedEvent,
 } from '@task1/shared/github-archive/index';
-import { LoggerAware } from '@task1/shared/logger/logger-aware.base';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { type ZodType } from 'zod';
 
 import rabbitmqConfig, { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
@@ -53,13 +54,14 @@ const REPUBLISH_REFUSED_LOG =
 const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
 @Controller()
-export class ImportEventsController extends LoggerAware {
+export class ImportEventsController {
   public constructor(
     private readonly tracker: ProcessingLogTracker,
     @Inject(rabbitmqConfig.KEY) private readonly rabbitmqConfiguration: RabbitmqConfiguration,
+    private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
-    super(loggerService);
+    this.logger = loggerService.getLogger(ImportEventsController.name);
   }
 
   @EventPattern(EVENT_PATTERNS.IMPORT_STARTED)
@@ -104,12 +106,14 @@ export class ImportEventsController extends LoggerAware {
     );
   }
 
+  private readonly logger: AppLogger;
+
   private async processEvent<
     TEvent extends ImportStartedEvent | ImportCompletedEvent | ImportFailedEvent,
   >(
     eventType: string,
     schema: ZodType<TEvent>,
-    toEntry: (event: TEvent, eventType: string) => IProcessingLogDocument,
+    toEntry: (event: TEvent, eventType: string, correlationId: string) => IProcessingLogDocument,
     payload: unknown,
     context: RmqContext,
   ): Promise<void> {
@@ -119,13 +123,17 @@ export class ImportEventsController extends LoggerAware {
     const parseResult = schema.safeParse(payload);
 
     if (!parseResult.success) {
-      this.logger.warn({ eventType, error: parseResult.error.message }, MALFORMED_MESSAGE_LOG);
+      this.logger.warn({ eventType, reason: parseResult.error.message }, MALFORMED_MESSAGE_LOG);
       channel.ack(message);
 
       return;
     }
 
-    const entry = toEntry(parseResult.data, eventType);
+    const entry = toEntry(
+      parseResult.data,
+      eventType,
+      this.requestContextService.requireContext().correlationId,
+    );
 
     try {
       await this.tracker.upsertLog(entry);
@@ -158,8 +166,8 @@ export class ImportEventsController extends LoggerAware {
         {
           eventType,
           retryCount,
-          error: errorMessage,
-          republishError:
+          reason: errorMessage,
+          republishReason:
             republishError instanceof Error ? republishError.message : String(republishError),
         },
         REPUBLISH_FAILED_LOG,
@@ -170,17 +178,17 @@ export class ImportEventsController extends LoggerAware {
     }
 
     if (!accepted) {
-      this.logger.error({ eventType, retryCount, error: errorMessage }, REPUBLISH_REFUSED_LOG);
+      this.logger.error({ eventType, retryCount, reason: errorMessage }, REPUBLISH_REFUSED_LOG);
       channel.nack(message, false, true);
 
       return;
     }
 
     if (isExhausted) {
-      this.logger.error({ eventType, retryCount, error: errorMessage }, DEAD_LETTERED_LOG);
+      this.logger.error({ eventType, retryCount, reason: errorMessage }, DEAD_LETTERED_LOG);
       await this.recordDeadLetter(entry, eventType, errorMessage);
     } else {
-      this.logger.warn({ eventType, retryCount, error: errorMessage }, RETRY_SCHEDULED_LOG);
+      this.logger.warn({ eventType, retryCount, reason: errorMessage }, RETRY_SCHEDULED_LOG);
     }
 
     channel.ack(message);
@@ -228,7 +236,7 @@ export class ImportEventsController extends LoggerAware {
       this.logger.error(
         {
           eventType,
-          error: writeError instanceof Error ? writeError.message : String(writeError),
+          reason: writeError instanceof Error ? writeError.message : String(writeError),
         },
         DEAD_LETTER_RECORD_FAILED_LOG,
       );

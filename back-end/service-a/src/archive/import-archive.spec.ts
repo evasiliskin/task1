@@ -5,7 +5,6 @@ import { type ImportResult } from './processing/process-archive.js';
 
 describe('importArchive', () => {
   const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
-  const correlationId = 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
   const successfulResult: ImportResult = {
     eventsProcessed: 10,
     validEvents: 8,
@@ -30,6 +29,12 @@ describe('importArchive', () => {
       recordImportCompleted: vi.fn().mockResolvedValue(undefined),
       recordImportFailed: vi.fn().mockResolvedValue(undefined),
       deleteArchive: vi.fn().mockResolvedValue(undefined),
+      logger: {
+        with: vi.fn().mockReturnThis(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as IImportArchiveDependencies['logger'],
       ...overrides,
     } as unknown as IImportArchiveDependencies &
       Record<keyof IImportArchiveDependencies, ReturnType<typeof vi.fn>>;
@@ -42,7 +47,6 @@ describe('importArchive', () => {
       const result = await importArchive(
         { type: 'download', dateHour: '2026-08-11-0' },
         importId,
-        correlationId,
         dependencies,
       );
 
@@ -102,18 +106,34 @@ describe('importArchive', () => {
       );
     });
 
+    it('should log every stage bound to the import id, when the import succeeds', async () => {
+      const lines: { fields: Record<string, unknown>; message: string }[] = [];
+      const logger = {
+        with: () => logger,
+        info: (fields: Record<string, unknown>, message: string) => lines.push({ fields, message }),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const dependencies = buildDependencies({ logger: logger as never });
+
+      await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
+
+      expect(lines.map((line) => line.message)).toEqual([
+        'import started',
+        'archive downloaded',
+        'archive processed',
+        'import completed',
+      ]);
+      expect(lines.at(-1)?.fields).toMatchObject({ eventsProcessed: expect.any(Number) as number });
+    });
+
     it('should record a processing-errors metric, when the result has a nonzero errorCount', async () => {
       const resultWithErrors: ImportResult = { ...successfulResult, errorCount: 3 };
       const dependencies = buildDependencies({
         processArchive: vi.fn().mockResolvedValue(resultWithErrors),
       });
 
-      await importArchive(
-        { type: 'download', dateHour: '2026-08-11-0' },
-        importId,
-        correlationId,
-        dependencies,
-      );
+      await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
 
       const [completionMetricEntries] = dependencies.recordMetrics.mock.calls[0] as [
         [string, number][],
@@ -132,7 +152,6 @@ describe('importArchive', () => {
       await importArchive(
         { type: 'upload', filePath: '/data/archives/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.json.gz' },
         importId,
-        correlationId,
         dependencies,
       );
 
@@ -163,12 +182,7 @@ describe('importArchive', () => {
       });
 
       await expect(
-        importArchive(
-          { type: 'download', dateHour: '2026-08-11-0' },
-          importId,
-          correlationId,
-          dependencies,
-        ),
+        importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies),
       ).rejects.toThrow(downloadError);
 
       const emittedPatterns = dependencies.emitEvent.mock.calls.map(
@@ -197,7 +211,6 @@ describe('importArchive', () => {
         importArchive(
           { type: 'upload', filePath: '/data/archives/x.json.gz' },
           importId,
-          correlationId,
           dependencies,
         ),
       ).rejects.toThrow(processingError);
@@ -221,12 +234,7 @@ describe('importArchive', () => {
       });
 
       await expect(
-        importArchive(
-          { type: 'download', dateHour: '2026-08-11-0' },
-          importId,
-          correlationId,
-          dependencies,
-        ),
+        importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies),
       ).rejects.toThrow('E11000 duplicate key');
 
       expect(dependencies.emitEvent).not.toHaveBeenCalled();
@@ -246,12 +254,7 @@ describe('importArchive', () => {
         }),
       });
 
-      await importArchive(
-        { type: 'download', dateHour: '2026-08-11-0' },
-        importId,
-        correlationId,
-        dependencies,
-      );
+      await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
 
       expect(callOrder[0]).toBe('claim');
       expect(callOrder[1]).toBe(`emit:${EVENT_PATTERNS.IMPORT_STARTED}`);
@@ -262,12 +265,7 @@ describe('importArchive', () => {
     it('should delete the downloaded archive after a successful import', async () => {
       const dependencies = buildDependencies();
 
-      await importArchive(
-        { type: 'download', dateHour: '2026-08-11-0' },
-        importId,
-        correlationId,
-        dependencies,
-      );
+      await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
 
       expect(dependencies.deleteArchive).toHaveBeenCalledWith(
         '/data/archives/2026-08-11-0.json.gz',
@@ -280,12 +278,7 @@ describe('importArchive', () => {
       });
 
       await expect(
-        importArchive(
-          { type: 'download', dateHour: '2026-08-11-0' },
-          importId,
-          correlationId,
-          dependencies,
-        ),
+        importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies),
       ).rejects.toThrow('corrupt gzip');
 
       expect(dependencies.deleteArchive).toHaveBeenCalledWith(
@@ -302,7 +295,6 @@ describe('importArchive', () => {
         importArchive(
           { type: 'upload', filePath: '/data/archives/x.json.gz' },
           importId,
-          correlationId,
           dependencies,
         ),
       ).rejects.toThrow('mongo down');
@@ -316,12 +308,7 @@ describe('importArchive', () => {
       });
 
       await expect(
-        importArchive(
-          { type: 'download', dateHour: '2026-08-11-0' },
-          importId,
-          correlationId,
-          dependencies,
-        ),
+        importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies),
       ).resolves.toEqual(successfulResult);
     });
   });

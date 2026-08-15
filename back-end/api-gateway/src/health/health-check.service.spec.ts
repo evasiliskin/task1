@@ -1,8 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthCheckService as TerminusHealthCheckService } from '@nestjs/terminus';
-import { type LoggerService } from '@task1/shared/logger/http/logger.service';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 
 import { HealthCheckService } from './health-check.service.js';
 import { type GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
@@ -15,13 +14,17 @@ const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'redis'];
 const ALL_UP_DETAILS = Object.fromEntries(ALL_KEYS.map((key) => [key, { status: 'up' }]));
 
 function buildService(
-  terminusCheck: ReturnType<typeof vi.fn>,
-  loggerErrorMock: ReturnType<typeof vi.fn> = vi.fn(),
+  overrides: {
+    terminusCheck?: ReturnType<typeof vi.fn>;
+    error?: ReturnType<typeof vi.fn>;
+  } = {},
 ): HealthCheckService {
+  const { terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis'])), error = vi.fn() } =
+    overrides;
   const terminus = { check: terminusCheck } as unknown as TerminusHealthCheckService;
   const loggerService = {
     getLogger: vi.fn().mockReturnValue({
-      error: loggerErrorMock,
+      error,
       warn: vi.fn(),
       info: vi.fn(),
       debug: vi.fn(),
@@ -37,7 +40,6 @@ function buildService(
     {} as RedisHealthIndicator,
     {} as ClientProxy,
     {} as ClientProxy,
-    new RequestContextService(),
     loggerService,
   );
 }
@@ -66,7 +68,7 @@ describe('HealthCheckService', () => {
         details: ALL_UP_DETAILS,
       });
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result).toEqual({
         status: 'ok',
@@ -83,7 +85,7 @@ describe('HealthCheckService', () => {
     it('should mark serviceA as unavailable and report the rest as ok, when service-a is unavailable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceA']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result).toEqual({
         status: 'degraded',
@@ -100,7 +102,7 @@ describe('HealthCheckService', () => {
     it('should mark serviceB as unavailable and report the rest as ok, when service-b is unavailable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceB']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result.services).toEqual({
         gateway: 'ok',
@@ -114,7 +116,7 @@ describe('HealthCheckService', () => {
     it('should mark rabbitmq as unavailable and report the rest as ok, when the broker is unreachable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['rabbitmq']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result.services).toEqual({
         gateway: 'ok',
@@ -128,7 +130,7 @@ describe('HealthCheckService', () => {
     it('should mark redis as unavailable and report the rest as ok, when Redis is unreachable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result.services).toEqual({
         gateway: 'ok',
@@ -142,7 +144,7 @@ describe('HealthCheckService', () => {
     it('should mark serviceB as unavailable, when its ping times out (indistinguishable from any other failure at this layer)', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceB']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result.status).toBe('degraded');
       expect(result.services.serviceB).toBe('unavailable');
@@ -151,7 +153,7 @@ describe('HealthCheckService', () => {
     it('should mark both serviceB and redis as unavailable independently, when both are down simultaneously', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceB', 'redis']));
 
-      const result = await buildService(terminusCheck).getHealth();
+      const result = await buildService({ terminusCheck }).getHealth();
 
       expect(result).toEqual({
         status: 'degraded',
@@ -169,17 +171,33 @@ describe('HealthCheckService', () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceB']));
       const loggerErrorMock = vi.fn();
 
-      await buildService(terminusCheck, loggerErrorMock).getHealth();
+      await buildService({ terminusCheck, error: loggerErrorMock }).getHealth();
 
       expect(loggerErrorMock).toHaveBeenCalledWith(
         expect.objectContaining({
           service: 'serviceB',
-          error: 'connection refused',
+          errorMessage: 'connection refused',
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           responseTimeMs: expect.any(Number),
         }),
         expect.stringContaining('serviceB'),
       );
+    });
+
+    it('should not duplicate the correlation fields the pino mixin already stamps', async () => {
+      const error = vi.fn();
+      const service = buildService({ error });
+
+      await service.getHealth();
+
+      const [fields] = error.mock.calls[0] as [Record<string, unknown>];
+
+      expect(fields).toMatchObject({
+        service: 'redis',
+        responseTimeMs: expect.any(Number) as number,
+      });
+      expect(fields).not.toHaveProperty('correlationId');
+      expect(fields).not.toHaveProperty('requestId');
     });
   });
 
@@ -187,7 +205,7 @@ describe('HealthCheckService', () => {
     it('should be ready, when only redis (non-critical) is unavailable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
 
-      const { ready, result } = await buildService(terminusCheck).getReadiness();
+      const { ready, result } = await buildService({ terminusCheck }).getReadiness();
 
       expect(ready).toBe(true);
       expect(result.services.redis).toBe('unavailable');
@@ -196,7 +214,7 @@ describe('HealthCheckService', () => {
     it('should not be ready, when service-a (critical) is unavailable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['serviceA']));
 
-      const { ready } = await buildService(terminusCheck).getReadiness();
+      const { ready } = await buildService({ terminusCheck }).getReadiness();
 
       expect(ready).toBe(false);
     });
@@ -204,7 +222,7 @@ describe('HealthCheckService', () => {
     it('should not be ready, when rabbitmq (critical) is unavailable even if redis (non-critical) is also down', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['rabbitmq', 'redis']));
 
-      const { ready, result } = await buildService(terminusCheck).getReadiness();
+      const { ready, result } = await buildService({ terminusCheck }).getReadiness();
 
       expect(ready).toBe(false);
       expect(result.services.redis).toBe('unavailable');
@@ -215,7 +233,7 @@ describe('HealthCheckService', () => {
     it('should always return status ok without checking any dependency', () => {
       const terminusCheck = vi.fn();
 
-      const result = buildService(terminusCheck).getLiveness();
+      const result = buildService({ terminusCheck }).getLiveness();
 
       expect(result).toEqual({ status: 'ok', service: 'gateway' });
       expect(terminusCheck).not.toHaveBeenCalled();

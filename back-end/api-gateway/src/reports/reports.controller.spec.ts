@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { type LoggerService } from '@task1/shared/logger/http/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type LogFields } from '@task1/shared/logger/types';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { type Response } from 'express';
 import { of } from 'rxjs';
 
@@ -48,7 +49,7 @@ function buildController(
 
   return new ReportsController(
     serviceBClient,
-    requestContextService,
+    new ContextPropagatingClient(requestContextService),
     rabbitmqConfiguration,
     reportConfiguration,
     loggerService,
@@ -117,7 +118,11 @@ describe('ReportsController', () => {
       const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
+        {
+          correlationId: 'correlation-id',
+          requestId: 'request-id',
+          correlationIdSource: 'inbound',
+        },
         () => controller.getPdfReport(bound, response),
       );
       response.emit('finish');
@@ -145,7 +150,11 @@ describe('ReportsController', () => {
       const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
+        {
+          correlationId: 'correlation-id',
+          requestId: 'request-id',
+          correlationIdSource: 'inbound',
+        },
         () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
@@ -171,7 +180,11 @@ describe('ReportsController', () => {
       const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
+        {
+          correlationId: 'correlation-id',
+          requestId: 'request-id',
+          correlationIdSource: 'inbound',
+        },
         () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
@@ -196,7 +209,11 @@ describe('ReportsController', () => {
       const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
+        {
+          correlationId: 'correlation-id',
+          requestId: 'request-id',
+          correlationIdSource: 'inbound',
+        },
         () => controller.getPdfReport(bound, response),
       );
       response.emit('close');
@@ -205,6 +222,7 @@ describe('ReportsController', () => {
       expect(warn).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
         'failed to delete generated PDF report file',
+        expect.anything(),
       );
     });
 
@@ -222,7 +240,11 @@ describe('ReportsController', () => {
       const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
+        {
+          correlationId: 'correlation-id',
+          requestId: 'request-id',
+          correlationIdSource: 'inbound',
+        },
         () => controller.getPdfReport(bound, response),
       );
       await waitFor(() => warn.mock.calls.length > 0, 'the delete-failure warning to be logged');
@@ -230,10 +252,12 @@ describe('ReportsController', () => {
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
         'failed to stream generated PDF report file',
+        expect.anything(),
       );
       expect(warn).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
         'failed to delete generated PDF report file',
+        expect.anything(),
       );
     });
 
@@ -256,7 +280,11 @@ describe('ReportsController', () => {
       try {
         await expect(
           requestContextService.run(
-            { correlationId: 'correlation-id', requestId: 'request-id' },
+            {
+              correlationId: 'correlation-id',
+              requestId: 'request-id',
+              correlationIdSource: 'inbound',
+            },
             () => controller.getPdfReport(bound, response),
           ),
         ).rejects.toThrow(ReportPathOutsideConfiguredDirectoryError);
@@ -283,8 +311,13 @@ describe('ReportsController', () => {
 
       try {
         await requestContextService
-          .run({ correlationId: 'correlation-id', requestId: 'request-id' }, () =>
-            controller.getPdfReport(bound, response),
+          .run(
+            {
+              correlationId: 'correlation-id',
+              requestId: 'request-id',
+              correlationIdSource: 'inbound',
+            },
+            () => controller.getPdfReport(bound, response),
           )
           .catch(() => undefined);
         await flushMicrotasks();

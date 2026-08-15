@@ -518,7 +518,21 @@ via a global RabbitMQ interceptor in service-a/service-b), stores them in an `As
 request context (`back-end/libs/shared/src/request-context/`, shared by all three services via
 `@task1/shared` — see the design doc referenced below), and makes them available to every
 controller, service, and log line for the duration of that request with no manual parameter
-threading.
+threading. On RabbitMQ, `correlationId` is carried **only** on the `x-correlation-id` AMQP header —
+it is deliberately not duplicated inside `import.*` event payloads (`ImportStartedEvent`,
+`ImportCompletedEvent`, `ImportFailedEvent`, etc.). Every outbound `ClientProxy.emit`/`.send` must
+go through `ContextPropagatingClient`
+(`back-end/libs/shared/src/request-context/rmq/context-propagating.client.ts`), which stamps the
+header from the current request context; calling a raw `ClientProxy` instead silently drops the
+header, and the next consumer mints a fresh id, breaking the trace chain at that hop.
+
+**`correlationIdSource`.** Every log line also carries `correlationIdSource`, either `"inbound"`
+(the id came from an incoming `X-Correlation-ID` header or `x-correlation-id` AMQP header) or
+`"generated"` (no id was supplied, so one was minted locally). On the `rmq` channel specifically,
+`correlationIdSource: "generated"` is the signal that a hop lost the incoming id — it means some
+publish site emitted without going through `ContextPropagatingClient`. There should be no
+`"generated"` values on the `rmq` channel in normal operation; any occurrence is a propagation bug
+at that publish site.
 
 **In logs.** Every service logs through a small `LoggerService`/`AppLogger` wrapper over
 `pino` (`back-end/libs/shared/src/logger/`, shared by all three services). Both `correlationId` and `requestId` are merged into

@@ -14,7 +14,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ResponseEnvelopeModule } from '@task1/shared/api-response/response-envelope.module';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { Redis } from 'ioredis';
 import { of, throwError } from 'rxjs';
@@ -49,8 +49,8 @@ vi.mock('node:fs/promises', async () => {
 });
 
 type App = Parameters<typeof request>[0];
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`: this is a local destructuring shape for the mocked emit() call, not a domain interface.
-type EmittedMessage = { importId: string; filePath: string };
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`: this is a local destructuring shape for the mocked emit() call's RmqRecord, not a domain interface.
+type EmittedRecord = { data: { importId: string; filePath: string } };
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- local destructuring shape for the enveloped response body, not a domain interface.
 type ImportIdEnvelope = { result: { data: { importId: string } } };
 
@@ -63,6 +63,7 @@ describe('UploadImportController (HTTP Integration)', () => {
     error: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
     info: ReturnType<typeof vi.fn>;
+    isLevelEnabled: ReturnType<typeof vi.fn>;
   };
 
   beforeAll(async () => {
@@ -70,7 +71,12 @@ describe('UploadImportController (HTTP Integration)', () => {
     process.env.STORAGE_DIR = storageDirectory;
 
     serviceAClient = { emit: vi.fn(() => of(undefined)) };
-    loggerSpy = { error: vi.fn(), warn: vi.fn(), info: vi.fn() };
+    loggerSpy = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      isLevelEnabled: vi.fn(() => false),
+    };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -125,12 +131,12 @@ describe('UploadImportController (HTTP Integration)', () => {
       expect(typeof (response.body as ImportIdEnvelope).result.data.importId).toBe('string');
       expect(serviceAClient.emit).toHaveBeenCalledTimes(1);
 
-      const [pattern, payload] = serviceAClient.emit.mock.calls[0] as [string, EmittedMessage];
+      const [pattern, record] = serviceAClient.emit.mock.calls[0] as [string, EmittedRecord];
 
       expect(pattern).toBe('archive.process.upload');
-      expect(payload.importId).toBe((response.body as ImportIdEnvelope).result.data.importId);
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- payload.filePath is read back from this test's own mocked emit call for assertion, not external input.
-      expect(readFileSync(payload.filePath)).toEqual(gzip);
+      expect(record.data.importId).toBe((response.body as ImportIdEnvelope).result.data.importId);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- record.data.filePath is read back from this test's own mocked emit call for assertion, not external input.
+      expect(readFileSync(record.data.filePath)).toEqual(gzip);
     });
 
     it('should return 400 and not emit any message, when the uploaded file does not have a .json.gz extension', async () => {
@@ -341,7 +347,12 @@ describe('UploadImportController rate limiting (HTTP Integration)', () => {
     process.env.STORAGE_DIR = storageDirectory;
 
     const serviceAClient = { emit: vi.fn(() => of(undefined)) };
-    const loggerSpy = { error: vi.fn(), warn: vi.fn(), info: vi.fn() };
+    const loggerSpy = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      isLevelEnabled: vi.fn(() => false),
+    };
     const fakeRedisClient = createFakeRedisClient();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

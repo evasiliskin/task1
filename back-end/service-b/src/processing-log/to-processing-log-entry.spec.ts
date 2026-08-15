@@ -16,15 +16,14 @@ describe('toProcessingLogEntry', () => {
   const archive = '2026-08-11-0.json.gz';
 
   describe('toStartedLogEntry', () => {
-    it('should map a started event to a started log entry with empty metadata, when called', () => {
+    it('should map a started event onto a processing-log document, using the ambient correlation id', () => {
       const event: ImportStartedEvent = {
         importId,
         archive,
         startedAt: '2026-08-11T00:00:00.000Z',
-        correlationId,
       };
 
-      const result = toStartedLogEntry(event, 'github.import.started');
+      const result = toStartedLogEntry(event, 'github.import.started', correlationId);
 
       expect(result).toEqual({
         importId,
@@ -51,10 +50,9 @@ describe('toProcessingLogEntry', () => {
         invalidEvents: 1,
         duplicateEvents: 1,
         errorCount: 0,
-        correlationId,
       };
 
-      const result = toCompletedLogEntry(event, 'github.import.completed');
+      const result = toCompletedLogEntry(event, 'github.import.completed', correlationId);
 
       expect(result).toEqual({
         importId,
@@ -83,10 +81,9 @@ describe('toProcessingLogEntry', () => {
         startedAt: '2026-08-11T00:00:00.000Z',
         failedAt: '2026-08-11T00:02:00.000Z',
         reason: 'download failed: 404 Not Found',
-        correlationId,
       };
 
-      const result = toFailedLogEntry(event, 'github.import.failed');
+      const result = toFailedLogEntry(event, 'github.import.failed', correlationId);
 
       expect(result).toEqual({
         importId,
@@ -109,10 +106,9 @@ describe('toProcessingLogEntry', () => {
         startedAt: '2026-08-11T00:00:00.000Z',
         failedAt: '2026-08-11T00:02:00.000Z',
         reason: longReason,
-        correlationId,
       };
 
-      const result = toFailedLogEntry(event, 'github.import.failed');
+      const result = toFailedLogEntry(event, 'github.import.failed', correlationId);
 
       expect(result.errorInfo).toEqual({ reason: longReason.slice(0, 500) });
     });

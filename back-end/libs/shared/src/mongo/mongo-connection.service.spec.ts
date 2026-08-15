@@ -1,18 +1,18 @@
 import { type MongoClient } from 'mongodb';
 
-import { type LoggerService } from '../logger/rmq/logger.service.js';
+import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
 
 import { MongoConnectionService } from './mongo-connection.service.js';
 
 describe('MongoConnectionService', () => {
   let infoMock: ReturnType<typeof vi.fn>;
-  let loggerService: LoggerService;
+  let loggerFactory: ILoggerFactory;
 
   beforeEach(() => {
     infoMock = vi.fn();
-    loggerService = {
+    loggerFactory = {
       getLogger: vi.fn().mockReturnValue({ info: infoMock }),
-    } as unknown as LoggerService;
+    };
   });
 
   describe('onModuleInit', () => {
@@ -21,7 +21,7 @@ describe('MongoConnectionService', () => {
         connect: vi.fn().mockResolvedValue(undefined),
         close: vi.fn(),
       } as unknown as MongoClient;
-      const service = new MongoConnectionService(client, loggerService);
+      const service = new MongoConnectionService(client, loggerFactory);
 
       await service.onModuleInit();
 
@@ -35,7 +35,7 @@ describe('MongoConnectionService', () => {
         connect: vi.fn().mockRejectedValue(new Error('connection refused')),
         close: vi.fn(),
       } as unknown as MongoClient;
-      const service = new MongoConnectionService(client, loggerService);
+      const service = new MongoConnectionService(client, loggerFactory);
 
       await expect(service.onModuleInit()).rejects.toThrow('connection refused');
     });
@@ -47,7 +47,7 @@ describe('MongoConnectionService', () => {
         connect: vi.fn(),
         close: vi.fn().mockResolvedValue(undefined),
       } as unknown as MongoClient;
-      const service = new MongoConnectionService(client, loggerService);
+      const service = new MongoConnectionService(client, loggerFactory);
 
       await service.onModuleDestroy();
 
