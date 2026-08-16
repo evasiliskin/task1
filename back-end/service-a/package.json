@@ -19,13 +19,15 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
-    "test:cov": "cross-env NODE_ENV=test vitest run --coverage"
+    "test:cov": "cross-env NODE_ENV=test vitest run --coverage",
+    "test:int": "cross-env NODE_ENV=test vitest run --config vitest.int.config.mts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/microservices": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
     "@nestjs/terminus": "^11.1.1",
     "@task1/shared": "workspace:*",
     "amqp-connection-manager": "^5.0.0",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@nestjs/cli": "^11.0.0",
+    "@testcontainers/rabbitmq": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@swc/core": "^1.7.39",
@@ -66,6 +69,7 @@
     "source-map-support": "^0.5.21",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
+    "testcontainers": "^11.0.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "unplugin-swc": "^1.5.1",

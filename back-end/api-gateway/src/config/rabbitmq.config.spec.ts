@@ -12,6 +12,7 @@ describe('rabbitmqConfig', () => {
       delete process.env.RABBITMQ_URL;
       delete process.env.RABBITMQ_SERVICE_B_QUEUE;
       delete process.env.RABBITMQ_SERVICE_A_QUEUE;
+      delete process.env.RABBITMQ_SERVICE_A_IMPORTS_QUEUE;
       delete process.env.RABBITMQ_PING_TIMEOUT_MS;
       delete process.env.RABBITMQ_RPC_TIMEOUT_MS;
 
@@ -19,6 +20,7 @@ describe('rabbitmqConfig', () => {
         url: 'amqp://guest:guest@localhost:5672',
         serviceBQueue: 'service_b_queue',
         serviceAQueue: 'service_a_queue',
+        serviceAImportsQueue: 'service_a_imports_queue',
         pingTimeoutMs: 3000,
         rpcTimeoutMs: 10_000,
       });
@@ -30,6 +32,7 @@ describe('rabbitmqConfig', () => {
       process.env.RABBITMQ_URL = 'amqp://user:pass@rabbit-host:5672';
       process.env.RABBITMQ_SERVICE_B_QUEUE = 'custom_service_b_queue';
       process.env.RABBITMQ_SERVICE_A_QUEUE = 'custom_service_a_queue';
+      process.env.RABBITMQ_SERVICE_A_IMPORTS_QUEUE = 'custom_service_a_imports_queue';
       process.env.RABBITMQ_PING_TIMEOUT_MS = '5000';
       process.env.RABBITMQ_RPC_TIMEOUT_MS = '15000';
 
@@ -37,6 +40,7 @@ describe('rabbitmqConfig', () => {
         url: 'amqp://user:pass@rabbit-host:5672',
         serviceBQueue: 'custom_service_b_queue',
         serviceAQueue: 'custom_service_a_queue',
+        serviceAImportsQueue: 'custom_service_a_imports_queue',
         pingTimeoutMs: 5000,
         rpcTimeoutMs: 15_000,
       });

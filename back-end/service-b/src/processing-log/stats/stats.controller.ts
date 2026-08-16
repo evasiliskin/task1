@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { getStatsMessageSchema } from './get-stats-message.schema.js';
@@ -20,8 +21,7 @@ export class StatsController {
 
       return await this.statsService.getStats(message.importId);
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- RmqContext channel is loosely typed; matches HealthController's manual-ack precedent under noAck: false
-      context.getChannelRef().ack(context.getMessage());
+      ackMessage(context);
     }
   }
 }

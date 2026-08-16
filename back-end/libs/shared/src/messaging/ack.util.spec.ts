@@ -1,11 +1,11 @@
 import { type RmqContext } from '@nestjs/microservices';
 
-import { ackMessage } from './rmq-ack.util.js';
+import { ackMessage } from './ack.util.js';
 
 describe('ackMessage', () => {
   it('should ack the current message on the current channel', () => {
     const ack = vi.fn();
-    const message = { fields: { deliveryTag: 1 } };
+    const message = { content: Buffer.from('{}'), properties: {} };
     const context = {
       getChannelRef: () => ({ ack }),
       getMessage: () => message,

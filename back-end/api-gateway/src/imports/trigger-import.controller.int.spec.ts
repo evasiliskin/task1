@@ -16,7 +16,7 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 import { ContractModule } from '../contract/contract.module.js';
-import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { SERVICE_A_IMPORTS_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { ImportsModule } from './imports.module.js';
@@ -63,7 +63,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
         ImportsModule,
       ],
     })
-      .overrideProvider(SERVICE_A_RMQ_CLIENT)
+      .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -83,6 +83,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    serviceAClient.emit.mockReturnValue(of(undefined));
   });
 
   describe('POST /imports', () => {
@@ -165,17 +166,17 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(serviceAClient.emit).not.toHaveBeenCalled();
     });
 
-    it('should still return 202 but log an error, when publishing to service-a fails', async () => {
+    it('should return 503 when the broker rejects the publish', async () => {
       const publishError = new Error('broker unavailable');
       serviceAClient.emit.mockReturnValue(throwError(() => publishError));
 
-      await request(httpServer).post('/imports').send({ dateHour: '2026-08-11-0' }).expect(202);
+      const response = await request(httpServer)
+        .post('/imports')
+        .send({ dateHour: '2026-08-11-0' });
 
-      expect(loggerSpy.error).toHaveBeenCalledWith(
-        expect.objectContaining({ pattern: 'archive.import.download' }),
-        'Failed to publish message to service-a',
-        expect.anything(),
-      );
+      expect(response.status).toBe(503);
+      expect((response.body as { status: string; code: number }).status).toBe('FAILED');
+      expect((response.body as { status: string; code: number }).code).toBe(503);
     });
   });
 });

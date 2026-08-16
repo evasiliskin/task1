@@ -115,8 +115,8 @@ completes normally and sets the status code, so no error envelope is produced.
 | `GET` | `/api/v1/health` | Aggregated health of gateway + all dependencies | Public | — |
 | `GET` | `/api/v1/health/live` | Liveness probe (process is running) | Public | — |
 | `GET` | `/api/v1/health/ready` | Readiness probe (`503` if RabbitMQ/service-a/service-b down) | Public | — |
-| `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported) | Required | `archive.import.download` → service-a |
-| `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart, max 512 MiB, gzip magic bytes verified) | Required | `archive.process.upload` → service-a |
+| `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported). `503` if the broker rejects the publish | Required | `archive.import.download` → service-a |
+| `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart, max 512 MiB, gzip magic bytes verified). `503` if the broker rejects the publish | Required | `archive.process.upload` → service-a |
 | `GET` | `/api/v1/imports/:importId` | Get one import run's status/counters | Required | `imports.status.get` → service-a |
 | `GET` | `/api/v1/events` | Search imported GitHub events, cursor pagination | Required | `events.search` → service-a |
 | `GET` | `/api/v1/logs` | Search processing-log entries, cursor pagination | Required | `logs.search` → service-b |
@@ -325,13 +325,18 @@ Client --HTTP--> gateway --RabbitMQ emit--> service-a --gunzip/parse/validate-->
                                                                           RedisTimeSeries (metrics)
 ```
 
-The trigger itself (`POST /imports`, `POST /imports/upload`) is a fire-and-forget RabbitMQ `emit` —
-the gateway returns immediately (`202`/`201`) once service-a has accepted the command, not once the
-import finishes; poll `GET /imports/:importId` (RabbitMQ RPC) for status. `GET /events`, `GET
-/logs`, `GET /stats`, and `GET /reports/pdf` are RabbitMQ RPC (`.send`) — the gateway blocks until
-the downstream service replies.
+The trigger itself (`POST /imports`, `POST /imports/upload`) publishes a RabbitMQ `emit`, but the
+gateway now **awaits** that publish before responding: it returns `202`/`201` once service-a has
+accepted the command (not once the import finishes — poll `GET /imports/:importId`, RabbitMQ RPC,
+for status), or `503` if the broker rejects the publish (e.g. a queue-declaration mismatch on
+connect). `GET /events`, `GET /logs`, `GET /stats`, and `GET /reports/pdf` are RabbitMQ RPC
+(`.send`) — the gateway blocks until the downstream service replies.
 
-`service-a` and `service-b` are RMQ-only — no HTTP adapter, reachable only through the gateway.
+`service-a` and `service-b` serve no HTTP traffic — reachable only through the gateway, over
+RabbitMQ. `service-a` does construct a Nest HTTP adapter internally (`NestFactory.create` with
+`@nestjs/platform-express`), but purely as an implementation detail of running two RMQ listeners in
+one process via `connectMicroservice`/`startAllMicroservices` — it never opens an HTTP port or
+listens for HTTP traffic.
 Uploaded archives and generated PDF reports move as file bytes over Docker-Compose-managed shared
 volumes (`archive-storage`, `report-storage`), never through RabbitMQ or an application `Buffer` —
 only a small `{importId, filePath}`-shaped message crosses the broker for either.
@@ -475,6 +480,40 @@ explained in the design doc's own "Out of scope / trade-offs" section rather tha
 (`docs/superpowers/specs/2026-08-12-github-archive-platform-design.md#out-of-scope--trade-offs` —
 `docs/` is `.gitignore`d and not committed, so this link only resolves locally, not from a fresh
 clone).
+
+### Upgrading to the split import topology
+
+The AB1 gateway-imports-queue split (`service_a_imports_queue`) and the DLQ/retry rework changed
+the declared arguments of three existing durable queues. RabbitMQ treats a queue's arguments as
+part of its identity: redeclaring an existing queue with different arguments doesn't update it, it
+fails with `PRECONDITION_FAILED` (406) and the failing side's channel closes. Before first deploy
+of this change, drain and delete these queues so they get recreated with the new arguments:
+
+- `service_a_queue` — gains dead-letter arguments (`x-dead-letter-exchange`,
+  `x-dead-letter-routing-key`) for the first time, declared in `back-end/service-a/src/main.ts`.
+- `service_b_queue` — same, declared in `back-end/service-b/src/main.ts`.
+- `service_b_queue.retry` — previously carried a fixed `x-message-ttl`; the new
+  `buildRetryQueueArguments` (`back-end/libs/shared/src/messaging/queue-topology.ts`) omits it in
+  favor of a per-message `expiration` set at publish time. If this queue isn't drained/deleted, the
+  OLD fixed-TTL queue silently stays in place — retries would still work, but the backoff timing
+  fix would be inert without any error surfaced.
+
+```bash
+rabbitmqctl list_queues name messages
+rabbitmqctl delete_queue service_a_queue
+rabbitmqctl delete_queue service_b_queue
+rabbitmqctl delete_queue service_b_queue.retry
+```
+
+**Deploy order:** bring up `service-a` first and let it start consuming
+`service_a_imports_queue` before starting/redeploying the gateway — the gateway's RMQ clients
+publish to that queue with `noAssert: true` (they don't declare it), so if nothing has declared it
+yet, published messages have nowhere durable to land.
+
+**Watch for this failure mode:** `QueueTopologyInitializer` treats a queue-declaration failure as
+non-fatal and only logs a `warn`-level line, not an error, so an argument mismatch on redeclare is
+easy to miss in logs during an upgrade — grep service-a/service-b startup logs for that warning
+after deploying.
 
 ## Correlation ID & Request ID
 
@@ -647,12 +686,11 @@ These are current, verifiable gaps in the implementation — not roadmap items, 
 For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`
 (not committed — `docs/` is `.gitignore`d, so this resolves only if you have that file locally).
 
-- **No integration tests exercise the real RabbitMQ broker, MongoDB, or the Docker filesystem.**
-  `service-a`/`service-b` have unit tests only (mocked collections/channels), so `pnpm test` alone
-  would not catch a container-filesystem-permissions bug (e.g. a missing `chown` on a Docker
-  volume). The only way to catch that class of regression today is to run the stack by hand
-  (`pnpm docker:up`) and walk the flow in "Trying it end-to-end" above — there is no automated
-  smoke test and no CI config in this repo.
+- **Integration coverage is partial.** `pnpm test:int` exercises the real RabbitMQ broker via
+  Testcontainers for import delivery, retry and dead-lettering (`back-end/service-a/test/int/`).
+  MongoDB and the Docker volume layout are still only covered by unit tests with mocked
+  collections, and the Docker volume layout is not covered at all. There is still no CI config in
+  this repo.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
   `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
   visible: each dead-lettered message is recorded as a `processing-logs` document with `status:

@@ -4,7 +4,11 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 
-import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rmq-client.tokens.js';
+import {
+  SERVICE_A_IMPORTS_RMQ_CLIENT,
+  SERVICE_A_RMQ_CLIENT,
+  SERVICE_B_RMQ_CLIENT,
+} from './rmq-client.tokens.js';
 
 @Global()
 @Module({
@@ -18,7 +22,19 @@ import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rmq-client.tokens.
           options: {
             urls: [config.url],
             queue: config.serviceAQueue,
-            queueOptions: { durable: true },
+            queueOptions: { durable: true, noAssert: true },
+          },
+        }),
+      },
+      {
+        name: SERVICE_A_IMPORTS_RMQ_CLIENT,
+        inject: [rabbitmqConfig.KEY],
+        useFactory: (config: ConfigType<typeof rabbitmqConfig>) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [config.url],
+            queue: config.serviceAImportsQueue,
+            queueOptions: { durable: true, noAssert: true },
           },
         }),
       },
@@ -30,7 +46,7 @@ import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from './rmq-client.tokens.
           options: {
             urls: [config.url],
             queue: config.serviceBQueue,
-            queueOptions: { durable: true },
+            queueOptions: { durable: true, noAssert: true },
           },
         }),
       },

@@ -1,4 +1,4 @@
-import { type INestMicroservice } from '@nestjs/common';
+import { type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
@@ -11,37 +11,68 @@ import { type Logger } from 'pino';
 import { AppModule } from './app.module.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 
+function buildRmqOptions(url: string, queue: string, prefetchCount: number): MicroserviceOptions {
+  return {
+    transport: Transport.RMQ,
+    options: {
+      urls: [url],
+      queue,
+      queueOptions: {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': `${queue}.dlq`,
+        },
+      },
+      noAck: false,
+      prefetchCount,
+    },
+  };
+}
+
 async function bootstrap(): Promise<void> {
-  let app: INestMicroservice | undefined;
+  let app: INestApplication | undefined;
 
   try {
-    const { url, queue, prefetchCount } = rabbitmqConfig();
+    const { url, queue, importsQueue, rpcPrefetch, importPrefetch } = rabbitmqConfig();
 
-    app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
-      transport: Transport.RMQ,
-      options: {
-        urls: [url],
-        queue,
-        queueOptions: { durable: true },
-        noAck: false,
-        prefetchCount,
-      },
-      bufferLogs: true,
+    // A single application hosting two RMQ listeners. Imports run for minutes and hold their
+    // prefetch slot until they finish; RPCs must answer in milliseconds. Sharing one queue means
+    // the second workload waits behind the first, so each gets its own queue and prefetch budget.
+    //
+    // connectMicroservice/startAllMicroservices only exist on INestApplication (Nest's hybrid-app
+    // API), not on the INestApplicationContext returned by createApplicationContext, so this uses
+    // NestFactory.create(). No HTTP port is ever opened (listen() is never called) — service-a
+    // stays RabbitMQ-only; the HTTP adapter is instantiated but unused.
+    const application = await NestFactory.create<INestApplication>(AppModule, { bufferLogs: true });
+
+    application.connectMicroservice(buildRmqOptions(url, queue, rpcPrefetch), {
+      inheritAppConfig: true,
+    });
+    application.connectMicroservice(buildRmqOptions(url, importsQueue, importPrefetch), {
+      inheritAppConfig: true,
     });
 
-    const loggerService = app.get(LoggerService);
-    const pinoLogger = app.get<Logger>(PINO_LOGGER);
-    const bootstrapLogger = loggerService.getLogger('Nest', 'bootstrap');
-    app.useLogger(new NestLoggerBridge(bootstrapLogger, pinoLogger));
+    app = application;
 
-    app.enableShutdownHooks();
+    const loggerService = application.get(LoggerService);
+    const pinoLogger = application.get<Logger>(PINO_LOGGER);
+    application.useLogger(
+      new NestLoggerBridge(loggerService.getLogger('Nest', 'bootstrap'), pinoLogger),
+    );
 
-    await app.listen();
+    application.enableShutdownHooks();
 
-    // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
-    // RpcExceptionFilter, shutdown notices — belongs to message handling, not to startup, so it
-    // must not keep the "bootstrap" channel.
-    app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'rmq'), pinoLogger));
+    // startAllMicroservices() only calls listen() on each connected microservice — it does not run
+    // the shared container's onModuleInit/onApplicationBootstrap hooks (that's normally listen()'s
+    // job, and we never call listen() since there's no HTTP server). init() must be called
+    // explicitly so MongoConnectionService/RedisConnectionService connect and
+    // QueueTopologyInitializer declares the retry/DLQ queues before either listener starts
+    // consuming.
+    await application.init();
+    await application.startAllMicroservices();
+
+    application.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'rmq'), pinoLogger));
   } catch (error) {
     if (app === undefined) {
       // eslint-disable-next-line n/no-process-exit -- no DI container available yet to resolve CentralizedErrorHandlerService

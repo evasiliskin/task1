@@ -1,10 +1,9 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
-
-import { ackMessage } from '../rmq-ack.util.js';
 
 import { EventsSearchService } from './events-search.service.js';
 import { searchEventsMessageSchema } from './search-events-message.schema.js';

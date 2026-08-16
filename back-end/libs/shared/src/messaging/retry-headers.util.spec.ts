@@ -1,6 +1,7 @@
-import { buildRetryHeaders, getRetryCount, type IRmqMessage } from './retry-count.util.js';
+import { buildRetryHeaders, getRetryCount } from './retry-headers.util.js';
+import { type IRmqMessage } from './rmq-channel.types.js';
 
-describe('retryCountUtil', () => {
+describe('retryHeadersUtil', () => {
   describe('getRetryCount', () => {
     it('should return 0, when the message has no headers', () => {
       const message: IRmqMessage = { content: Buffer.from('{}'), properties: {} };

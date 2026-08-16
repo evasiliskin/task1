@@ -25,7 +25,8 @@ import storageConfig, { type StorageConfiguration } from '../config/storage.conf
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
-import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { publishImportMessage } from '../rmq/publish-import-message.js';
+import { SERVICE_A_IMPORTS_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import {
   ArchiveUploadError,
@@ -39,14 +40,13 @@ import {
   parseImportIdFromTemporaryFilename,
 } from './upload-storage.util.js';
 
-const PUBLISH_FAILED_LOG = 'Failed to publish message to service-a';
 const UNLINK_REJECTED_UPLOAD_FAILED_LOG = 'Failed to remove an upload rejected as non-gzip content';
 
 @ApiTags('imports')
 @Controller('imports')
 export class UploadImportController {
   public constructor(
-    @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
+    @Inject(SERVICE_A_IMPORTS_RMQ_CLIENT) private readonly serviceAImportsClient: ClientProxy,
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
     private readonly propagatingClient: ContextPropagatingClient,
     loggerService: LoggerService,
@@ -108,18 +108,15 @@ export class UploadImportController {
       );
     }
 
-    this.publish(RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD, { importId, filePath: finalPath });
+    await publishImportMessage({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceAImportsClient,
+      pattern: RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD,
+      payload: { importId, filePath: finalPath },
+    });
 
     return { importId };
   }
 
   private readonly logger: AppLogger;
-
-  private publish(pattern: string, payload: Record<string, unknown>): void {
-    this.propagatingClient.emit(this.serviceAClient, pattern, payload).subscribe({
-      error: (error: unknown) => {
-        this.logger.error({ pattern }, PUBLISH_FAILED_LOG, error);
-      },
-    });
-  }
 }

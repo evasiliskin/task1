@@ -22,7 +22,13 @@ async function bootstrap(): Promise<void> {
       options: {
         urls: [url],
         queue,
-        queueOptions: { durable: true },
+        queueOptions: {
+          durable: true,
+          arguments: {
+            'x-dead-letter-exchange': '',
+            'x-dead-letter-routing-key': `${queue}.dlq`,
+          },
+        },
         noAck: false,
         prefetchCount,
       },

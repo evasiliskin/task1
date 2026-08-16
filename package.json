@@ -9,6 +9,7 @@
     "dev:service-a": "cross-env NODE_ENV=development pnpm --filter service-a run start:dev",
     "build": "cross-env NODE_ENV=production pnpm -r run build",
     "test": "cross-env NODE_ENV=test pnpm -r run test",
+    "test:int": "cross-env NODE_ENV=test pnpm -r run test:int",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

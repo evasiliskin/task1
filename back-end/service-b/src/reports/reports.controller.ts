@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { generateReportMessageSchema } from './generate-report-message.schema.js';
@@ -42,8 +43,7 @@ export class ReportsController {
 
       throw error;
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- RmqContext channel is loosely typed; matches HealthController's manual-ack precedent under noAck: false
-      context.getChannelRef().ack(context.getMessage());
+      ackMessage(context);
     }
   }
 

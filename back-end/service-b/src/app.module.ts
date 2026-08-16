@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { type ConfigType, ConfigModule } from '@nestjs/config';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/exception-handling.module';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { MessagingModule } from '@task1/shared/messaging/messaging.module';
 import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
 import mongodbConfig from './config/mongodb.config.js';
@@ -25,6 +26,18 @@ import { ReportsModule } from './reports/reports.module.js';
     RequestContextModule,
     LoggerModule,
     ExceptionHandlingModule,
+    MessagingModule.forQueueAsync({
+      inject: [rabbitmqConfig.KEY],
+      useFactory: (config: ConfigType<typeof rabbitmqConfig>) => ({
+        mainQueue: config.queue,
+        rabbitmqUrl: config.url,
+        policy: {
+          maxRetries: config.maxRetries,
+          retryDelayMs: config.retryDelayMs,
+          maxRetryDelayMs: config.maxRetryDelayMs,
+        },
+      }),
+    }),
     MongoModule,
     RedisModule,
     HealthModule,

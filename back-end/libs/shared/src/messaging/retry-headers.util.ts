@@ -1,9 +1,6 @@
-export const RETRY_COUNT_HEADER = 'x-retry-count';
+import { type IRmqMessage } from './rmq-channel.types.js';
 
-export interface IRmqMessage {
-  content: Buffer;
-  properties: { headers?: Record<string, unknown> };
-}
+export const RETRY_COUNT_HEADER = 'x-retry-count';
 
 export function getRetryCount(message: IRmqMessage): number {
   // eslint-disable-next-line security/detect-object-injection -- RETRY_COUNT_HEADER is a fixed literal, not user input.

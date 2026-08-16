@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { MetricsService } from '../infra/redis/metrics.service.js';
@@ -7,7 +8,6 @@ import { MetricsService } from '../infra/redis/metrics.service.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { type IImportRunDocument } from './import-run.types.js';
 import { importStatusMessageSchema } from './import-status-message.schema.js';
-import { ackMessage } from './rmq-ack.util.js';
 
 const METRIC_STATUS_REQUESTS = 'service_a.archive.status.requests';
 

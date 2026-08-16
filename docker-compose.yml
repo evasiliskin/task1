@@ -74,6 +74,7 @@ services:
       <<: *rabbitmq_url
       SERVICE_NAME: service-a
       RABBITMQ_QUEUE: service_a_queue
+      RABBITMQ_IMPORTS_QUEUE: service_a_imports_queue
       MONGODB_URI: mongodb://mongodb:27017/service_a
       MONGO_BATCH_SIZE: 500
       REDIS_URL: redis://redis:6379
@@ -105,6 +106,7 @@ services:
       PORT: 3000
       RABBITMQ_SERVICE_B_QUEUE: service_b_queue
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue
+      RABBITMQ_SERVICE_A_IMPORTS_QUEUE: service_a_imports_queue
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data/archives
       REPORT_DIR: /data/reports

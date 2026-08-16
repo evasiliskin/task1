@@ -1,9 +1,8 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, type RmqContext } from '@nestjs/microservices';
 import { HealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
-
-import { ackMessage } from '../archive/rmq-ack.util.js';
 
 @Controller()
 export class HealthController {

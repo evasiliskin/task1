@@ -18,7 +18,7 @@ import uploadConfig from './config/upload.config.js';
 import { ContractModule } from './contract/contract.module.js';
 import { ImportsModule } from './imports/imports.module.js';
 import { applyRequestContext } from './request-context.setup.js';
-import { SERVICE_A_RMQ_CLIENT } from './rmq/rmq-client.tokens.js';
+import { SERVICE_A_IMPORTS_RMQ_CLIENT } from './rmq/rmq-client.tokens.js';
 import { RmqClientsModule } from './rmq/rmq-clients.module.js';
 
 type App = Parameters<typeof request>[0];
@@ -47,7 +47,7 @@ describe('Early-failure correlation (HTTP Integration)', () => {
         ImportsModule,
       ],
     })
-      .overrideProvider(SERVICE_A_RMQ_CLIENT)
+      .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
       .useValue({ emit: vi.fn(() => of(undefined)) })
       .overrideProvider(AuthGuard)
       .useValue({ canActivate: () => true })

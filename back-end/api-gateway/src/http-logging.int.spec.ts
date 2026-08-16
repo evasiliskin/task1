@@ -28,6 +28,7 @@ import { REDIS_CLIENT } from './health/infra-clients.tokens.js';
 import { ImportsModule } from './imports/imports.module.js';
 import {
   RABBITMQ_CONNECTION_MANAGER,
+  SERVICE_A_IMPORTS_RMQ_CLIENT,
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
 } from './rmq/rmq-client.tokens.js';
@@ -87,7 +88,7 @@ describe('HttpLoggingMiddleware (HTTP Integration)', () => {
         ImportsModule,
       ],
     })
-      .overrideProvider(SERVICE_A_RMQ_CLIENT)
+      .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -276,6 +277,8 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
       ],
     })
       .overrideProvider(SERVICE_A_RMQ_CLIENT)
+      .useValue(serviceAClient as unknown as ClientProxy)
+      .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(SERVICE_B_RMQ_CLIENT)
       .useValue(serviceBClient as unknown as ClientProxy)

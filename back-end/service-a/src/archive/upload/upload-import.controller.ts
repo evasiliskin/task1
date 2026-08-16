@@ -2,21 +2,23 @@ import { Controller } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, type RmqContext } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
+import { RetryPublisher } from '@task1/shared/messaging/retry-publisher';
+import { type IRmqChannel, type IRmqMessage } from '@task1/shared/messaging/rmq-channel.types';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
-import { ImportAlreadyClaimedError } from '../import-claim.error.js';
 import { ImportOrchestrationService } from '../import-orchestration.service.js';
-import { ackMessage } from '../rmq-ack.util.js';
+import { settleImportResult } from '../import-settlement.js';
 
 import { uploadImportMessageSchema } from './upload-import-message.schema.js';
 
-const ALREADY_CLAIMED_LOG_MESSAGE =
-  'Import already claimed by another consumer, skipping duplicate';
+const MALFORMED_MESSAGE_LOG = 'Rejected malformed upload-import message, acking without importing';
 
 @Controller()
 export class UploadImportController {
   public constructor(
     private readonly importOrchestrationService: ImportOrchestrationService,
+    private readonly retryPublisher: RetryPublisher,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(UploadImportController.name);
@@ -27,23 +29,25 @@ export class UploadImportController {
     @Payload() payload: unknown,
     @Ctx() context: RmqContext,
   ): Promise<void> {
-    try {
-      const { importId, filePath } = uploadImportMessageSchema.parse(payload);
+    const parsed = uploadImportMessageSchema.safeParse(payload);
 
-      try {
-        await this.importOrchestrationService.importUpload(filePath, importId);
-      } catch (error) {
-        if (error instanceof ImportAlreadyClaimedError) {
-          this.logger.info({ importId }, ALREADY_CLAIMED_LOG_MESSAGE);
-
-          return;
-        }
-
-        throw error;
-      }
-    } finally {
+    if (!parsed.success) {
+      this.logger.warn({}, MALFORMED_MESSAGE_LOG, parsed.error);
       ackMessage(context);
+
+      return;
     }
+
+    const { importId, filePath } = parsed.data;
+
+    await settleImportResult({
+      run: () => this.importOrchestrationService.importUpload(filePath, importId),
+      channel: context.getChannelRef() as IRmqChannel,
+      message: context.getMessage() as IRmqMessage,
+      retryPublisher: this.retryPublisher,
+      logger: this.logger,
+      importId,
+    });
   }
 
   private readonly logger: AppLogger;
