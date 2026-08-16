@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
 import { LoggerModule } from '@task1/shared/logger/http/logger.module';
+import { buildUploadTemporaryFilename } from '@task1/shared/storage/archive-paths';
 import { diskStorage } from 'multer';
 
 import storageConfig from '../config/storage.config.js';
@@ -11,8 +12,9 @@ import uploadConfig from '../config/upload.config.js';
 
 import { GetImportStatusController } from './get-import-status.controller.js';
 import { TriggerImportController } from './trigger-import.controller.js';
+import { UploadCleanupService } from './upload-cleanup.service.js';
 import { UploadImportController } from './upload-import.controller.js';
-import { buildTemporaryUploadFilename, isArchiveFilename } from './upload-storage.util.js';
+import { isArchiveFilename } from './upload-storage.util.js';
 
 @Module({
   imports: [
@@ -28,7 +30,7 @@ import { buildTemporaryUploadFilename, isArchiveFilename } from './upload-storag
             callback(null, storageConfiguration.dir);
           },
           filename: (_request, _file, callback) => {
-            callback(null, buildTemporaryUploadFilename(randomUUID()));
+            callback(null, buildUploadTemporaryFilename(randomUUID()));
           },
         }),
         fileFilter: (request, file, callback) => {
@@ -46,5 +48,6 @@ import { buildTemporaryUploadFilename, isArchiveFilename } from './upload-storag
     }),
   ],
   controllers: [UploadImportController, TriggerImportController, GetImportStatusController],
+  providers: [UploadCleanupService],
 })
 export class ImportsModule {}

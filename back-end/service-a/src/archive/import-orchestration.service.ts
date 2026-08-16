@@ -11,6 +11,7 @@ import { MetricsService } from '../infra/redis/metrics.service.js';
 import { ArchiveDownloadService } from './download/archive-download.service.js';
 import { importArchive, type IImportArchiveDependencies } from './import-archive.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
+import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { type ImportResult } from './processing/process-archive.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { ArchiveProcessingService } from './upload/archive-processing.service.js';
@@ -27,24 +28,30 @@ export class ImportOrchestrationService {
     private readonly archiveDownloadService: ArchiveDownloadService,
     private readonly archiveProcessingService: ArchiveProcessingService,
     private readonly propagatingClient: ContextPropagatingClient,
+    private readonly inFlightImports: InFlightImportRegistry,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(ImportOrchestrationService.name);
   }
 
   public importDownload(dateHour: string, importId: string): Promise<ImportResult> {
-    return importArchive({ type: 'download', dateHour }, importId, this.buildDependencies());
+    return this.inFlightImports.track(() =>
+      importArchive({ type: 'download', dateHour }, importId, this.buildDependencies()),
+    );
   }
 
   public importUpload(filePath: string, importId: string): Promise<ImportResult> {
-    return importArchive({ type: 'upload', filePath }, importId, this.buildDependencies());
+    return this.inFlightImports.track(() =>
+      importArchive({ type: 'upload', filePath }, importId, this.buildDependencies()),
+    );
   }
 
   private readonly logger: AppLogger;
 
   private buildDependencies(): IImportArchiveDependencies {
     return {
-      downloadArchive: (dateHour) => this.archiveDownloadService.download(dateHour),
+      downloadArchive: (dateHour, importId) =>
+        this.archiveDownloadService.download(dateHour, importId),
       processArchive: (filePath, importId) =>
         this.archiveProcessingService.process(filePath, importId),
       emitEvent: (pattern, payload) => {

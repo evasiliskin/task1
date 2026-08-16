@@ -51,7 +51,7 @@ describe('importArchive', () => {
       );
 
       expect(result).toEqual(successfulResult);
-      expect(dependencies.downloadArchive).toHaveBeenCalledWith('2026-08-11-0');
+      expect(dependencies.downloadArchive).toHaveBeenCalledWith('2026-08-11-0', importId);
       expect(dependencies.processArchive).toHaveBeenCalledWith(
         '/data/archives/2026-08-11-0.json.gz',
         importId,

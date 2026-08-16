@@ -10,10 +10,13 @@ import { DownloadImportController } from './download/download-import.controller.
 import { EnsureEventIndexesInitializer } from './ensure-event-indexes-initializer.service.js';
 import { EnsureImportIndexesInitializer } from './ensure-import-indexes-initializer.service.js';
 import { eventsCollectionProvider } from './events-collection.provider.js';
+import { GracefulShutdownService } from './graceful-shutdown.service.js';
 import { ImportOrchestrationService } from './import-orchestration.service.js';
+import { ImportRunReconciliationService } from './import-run-reconciliation.service.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { ImportStatusController } from './import-status.controller.js';
 import { importsCollectionProvider } from './imports-collection.provider.js';
+import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { EventsSearchController } from './search/events-search.controller.js';
 import { EventsSearchService } from './search/events-search.service.js';
@@ -53,9 +56,13 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     ArchiveProcessingService,
     ArchiveDownloadService,
     ImportRunTracker,
+    ImportRunReconciliationService,
     ImportOrchestrationService,
     EventsSearchService,
     StorageCleanupService,
+    InFlightImportRegistry,
+    GracefulShutdownService,
   ],
+  exports: [InFlightImportRegistry],
 })
 export class ArchiveModule {}

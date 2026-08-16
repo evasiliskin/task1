@@ -41,7 +41,7 @@ describe('RedisConnectionService', () => {
     });
   });
 
-  describe('onModuleDestroy', () => {
+  describe('onApplicationShutdown', () => {
     it('should gracefully close the Redis client, when destroyed', async () => {
       const client = {
         connect: vi.fn(),
@@ -49,7 +49,7 @@ describe('RedisConnectionService', () => {
       } as unknown as Redis;
       const service = new RedisConnectionService(client, loggerFactory);
 
-      await service.onModuleDestroy();
+      await service.onApplicationShutdown();
 
       // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
       expect(client.quit).toHaveBeenCalledTimes(1);

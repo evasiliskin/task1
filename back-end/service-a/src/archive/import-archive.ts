@@ -28,7 +28,7 @@ export type ImportSourceInput =
   | { readonly type: 'upload'; readonly filePath: string };
 
 export interface IImportArchiveDependencies {
-  downloadArchive: (dateHour: string) => Promise<{ filePath: string }>;
+  downloadArchive: (dateHour: string, importId: string) => Promise<{ filePath: string }>;
   processArchive: (filePath: string, importId: string) => Promise<ImportResult>;
   emitEvent: (pattern: string, payload: unknown) => void;
   recordMetric: (key: string, value: number) => Promise<void>;
@@ -84,7 +84,7 @@ export async function importArchive(
 
     if (source.type === 'download') {
       const downloadStartedAt = Date.now();
-      const downloadResult = await dependencies.downloadArchive(source.dateHour);
+      const downloadResult = await dependencies.downloadArchive(source.dateHour, importId);
 
       filePath = downloadResult.filePath;
 

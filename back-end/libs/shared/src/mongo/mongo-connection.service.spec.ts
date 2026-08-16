@@ -41,7 +41,7 @@ describe('MongoConnectionService', () => {
     });
   });
 
-  describe('onModuleDestroy', () => {
+  describe('onApplicationShutdown', () => {
     it('should close the Mongo client, when destroyed', async () => {
       const client = {
         connect: vi.fn(),
@@ -49,7 +49,7 @@ describe('MongoConnectionService', () => {
       } as unknown as MongoClient;
       const service = new MongoConnectionService(client, loggerFactory);
 
-      await service.onModuleDestroy();
+      await service.onApplicationShutdown();
 
       // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
       expect(client.close).toHaveBeenCalledTimes(1);

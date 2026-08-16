@@ -1,8 +1,7 @@
 import { createReadStream } from 'node:fs';
-import { unlink } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-import { Controller, Get, Inject, Res, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Inject, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -10,7 +9,6 @@ import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { type Response } from 'express';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -50,7 +48,6 @@ export class ReportsController {
   @ApiOkResponse({ description: 'The generated PDF report' })
   public async getPdfReport(
     @ModelBinder(GetReportRequestSchema) bound: BoundRequest<typeof GetReportRequestSchema>,
-    @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     const result = await firstValueFrom(
       this.propagatingClient
@@ -64,30 +61,9 @@ export class ReportsController {
 
     this.assertReportPathIsContained(result.reportPath);
 
-    let reportFileDeleted = false;
-
-    const deleteReportFile = (): void => {
-      if (reportFileDeleted) {
-        return;
-      }
-
-      reportFileDeleted = true;
-
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
-      unlink(result.reportPath).catch((error: unknown) => {
-        this.logger.warn(
-          { reportPath: result.reportPath },
-          'failed to delete generated PDF report file',
-          error,
-        );
-      });
-    };
-
-    // A single 'close' listener covers both outcomes: the happy-path completion of a fully
-    // streamed download, and a client-aborted/interrupted download that also fires 'close' on
-    // the response — either way the generated report file is no longer needed and can be cleaned up.
-    response.on('close', deleteReportFile);
-
+    // service-b writes this file and its ReportCleanupService removes it on retention. The gateway
+    // reads and forgets: two owners for one file produced a race where the sweeper could unlink a
+    // report between generation and download.
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
     const reportFileStream = createReadStream(result.reportPath);
 
@@ -97,7 +73,6 @@ export class ReportsController {
         'failed to stream generated PDF report file',
         error,
       );
-      deleteReportFile();
     });
 
     return new StreamableFile(reportFileStream, {

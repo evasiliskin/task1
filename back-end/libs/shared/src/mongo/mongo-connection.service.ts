@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { type MongoClient } from 'mongodb';
 
 import { MONGO_CLIENT } from '../infra/client-tokens.js';
@@ -7,7 +7,7 @@ import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
 import { LOGGER_FACTORY } from '../logger/logger.tokens.js';
 
 @Injectable()
-export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
+export class MongoConnectionService implements OnModuleInit, OnApplicationShutdown {
   public constructor(
     @Inject(MONGO_CLIENT) private readonly client: MongoClient,
     @Inject(LOGGER_FACTORY) loggerFactory: ILoggerFactory,
@@ -21,7 +21,12 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
     this.logger.info({}, 'Connected to MongoDB');
   }
 
-  public async onModuleDestroy(): Promise<void> {
+  /**
+   * `onApplicationShutdown`, not `onModuleDestroy`: Nest runs `onModuleDestroy` first, which used
+   * to close the client while an import was still writing. Shutdown order is now drain
+   * (`onModuleDestroy`) → stop consuming (dispose) → close connections (here).
+   */
+  public async onApplicationShutdown(): Promise<void> {
     await this.client.close();
   }
 

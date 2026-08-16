@@ -44,6 +44,7 @@ services:
       dockerfile: back-end/service-b/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     environment:
       <<: *rabbitmq_url
       SERVICE_NAME: service-b
@@ -70,6 +71,7 @@ services:
       dockerfile: back-end/service-a/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     environment:
       <<: *rabbitmq_url
       SERVICE_NAME: service-a
@@ -82,6 +84,7 @@ services:
       STORAGE_DIR: /data/archives
       ARCHIVE_MAX_DECOMPRESSED_BYTES: 4294967296
       ARCHIVE_MAX_LINE_BYTES: 1048576
+      SHUTDOWN_DRAIN_TIMEOUT_MS: 60000
     volumes:
       - archive-storage:/data/archives
     depends_on:
@@ -101,6 +104,7 @@ services:
       dockerfile: back-end/api-gateway/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     ports:
       - "3000:3000"
     environment:
@@ -113,6 +117,8 @@ services:
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data/archives
       REPORT_DIR: /data/reports
+      UPLOAD_RETENTION_MS: 86400000
+      UPLOAD_SWEEP_INTERVAL_MS: 900000
     volumes:
       - archive-storage:/data/archives
       - report-storage:/data/reports

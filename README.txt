@@ -515,6 +515,17 @@ non-fatal and only logs a `warn`-level line, not an error, so an argument mismat
 easy to miss in logs during an upgrade — grep service-a/service-b startup logs for that warning
 after deploying.
 
+**One-off cleanup — legacy `.tmp` files:** before this phase, uploaded/downloaded archives in
+`service-a`'s storage directory used a bare `.tmp` suffix; this phase split that into
+`.upload.tmp`/`.download.tmp` so the sweeper can tell an in-progress upload apart from an
+in-progress download. The sweeper only matches the new suffixes, so any bare-`.tmp` file left over
+from before the upgrade will never be cleaned up on its own. Run this once after deploying, to
+clear out that pre-existing backlog:
+
+```bash
+docker compose exec service-a sh -c 'find /data/archives -maxdepth 1 -name "*.tmp" ! -name "*.upload.tmp" ! -name "*.download.tmp" -mmin +60 -delete'
+```
+
 ## Correlation ID & Request ID
 
 Every request that flows through `gateway → service-a → service-b` carries two identifiers:
@@ -690,8 +701,10 @@ For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlea
   Testcontainers for import delivery, retry and dead-lettering (`back-end/service-a/test/int/`).
   `pnpm test:int` also exercises real MongoDB via Testcontainers for archive ingestion —
   decompression bounds, UTF-8 boundary correctness, payload shape and insert concurrency
-  (`back-end/service-a/test/int/archive-ingestion.int.spec.ts`). The Docker volume layout is still
-  not covered at all. There is still no CI config in this repo.
+  (`back-end/service-a/test/int/archive-ingestion.int.spec.ts`).
+  Filesystem ownership across the shared archive volume is covered by
+  `back-end/service-a/test/int/storage-ownership.int.spec.ts`.
+  The Docker volume layout is still not covered at all. There is still no CI config in this repo.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
   `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
   visible: each dead-lettered message is recorded as a `processing-logs` document with `status:

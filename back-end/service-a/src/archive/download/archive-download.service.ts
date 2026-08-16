@@ -13,9 +13,14 @@ export class ArchiveDownloadService {
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
   ) {}
 
-  public download(dateHour: string, httpGet?: HttpGetFunction): Promise<IDownloadArchiveResult> {
+  public download(
+    dateHour: string,
+    importId: string,
+    httpGet?: HttpGetFunction,
+  ): Promise<IDownloadArchiveResult> {
     return downloadArchive(
       dateHour,
+      importId,
       {
         baseUrl: this.archiveConfiguration.baseUrl,
         storageDirectory: this.storageConfiguration.dir,

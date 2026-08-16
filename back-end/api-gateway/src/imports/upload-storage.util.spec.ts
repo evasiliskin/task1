@@ -3,14 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-import {
-  buildFinalArchiveFilename,
-  buildTemporaryUploadFilename,
-  isArchiveFilename,
-  isGzipFile,
-  parseImportIdFromTemporaryFilename,
-  TEMP_UPLOAD_FILE_SUFFIX,
-} from './upload-storage.util.js';
+import { isArchiveFilename, isGzipFile } from './upload-storage.util.js';
 
 describe('isArchiveFilename', () => {
   it('should return true, when the filename ends with .json.gz', () => {
@@ -27,30 +20,6 @@ describe('isArchiveFilename', () => {
 
   it('should return false, when the filename has no extension', () => {
     expect(isArchiveFilename('archive')).toBe(false);
-  });
-});
-
-describe('buildTemporaryUploadFilename', () => {
-  it('should append the temp suffix to the importId, when called', () => {
-    expect(buildTemporaryUploadFilename('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')).toBe(
-      `a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11${TEMP_UPLOAD_FILE_SUFFIX}`,
-    );
-  });
-});
-
-describe('parseImportIdFromTemporaryFilename', () => {
-  it('should strip the temp suffix, when the filename has one', () => {
-    expect(parseImportIdFromTemporaryFilename('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.tmp')).toBe(
-      'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    );
-  });
-});
-
-describe('buildFinalArchiveFilename', () => {
-  it('should append .json.gz to the importId, when called', () => {
-    expect(buildFinalArchiveFilename('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')).toBe(
-      'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.json.gz',
-    );
   });
 });
 

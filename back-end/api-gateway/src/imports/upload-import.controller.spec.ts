@@ -32,10 +32,14 @@ const isGzipFileMock = vi.mocked(uploadStorageUtil.isGzipFile);
 function buildController(
   storageDirectory: string,
   loggerMocks: { warn: LogMock; error: LogMock },
-): UploadImportController {
+): { controller: UploadImportController; requestContextService: RequestContextService } {
   const requestContextService = new RequestContextService();
   const serviceAClient = { emit: vi.fn(() => of(undefined)) } as unknown as ClientProxy;
-  const storageConfiguration: StorageConfiguration = { dir: storageDirectory };
+  const storageConfiguration: StorageConfiguration = {
+    dir: storageDirectory,
+    uploadRetentionMs: 86_400_000,
+    uploadSweepIntervalMs: 900_000,
+  };
   const loggerService = {
     getLogger: vi.fn().mockReturnValue({
       warn: loggerMocks.warn,
@@ -47,12 +51,14 @@ function buildController(
     } satisfies Partial<AppLogger>),
   } as unknown as LoggerService;
 
-  return new UploadImportController(
+  const controller = new UploadImportController(
     serviceAClient,
     storageConfiguration,
     new ContextPropagatingClient(requestContextService),
     loggerService,
   );
+
+  return { controller, requestContextService };
 }
 
 describe('UploadImportController', () => {
@@ -68,10 +74,41 @@ describe('UploadImportController', () => {
   });
 
   describe('upload', () => {
+    it('should derive the import id from the namespaced upload temp filename', async () => {
+      const warn: LogMock = vi.fn();
+      const error: LogMock = vi.fn();
+      const { controller, requestContextService } = buildController(storageDirectory, {
+        warn,
+        error,
+      });
+      const importId = '11111111-1111-4111-8111-111111111111';
+      const temporaryFilePath = join(storageDirectory, `${importId}.upload.tmp`);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- temporaryFilePath is this spec's own mkdtempSync'd fixture path, never external input.
+      writeFileSync(temporaryFilePath, Buffer.from('gzipped-content'));
+      isGzipFileMock.mockResolvedValue(true);
+
+      const result = await requestContextService.run(
+        { correlationId: randomUUID(), requestId: 'req-1', correlationIdSource: 'inbound' },
+        () =>
+          controller.upload(
+            { rejectedFilename: undefined } as unknown as Parameters<
+              UploadImportController['upload']
+            >[0],
+            {
+              path: temporaryFilePath,
+              originalname: 'archive.json.gz',
+              filename: `${importId}.upload.tmp`,
+            } as unknown as Express.Multer.File,
+          ),
+      );
+
+      expect(result).toEqual({ importId });
+    });
+
     it('should log a warning and still reject with 400, when removing a rejected non-gzip upload fails', async () => {
       const warn: LogMock = vi.fn();
       const error: LogMock = vi.fn();
-      const controller = buildController(storageDirectory, { warn, error });
+      const { controller } = buildController(storageDirectory, { warn, error });
       // A path that never existed: the real fs unlink() call this exercises fails with ENOENT.
       const missingFilePath = join(storageDirectory, `${randomUUID()}.tmp`);
       isGzipFileMock.mockResolvedValue(false);
@@ -101,7 +138,7 @@ describe('UploadImportController', () => {
       const error: LogMock = vi.fn();
       // A storage directory that does not exist makes the controller's rename() call fail.
       const missingStorageDirectory = join(storageDirectory, 'does-not-exist');
-      const controller = buildController(missingStorageDirectory, { warn, error });
+      const { controller } = buildController(missingStorageDirectory, { warn, error });
       const importId = randomUUID();
       const temporaryFilePath = join(storageDirectory, `${importId}.tmp`);
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- temporaryFilePath is this spec's own mkdtempSync'd fixture path, never external input.

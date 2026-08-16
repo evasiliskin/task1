@@ -57,3 +57,5 @@ export * from './config/logger.config.js';
 export * from './config/require-in-production.js';
 
 export * from './security/helmet.config.js';
+
+export * from './storage/archive-paths.js';

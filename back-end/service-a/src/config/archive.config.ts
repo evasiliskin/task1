@@ -14,6 +14,7 @@ const archiveConfigSchema = z.object({
   downloadRetryDelayMs: z.coerce.number().int().positive().default(2000),
   maxDecompressedBytes: z.coerce.number().int().positive().default(DEFAULT_MAX_DECOMPRESSED_BYTES),
   maxLineBytes: z.coerce.number().int().positive().default(DEFAULT_MAX_LINE_BYTES),
+  shutdownDrainTimeoutMs: z.coerce.number().int().positive().default(60_000),
 });
 
 export type ArchiveConfiguration = z.infer<typeof archiveConfigSchema>;
@@ -27,5 +28,6 @@ export default registerAs('archive', (): ArchiveConfiguration =>
     downloadRetryDelayMs: process.env.ARCHIVE_DOWNLOAD_RETRY_DELAY_MS,
     maxDecompressedBytes: process.env.ARCHIVE_MAX_DECOMPRESSED_BYTES,
     maxLineBytes: process.env.ARCHIVE_MAX_LINE_BYTES,
+    shutdownDrainTimeoutMs: process.env.SHUTDOWN_DRAIN_TIMEOUT_MS,
   }),
 );

@@ -118,7 +118,7 @@ describe('ReportsController (HTTP Integration)', () => {
       expect(record.data).toEqual({ importId });
     });
 
-    it('should delete the report file after the response finishes, when the download completes', async () => {
+    it('should not delete the report file after the response finishes, when the download completes', async () => {
       serviceBClient.send.mockReturnValue(of({ reportPath }));
 
       await request(httpServer).get('/reports/pdf').query({ importId });
@@ -126,8 +126,9 @@ describe('ReportsController (HTTP Integration)', () => {
         setTimeout(resolve, 50);
       });
 
+      // The gateway reads and forgets: service-b's ReportCleanupService owns removal on retention.
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      expect(existsSync(reportPath)).toBe(false);
+      expect(existsSync(reportPath)).toBe(true);
     });
 
     it('should return 400 and not call service-b, when importId is not a uuid', async () => {

@@ -12,4 +12,13 @@ describe('ensureImportIndexes', () => {
 
     expect(createIndex).toHaveBeenCalledWith({ importId: 1 }, { unique: true });
   });
+
+  it('should create a compound index on status and startedAt, when called', async () => {
+    const createIndex = vi.fn().mockResolvedValue('status_1_startedAt_1');
+    const collection = { createIndex } as unknown as Collection<IImportRunDocument>;
+
+    await ensureImportIndexes(collection);
+
+    expect(createIndex).toHaveBeenCalledWith({ status: 1, startedAt: 1 });
+  });
 });

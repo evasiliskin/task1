@@ -122,6 +122,21 @@ describe('ImportRunTracker', () => {
     });
   });
 
+  describe('failStaleRuns', () => {
+    it('should fail every run left started before the cutoff', async () => {
+      const updateMany = vi.fn().mockResolvedValue({ modifiedCount: 2 });
+      const tracker = new ImportRunTracker({ updateMany } as never);
+      const cutoff = new Date('2026-08-11T00:00:00Z');
+
+      await expect(tracker.failStaleRuns(cutoff, 'abandoned')).resolves.toBe(2);
+      expect(updateMany).toHaveBeenCalledWith(
+        { status: 'started', startedAt: { $lt: cutoff } },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.objectContaining()'s return type is untyped `any` by design; this asserts against a vi.fn() mock call, not production code.
+        expect.objectContaining({ $set: expect.objectContaining({ status: 'failed' }) }),
+      );
+    });
+  });
+
   describe('recordStarted duplicate handling', () => {
     it('should throw ImportAlreadyClaimedError, when the unique importId index rejects the insert', async () => {
       const duplicateKeyError = new MongoServerError({ message: 'E11000 duplicate key' });

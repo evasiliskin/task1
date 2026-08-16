@@ -25,6 +25,7 @@ describe('archiveConfig', () => {
         downloadRetryDelayMs: 2000,
         maxDecompressedBytes: 4_294_967_296,
         maxLineBytes: 1_048_576,
+        shutdownDrainTimeoutMs: 60_000,
       });
     });
   });
@@ -38,6 +39,7 @@ describe('archiveConfig', () => {
       process.env.ARCHIVE_DOWNLOAD_RETRY_DELAY_MS = '3000';
       process.env.ARCHIVE_MAX_DECOMPRESSED_BYTES = '1024';
       process.env.ARCHIVE_MAX_LINE_BYTES = '64';
+      process.env.SHUTDOWN_DRAIN_TIMEOUT_MS = '15000';
 
       expect(archiveConfig()).toEqual({
         baseUrl: 'https://custom-archive-mirror.example.com',
@@ -47,6 +49,7 @@ describe('archiveConfig', () => {
         downloadRetryDelayMs: 3000,
         maxDecompressedBytes: 1024,
         maxLineBytes: 64,
+        shutdownDrainTimeoutMs: 15_000,
       });
     });
   });
@@ -90,6 +93,12 @@ describe('archiveConfig', () => {
 
     it('should throw, when ARCHIVE_MAX_LINE_BYTES is not a positive number', () => {
       process.env.ARCHIVE_MAX_LINE_BYTES = '0';
+
+      expect(() => archiveConfig()).toThrow();
+    });
+
+    it('should throw, when SHUTDOWN_DRAIN_TIMEOUT_MS is not a positive number', () => {
+      process.env.SHUTDOWN_DRAIN_TIMEOUT_MS = '0';
 
       expect(() => archiveConfig()).toThrow();
     });

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { type ClientRequest, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,12 +12,26 @@ import { type HttpGetFunction } from './fetch-archive-stream.js';
 describe('downloadArchive', () => {
   let storageDirectory: string;
 
+  const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+
   beforeEach(() => {
     storageDirectory = mkdtempSync(join(tmpdir(), 'archive-download-spec-'));
   });
 
   afterEach(() => {
     rmSync(storageDirectory, { recursive: true, force: true });
+  });
+
+  const buildOptions = (
+    overrides: Partial<IDownloadArchiveOptions> = {},
+  ): IDownloadArchiveOptions => ({
+    baseUrl: 'https://data.gharchive.org',
+    storageDirectory,
+    timeoutMs: 1000,
+    totalTimeoutMs: 5000,
+    maxAttempts: 1,
+    retryDelayMs: 10,
+    ...overrides,
   });
 
   const buildSuccessfulHttpGet = (content: string): HttpGetFunction => {
@@ -32,6 +46,8 @@ describe('downloadArchive', () => {
       return fakeRequest as unknown as ClientRequest;
     });
   };
+
+  const buildHttpGet = (): HttpGetFunction => buildSuccessfulHttpGet('fake gzip content');
 
   const buildFailingHttpGet = (statusCode: number): HttpGetFunction => {
     const fakeRequest = { on: vi.fn(), setTimeout: vi.fn(), destroy: vi.fn() };
@@ -49,70 +65,54 @@ describe('downloadArchive', () => {
   it('should write the archive to the final path, when the download succeeds', async () => {
     const httpGet = buildSuccessfulHttpGet('fake gzip content');
 
-    const result = await downloadArchive(
-      '2026-08-11-0',
-      {
-        baseUrl: 'https://data.gharchive.org',
-        storageDirectory,
-        timeoutMs: 1000,
-        totalTimeoutMs: 5000,
-        maxAttempts: 1,
-        retryDelayMs: 10,
-      },
-      httpGet,
-    );
+    const result = await downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet);
 
-    expect(result.filePath).toBe(join(storageDirectory, '2026-08-11-0.json.gz'));
+    expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(result.filePath)).toBe(true);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(readFileSync(result.filePath, 'utf8')).toBe('fake gzip content');
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
-    expect(existsSync(`${result.filePath}.tmp`)).toBe(false);
+    expect(existsSync(join(storageDirectory, `${importId}.download.tmp`))).toBe(false);
+  });
+
+  it('should write to an importId-keyed path so concurrent same-hour imports cannot collide', async () => {
+    const importId = '11111111-1111-4111-8111-111111111111';
+
+    const result = await downloadArchive('2026-08-11-0', importId, buildOptions(), buildHttpGet());
+
+    expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
+  });
+
+  it('should leave no temp file behind on success', async () => {
+    const importId = '22222222-2222-4222-8222-222222222222';
+
+    await downloadArchive('2026-08-11-0', importId, buildOptions(), buildHttpGet());
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
+    expect(readdirSync(storageDirectory)).toEqual([`${importId}.json.gz`]);
   });
 
   it('should throw InvalidDateHourError and write no file, when dateHour is malformed', async () => {
     const httpGet = buildSuccessfulHttpGet('unused');
 
-    await expect(
-      downloadArchive(
-        'not-a-date',
-        {
-          baseUrl: 'https://data.gharchive.org',
-          storageDirectory,
-          timeoutMs: 1000,
-          totalTimeoutMs: 5000,
-          maxAttempts: 1,
-          retryDelayMs: 10,
-        },
-        httpGet,
-      ),
-    ).rejects.toThrow(InvalidDateHourError);
+    await expect(downloadArchive('not-a-date', importId, buildOptions(), httpGet)).rejects.toThrow(
+      InvalidDateHourError,
+    );
     expect(httpGet).not.toHaveBeenCalled();
   });
 
   it('should throw ArchiveDownloadError and leave no final or temp file, when the response is a 404', async () => {
     const httpGet = buildFailingHttpGet(404);
-    const finalPath = join(storageDirectory, '2026-08-11-0.json.gz');
+    const finalPath = join(storageDirectory, `${importId}.json.gz`);
 
     await expect(
-      downloadArchive(
-        '2026-08-11-0',
-        {
-          baseUrl: 'https://data.gharchive.org',
-          storageDirectory,
-          timeoutMs: 1000,
-          totalTimeoutMs: 5000,
-          maxAttempts: 1,
-          retryDelayMs: 10,
-        },
-        httpGet,
-      ),
+      downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet),
     ).rejects.toThrow(ArchiveDownloadError);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(finalPath)).toBe(false);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
-    expect(existsSync(`${finalPath}.tmp`)).toBe(false);
+    expect(existsSync(join(storageDirectory, `${importId}.download.tmp`))).toBe(false);
   });
 
   it('should clean up the temp file and rethrow, when the response stream errors mid-download', async () => {
@@ -131,26 +131,15 @@ describe('downloadArchive', () => {
         return fakeRequest as unknown as ClientRequest;
       },
     );
-    const finalPath = join(storageDirectory, '2026-08-11-0.json.gz');
+    const finalPath = join(storageDirectory, `${importId}.json.gz`);
 
     await expect(
-      downloadArchive(
-        '2026-08-11-0',
-        {
-          baseUrl: 'https://data.gharchive.org',
-          storageDirectory,
-          timeoutMs: 1000,
-          totalTimeoutMs: 5000,
-          maxAttempts: 1,
-          retryDelayMs: 10,
-        },
-        httpGet,
-      ),
+      downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet),
     ).rejects.toThrow(ArchiveDownloadError);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(finalPath)).toBe(false);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
-    expect(existsSync(`${finalPath}.tmp`)).toBe(false);
+    expect(existsSync(join(storageDirectory, `${importId}.download.tmp`))).toBe(false);
   });
 
   it('should abort the download and clean up the temp file, when the body stalls past the total timeout', async () => {
@@ -161,14 +150,7 @@ describe('downloadArchive', () => {
     const realSetImmediate = setImmediate;
     vi.useFakeTimers();
 
-    const options = {
-      baseUrl: 'https://data.gharchive.org',
-      storageDirectory,
-      timeoutMs: 1000,
-      totalTimeoutMs: 5000,
-      maxAttempts: 1,
-      retryDelayMs: 10,
-    };
+    const options = buildOptions();
     const stalledBody = new PassThrough();
     const httpGetMock = vi.fn((_url: string, callback: (response: IncomingMessage) => void) => {
       callback(
@@ -182,7 +164,7 @@ describe('downloadArchive', () => {
     });
     const httpGet: HttpGetFunction = httpGetMock;
 
-    const promise = downloadArchive('2026-08-11-0', options, httpGet);
+    const promise = downloadArchive('2026-08-11-0', importId, options, httpGet);
 
     while (httpGetMock.mock.calls.length === 0) {
       await new Promise((resolve) => realSetImmediate(resolve));
@@ -191,7 +173,7 @@ describe('downloadArchive', () => {
 
     await expect(promise).rejects.toThrow(/timed out/);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
-    expect(existsSync(join(storageDirectory, '2026-08-11-0.json.gz.tmp'))).toBe(false);
+    expect(existsSync(join(storageDirectory, `${importId}.download.tmp`))).toBe(false);
 
     vi.useRealTimers();
   });
@@ -227,8 +209,8 @@ describe('downloadArchive', () => {
         .mockImplementationOnce(respondWith(503))
         .mockImplementationOnce(respondWith(200, gzipSync(Buffer.from('{}'))));
 
-      await expect(downloadArchive('2026-08-11-0', options, httpGet)).resolves.toEqual({
-        filePath: join(storageDirectory, '2026-08-11-0.json.gz'),
+      await expect(downloadArchive('2026-08-11-0', importId, options, httpGet)).resolves.toEqual({
+        filePath: join(storageDirectory, `${importId}.json.gz`),
       });
       expect(httpGet).toHaveBeenCalledTimes(2);
     });
@@ -236,7 +218,9 @@ describe('downloadArchive', () => {
     it('should not retry a 404, because the archive hour does not exist and never will on this attempt cycle', async () => {
       const httpGet = vi.fn().mockImplementation(respondWith(404));
 
-      await expect(downloadArchive('2999-01-01-0', options, httpGet)).rejects.toThrow(/HTTP 404/);
+      await expect(downloadArchive('2999-01-01-0', importId, options, httpGet)).rejects.toThrow(
+        /HTTP 404/,
+      );
       expect(httpGet).toHaveBeenCalledTimes(1);
     });
   });

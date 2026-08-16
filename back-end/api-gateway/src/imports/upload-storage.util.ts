@@ -1,25 +1,16 @@
 import { open } from 'node:fs/promises';
 
-export const TEMP_UPLOAD_FILE_SUFFIX = '.tmp';
-
 const ARCHIVE_FILENAME_PATTERN = /\.json\.gz$/i;
 const GZIP_MAGIC_BYTE_0 = 0x1f;
 const GZIP_MAGIC_BYTE_1 = 0x8b;
 
+/**
+ * Validates the client-supplied original filename in multer's `fileFilter`. Deliberately not part
+ * of `@task1/shared/storage/archive-paths` — that module describes what this service writes to
+ * disk, this one describes what a caller is allowed to send.
+ */
 export function isArchiveFilename(filename: string): boolean {
   return ARCHIVE_FILENAME_PATTERN.test(filename);
-}
-
-export function buildTemporaryUploadFilename(importId: string): string {
-  return `${importId}${TEMP_UPLOAD_FILE_SUFFIX}`;
-}
-
-export function parseImportIdFromTemporaryFilename(filename: string): string {
-  return filename.slice(0, -TEMP_UPLOAD_FILE_SUFFIX.length);
-}
-
-export function buildFinalArchiveFilename(importId: string): string {
-  return `${importId}.json.gz`;
 }
 
 export async function isGzipFile(filePath: string): Promise<boolean> {

@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { type Redis } from 'ioredis';
 
 import { REDIS_CLIENT } from '../infra/client-tokens.js';
@@ -7,7 +7,7 @@ import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
 import { LOGGER_FACTORY } from '../logger/logger.tokens.js';
 
 @Injectable()
-export class RedisConnectionService implements OnModuleInit, OnModuleDestroy {
+export class RedisConnectionService implements OnModuleInit, OnApplicationShutdown {
   public constructor(
     @Inject(REDIS_CLIENT) private readonly client: Redis,
     @Inject(LOGGER_FACTORY) loggerFactory: ILoggerFactory,
@@ -21,7 +21,12 @@ export class RedisConnectionService implements OnModuleInit, OnModuleDestroy {
     this.logger.info({}, 'Connected to Redis');
   }
 
-  public async onModuleDestroy(): Promise<void> {
+  /**
+   * `onApplicationShutdown`, not `onModuleDestroy`: Nest runs `onModuleDestroy` first, which used
+   * to close the client while an import was still writing. Shutdown order is now drain
+   * (`onModuleDestroy`) → stop consuming (dispose) → close connections (here).
+   */
+  public async onApplicationShutdown(): Promise<void> {
     await this.client.quit();
   }
 

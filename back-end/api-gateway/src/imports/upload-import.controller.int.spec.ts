@@ -221,7 +221,11 @@ describe('UploadImportController (HTTP Integration)', () => {
         ],
       })
         .overrideProvider(storageConfig.KEY)
-        .useValue({ dir: overrideDirectory })
+        .useValue({
+          dir: overrideDirectory,
+          uploadRetentionMs: 86_400_000,
+          uploadSweepIntervalMs: 900_000,
+        })
         .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
         .useValue(serviceAClient as unknown as ClientProxy)
         .overrideProvider(AuthGuard)

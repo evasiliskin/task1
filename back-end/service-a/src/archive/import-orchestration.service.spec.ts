@@ -8,6 +8,7 @@ import { type MetricsService } from '../infra/redis/metrics.service.js';
 import { type ArchiveDownloadService } from './download/archive-download.service.js';
 import { ImportOrchestrationService } from './import-orchestration.service.js';
 import { type ImportRunTracker } from './import-run-tracker.service.js';
+import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { type ImportResult } from './processing/process-archive.js';
 import { type ArchiveProcessingService } from './upload/archive-processing.service.js';
 
@@ -68,6 +69,7 @@ describe('ImportOrchestrationService', () => {
       archiveDownloadService,
       archiveProcessingService,
       propagatingClient,
+      new InFlightImportRegistry(),
       loggerService,
     );
 
@@ -98,7 +100,7 @@ describe('ImportOrchestrationService', () => {
       const result = await runInContext(() => service.importDownload('2026-08-11-0', importId));
 
       expect(result).toEqual(successfulResult);
-      expect(download).toHaveBeenCalledWith('2026-08-11-0');
+      expect(download).toHaveBeenCalledWith('2026-08-11-0', importId);
       expect(process).toHaveBeenCalledWith('/data/archives/2026-08-11-0.json.gz', importId);
       expect(emit).toHaveBeenCalledTimes(2);
       expect(emit.mock.calls[0]?.[0]).toBe('github.import.started');

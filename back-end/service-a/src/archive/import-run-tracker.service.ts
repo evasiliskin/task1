@@ -61,4 +61,27 @@ export class ImportRunTracker {
       },
     );
   }
+
+  /**
+   * Marks runs abandoned in `started` as failed.
+   *
+   * A SIGKILL, an OOM or a drain timeout leaves the document `started` with no `failedAt` and
+   * nothing to ever correct it, so `/imports/{id}` reports an import as running indefinitely.
+   */
+  public async failStaleRuns(olderThan: Date, reason: string): Promise<number> {
+    const result = await this.collection.updateMany(
+      { status: 'started', startedAt: { $lt: olderThan } },
+      {
+        $set: { status: 'failed', failedAt: new Date() },
+        $push: {
+          errorSamples: {
+            $each: [reason.slice(0, ERROR_SAMPLE_MAX_LENGTH)],
+            $slice: -ERROR_SAMPLES_LIMIT,
+          },
+        },
+      },
+    );
+
+    return result.modifiedCount;
+  }
 }

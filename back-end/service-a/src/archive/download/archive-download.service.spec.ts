@@ -28,6 +28,9 @@ describe('ArchiveDownloadService', () => {
       downloadTotalTimeoutMs: 5000,
       downloadMaxAttempts: 3,
       downloadRetryDelayMs: 10,
+      maxDecompressedBytes: 4_294_967_296,
+      maxLineBytes: 1_048_576,
+      shutdownDrainTimeoutMs: 60_000,
     };
     const storageConfiguration: StorageConfiguration = { dir: storageDirectory };
 
@@ -50,9 +53,10 @@ describe('ArchiveDownloadService', () => {
   it('should download using the injected config and return the final file path, when given a valid dateHour', async () => {
     const httpGet = buildSuccessfulHttpGet('fake gzip content');
     const service = buildService();
+    const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
-    const result = await service.download('2026-08-11-0', httpGet);
+    const result = await service.download('2026-08-11-0', importId, httpGet);
 
-    expect(result.filePath).toBe(join(storageDirectory, '2026-08-11-0.json.gz'));
+    expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
   });
 });

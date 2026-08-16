@@ -1,6 +1,3 @@
-import { rename, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import {
   Controller,
   HttpCode,
@@ -28,17 +25,9 @@ import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
 import { publishImportMessage } from '../rmq/publish-import-message.js';
 import { SERVICE_A_IMPORTS_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
-import {
-  ArchiveUploadError,
-  MissingUploadFileError,
-  UnsupportedArchiveFormatError,
-} from './errors.js';
+import { MissingUploadFileError, UnsupportedArchiveFormatError } from './errors.js';
+import { finalizeUpload } from './finalize-upload.js';
 import { UploadImportResponseSchema } from './schemas/upload-import-response.schema.js';
-import {
-  buildFinalArchiveFilename,
-  isGzipFile,
-  parseImportIdFromTemporaryFilename,
-} from './upload-storage.util.js';
 
 const UNLINK_REJECTED_UPLOAD_FAILED_LOG = 'Failed to remove an upload rejected as non-gzip content';
 
@@ -80,33 +69,13 @@ export class UploadImportController {
       throw new MissingUploadFileError();
     }
 
-    if (!(await isGzipFile(file.path))) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- file.path is the temp path multer just wrote inside the configured storage directory.
-      await unlink(file.path).catch((error: unknown) => {
-        this.logger.warn({ path: file.path }, UNLINK_REJECTED_UPLOAD_FAILED_LOG, error);
-      });
-
-      throw new UnsupportedArchiveFormatError(file.originalname);
-    }
-
-    const importId = parseImportIdFromTemporaryFilename(file.filename);
-    const finalPath = join(this.storageConfiguration.dir, buildFinalArchiveFilename(importId));
-
-    try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- both paths are derived from the configured storage directory and a server-generated UUID, never raw external input.
-      await rename(file.path, finalPath);
-    } catch (error) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-      await unlink(file.path).catch(() => undefined);
-
-      const cause = error instanceof Error ? error : undefined;
-
-      throw new ArchiveUploadError(
-        `Failed to finalize uploaded archive: ${error instanceof Error ? error.message : String(error)}`,
-        importId,
-        cause,
-      );
-    }
+    const { importId, finalPath } = await finalizeUpload({
+      file,
+      storageDirectory: this.storageConfiguration.dir,
+      onUnlinkFailed: (path, error) => {
+        this.logger.warn({ path }, UNLINK_REJECTED_UPLOAD_FAILED_LOG, error);
+      },
+    });
 
     await publishImportMessage({
       propagatingClient: this.propagatingClient,
