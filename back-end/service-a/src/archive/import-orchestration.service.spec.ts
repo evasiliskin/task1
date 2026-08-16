@@ -6,11 +6,19 @@ import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/cont
 import { type MetricsService } from '../infra/redis/metrics.service.js';
 
 import { type ArchiveDownloadService } from './download/archive-download.service.js';
+import type * as importArchiveModule from './import-archive.js';
+import { importArchive } from './import-archive.js';
 import { ImportOrchestrationService } from './import-orchestration.service.js';
 import { type ImportRunTracker } from './import-run-tracker.service.js';
 import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { type ImportResult } from './processing/process-archive.js';
 import { type ArchiveProcessingService } from './upload/archive-processing.service.js';
+
+vi.mock('./import-archive.js', async () => {
+  const actual = await vi.importActual<typeof importArchiveModule>('./import-archive.js');
+
+  return { ...actual, importArchive: vi.fn(actual.importArchive) };
+});
 
 describe('ImportOrchestrationService', () => {
   const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -18,6 +26,13 @@ describe('ImportOrchestrationService', () => {
   const successfulResult: ImportResult = {
     eventsProcessed: 3,
     validEvents: 3,
+    invalidEvents: 0,
+    duplicateEvents: 0,
+    errorCount: 0,
+  };
+  const emptyResult: ImportResult = {
+    eventsProcessed: 0,
+    validEvents: 0,
     invalidEvents: 0,
     duplicateEvents: 0,
     errorCount: 0,
@@ -145,5 +160,27 @@ describe('ImportOrchestrationService', () => {
         importId,
       );
     });
+  });
+
+  it('should reuse one dependency object across imports', async () => {
+    const captured: unknown[] = [];
+
+    vi.mocked(importArchive).mockImplementation((_source, _importId, dependencies) => {
+      captured.push(dependencies);
+
+      return Promise.resolve(emptyResult);
+    });
+
+    const { service, runInContext } = buildService();
+
+    await runInContext(() =>
+      service.importDownload('2026-08-11-0', '11111111-1111-4111-8111-111111111111'),
+    );
+    await runInContext(() =>
+      service.importUpload('/data/a.json.gz', '22222222-2222-4222-8222-222222222222'),
+    );
+
+    expect(captured).toHaveLength(2);
+    expect(captured[0]).toBe(captured[1]);
   });
 });

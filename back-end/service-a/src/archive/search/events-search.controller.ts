@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, type RmqContext } from '@nestjs/microservices';
-import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { type IEventView } from '@task1/shared/github-archive/index';
 import { ackMessage } from '@task1/shared/messaging/ack.util';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
@@ -16,7 +16,7 @@ export class EventsSearchController {
   public async handleSearch(
     @Payload() payload: unknown,
     @Ctx() context: RmqContext,
-  ): Promise<ICursorPage<IGithubEventDocument>> {
+  ): Promise<ICursorPage<IEventView>> {
     try {
       const message = searchEventsMessageSchema.parse(payload);
 

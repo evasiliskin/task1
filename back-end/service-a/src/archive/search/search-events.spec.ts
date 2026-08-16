@@ -3,6 +3,7 @@ import { type Collection } from 'mongodb';
 
 import { encodeEventCursor } from './event-cursor.util.js';
 import { searchEvents } from './search-events.js';
+import { toEventView } from './to-event-view.js';
 
 describe('searchEvents', () => {
   function buildDocument(eventId: string, createdAt: string): IGithubEventDocument {
@@ -38,7 +39,7 @@ describe('searchEvents', () => {
 
     const result = await searchEvents(collection, { limit: 50 });
 
-    expect(result).toEqual({ data: documents });
+    expect(result).toEqual({ data: documents.map(toEventView) });
   });
 
   it('should return a nextCursor derived from the last returned document, when more documents exist than the limit', async () => {
@@ -51,7 +52,7 @@ describe('searchEvents', () => {
 
     const result = await searchEvents(collection, { limit: 2 });
 
-    expect(result.data).toEqual(documents.slice(0, 2));
+    expect(result.data).toEqual(documents.slice(0, 2).map(toEventView));
     expect(result.nextCursor).toBe(
       encodeEventCursor({
         createdAt: documents[1]?.createdAt,

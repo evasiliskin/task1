@@ -5,6 +5,7 @@ import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { listResult } from '@task1/shared/pagination/list-result';
+import { type ILogView } from '@task1/shared/processing-log/contracts/log-view.dto';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
 
@@ -16,7 +17,6 @@ import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { SearchLogsRequestSchema } from './schemas/search-logs-request.schema.js';
 import {
-  type LogEntry,
   type SearchLogsResponse,
   SearchLogsResponseSchema,
   SearchLogsResultShape,
@@ -59,7 +59,7 @@ export class LogsController {
   ): Promise<SearchLogsResponse> {
     const result = await firstValueFrom(
       this.propagatingClient
-        .send<ICursorPage<LogEntry>>(this.serviceBClient, RPC_PATTERNS.LOGS_SEARCH, bound.data)
+        .send<ICursorPage<ILogView>>(this.serviceBClient, RPC_PATTERNS.LOGS_SEARCH, bound.data)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

@@ -52,7 +52,7 @@ describe('searchLogs', () => {
       eventType: 'github.import.completed',
       service: 'service-a',
       status: 'completed',
-      timestamp: new Date('2026-08-11T00:02:00.000Z'),
+      timestamp: '2026-08-11T00:02:00.000Z',
       correlationId,
       archive: '2026-08-11-0.json.gz',
       metadata: { eventsProcessed: 10 },

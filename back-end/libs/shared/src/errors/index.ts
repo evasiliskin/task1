@@ -11,3 +11,4 @@ export * from './not-found/not-found-error.js';
 export * from './validation/validation-error.js';
 export * from './validation/request-contract-violation-error.js';
 export * from './validation/field-error.types.js';
+export * from './validation/invalid-cursor.error.js';

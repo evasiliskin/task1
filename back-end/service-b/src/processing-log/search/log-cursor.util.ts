@@ -1,7 +1,6 @@
 import { decodeCursor, encodeCursor } from '@task1/shared';
+import { InvalidCursorError } from '@task1/shared/errors/index';
 import { z } from 'zod';
-
-import { InvalidCursorError } from './errors.js';
 
 const cursorPayloadSchema = z.object({
   timestamp: z.string().datetime(),

@@ -12,11 +12,11 @@ import { LoggerService } from '@task1/shared/logger/logger.service';
 import redisConfig from '../config/redis.config.js';
 import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
+import { HealthTransitionLogger } from './health-transition-logger.js';
 import { GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
 import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
-export const HEALTH_CHECK_FAILED_LOG = 'health check failed';
-export const HEALTH_CHECK_RECOVERED_LOG = 'health check recovered';
+export { HEALTH_CHECK_FAILED_LOG, HEALTH_CHECK_RECOVERED_LOG } from './health-transition-logger.js';
 
 export type ServiceStatus = 'ok' | 'unavailable';
 
@@ -44,6 +44,7 @@ export class HealthCheckService {
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(HealthCheckService.name);
+    this.transitionLogger = new HealthTransitionLogger(this.logger);
   }
 
   public async getHealth(): Promise<IAggregatedHealth> {
@@ -73,12 +74,7 @@ export class HealthCheckService {
 
   private readonly logger: AppLogger;
 
-  /**
-   * Which dependencies were down at the last poll. Health endpoints are polled continuously, so
-   * logging the current state every time turns one outage into hundreds of identical lines. The
-   * transition is the event; the state is already in the response body.
-   */
-  private readonly downDependencies = new Set<string>();
+  private readonly transitionLogger: HealthTransitionLogger;
 
   private inFlightCheck?: Promise<IAggregatedHealth>;
 
@@ -102,7 +98,7 @@ export class HealthCheckService {
     const raw = await this.executeIndicators();
     const responseTimeMs = Date.now() - startedAt;
 
-    this.logFailures(raw.details, responseTimeMs);
+    this.transitionLogger.record(raw.details, responseTimeMs);
 
     const serviceA: ServiceStatus = raw.details.serviceA?.status === 'up' ? 'ok' : 'unavailable';
     const serviceB: ServiceStatus = raw.details.serviceB?.status === 'up' ? 'ok' : 'unavailable';
@@ -148,30 +144,5 @@ export class HealthCheckService {
 
       throw error;
     }
-  }
-
-  private logFailures(details: HealthCheckResult['details'], responseTimeMs: number): void {
-    // correlationId and requestId are stamped on every line by pino's mixin — repeating them here
-    // would model a pattern that hides the fact that context is automatic. `dependency`, not
-    // `service`: `service` is a pino `base` binding naming *this* process.
-    Object.entries(details).forEach(([dependency, detail]) => {
-      const isDown = detail.status === 'down';
-      const wasDown = this.downDependencies.has(dependency);
-
-      if (isDown && !wasDown) {
-        this.downDependencies.add(dependency);
-        this.logger.error(
-          { dependency, errorMessage: detail.message, responseTimeMs },
-          HEALTH_CHECK_FAILED_LOG,
-        );
-
-        return;
-      }
-
-      if (!isDown && wasDown) {
-        this.downDependencies.delete(dependency);
-        this.logger.info({ dependency, responseTimeMs }, HEALTH_CHECK_RECOVERED_LOG);
-      }
-    });
   }
 }

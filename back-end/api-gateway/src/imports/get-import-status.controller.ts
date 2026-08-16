@@ -2,6 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { type IImportStatusView } from '@task1/shared/github-archive/index';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -40,7 +41,7 @@ export class GetImportStatusController {
   ): Promise<ImportStatusResponse> {
     const result = await firstValueFrom(
       this.propagatingClient
-        .send<ImportStatusResponse | null>(this.serviceAClient, RPC_PATTERNS.IMPORTS_STATUS_GET, {
+        .send<IImportStatusView | null>(this.serviceAClient, RPC_PATTERNS.IMPORTS_STATUS_GET, {
           importId: bound.data.importId,
         })
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),

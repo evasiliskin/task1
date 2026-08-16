@@ -47,7 +47,8 @@ const CORRELATION_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 describe('HttpLoggingMiddleware (HTTP Integration)', () => {
   let app: INestApplication;
   let httpServer: App;
-  let serviceAClient: { emit: ReturnType<typeof vi.fn> };
+  let serviceAImportsClient: { emit: ReturnType<typeof vi.fn> };
+  let serviceAClient: { send: ReturnType<typeof vi.fn> };
   let logged: LoggedCall[];
 
   function capture(level: LoggedCall['level']) {
@@ -68,7 +69,8 @@ describe('HttpLoggingMiddleware (HTTP Integration)', () => {
 
   beforeAll(async () => {
     logged = [];
-    serviceAClient = { emit: vi.fn(() => of(undefined)) };
+    serviceAImportsClient = { emit: vi.fn(() => of(undefined)) };
+    serviceAClient = { send: vi.fn(() => of({ importId: IMPORT_ID })) };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -88,6 +90,8 @@ describe('HttpLoggingMiddleware (HTTP Integration)', () => {
       ],
     })
       .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
+      .useValue(serviceAImportsClient as unknown as ClientProxy)
+      .overrideProvider(SERVICE_A_RMQ_CLIENT)
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -115,6 +119,7 @@ describe('HttpLoggingMiddleware (HTTP Integration)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    serviceAClient.send.mockReturnValue(of({ importId: IMPORT_ID }));
     logged = [];
   });
 
@@ -248,7 +253,10 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
 
   beforeAll(async () => {
     logged = [];
-    serviceAClient = { emit: vi.fn(() => of(undefined)), send: vi.fn(() => of({ status: 'ok' })) };
+    serviceAClient = {
+      emit: vi.fn(() => of(undefined)),
+      send: vi.fn(() => of({ importId: IMPORT_ID })),
+    };
     serviceBClient = { send: vi.fn(() => of({ status: 'ok' })) };
     redisClient = { ping: vi.fn().mockResolvedValue('PONG') };
 

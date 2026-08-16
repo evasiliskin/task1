@@ -32,21 +32,26 @@ export class ImportOrchestrationService {
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(ImportOrchestrationService.name);
+    // Nothing in the dependency set varies per import, so it is a constant of this service rather
+    // than an eleven-member object re-allocated on every call.
+    this.dependencies = this.buildDependencies();
   }
 
   public importDownload(dateHour: string, importId: string): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'download', dateHour }, importId, this.buildDependencies()),
+      importArchive({ type: 'download', dateHour }, importId, this.dependencies),
     );
   }
 
   public importUpload(filePath: string, importId: string): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'upload', filePath }, importId, this.buildDependencies()),
+      importArchive({ type: 'upload', filePath }, importId, this.dependencies),
     );
   }
 
   private readonly logger: AppLogger;
+
+  private readonly dependencies: IImportArchiveDependencies;
 
   private buildDependencies(): IImportArchiveDependencies {
     return {

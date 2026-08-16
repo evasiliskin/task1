@@ -21,7 +21,7 @@ describe('ArchiveDownloadService', () => {
     rmSync(storageDirectory, { recursive: true, force: true });
   });
 
-  function buildService(): ArchiveDownloadService {
+  function buildService(httpGet: HttpGetFunction): ArchiveDownloadService {
     const archiveConfiguration: ArchiveConfiguration = {
       baseUrl: 'https://data.gharchive.org',
       downloadTimeoutMs: 1000,
@@ -34,7 +34,7 @@ describe('ArchiveDownloadService', () => {
     };
     const storageConfiguration: StorageConfiguration = { dir: storageDirectory };
 
-    return new ArchiveDownloadService(archiveConfiguration, storageConfiguration);
+    return new ArchiveDownloadService(archiveConfiguration, storageConfiguration, httpGet);
   }
 
   const buildSuccessfulHttpGet = (content: string): HttpGetFunction => {
@@ -52,10 +52,10 @@ describe('ArchiveDownloadService', () => {
 
   it('should download using the injected config and return the final file path, when given a valid dateHour', async () => {
     const httpGet = buildSuccessfulHttpGet('fake gzip content');
-    const service = buildService();
+    const service = buildService(httpGet);
     const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
-    const result = await service.download('2026-08-11-0', importId, httpGet);
+    const result = await service.download('2026-08-11-0', importId);
 
     expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
   });

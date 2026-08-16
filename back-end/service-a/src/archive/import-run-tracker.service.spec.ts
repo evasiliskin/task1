@@ -10,6 +10,9 @@ import { type ImportResult } from './processing/process-archive.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- keeps IGithubEventDocument's import path exercised for consistency with the rest of this module's test files; no direct use here.
 type UnusedGithubEventDocument = IGithubEventDocument;
 
+const SOURCE = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
+const STARTED_AT = new Date('2026-08-11T00:00:00Z');
+
 describe('ImportRunTracker', () => {
   const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
@@ -41,7 +44,10 @@ describe('ImportRunTracker', () => {
       const result = await tracker.findByImportId(importId);
 
       expect(result).toBe(document);
-      expect(findOne).toHaveBeenCalledWith({ importId }, { projection: { _id: 0 } });
+      expect(findOne).toHaveBeenCalledWith(
+        { importId, startedAt: { $exists: true } },
+        { projection: { _id: 0 } },
+      );
     });
 
     it('should return null, when no document matches', async () => {
@@ -50,18 +56,126 @@ describe('ImportRunTracker', () => {
 
       await expect(tracker.findByImportId(importId)).resolves.toBeNull();
     });
+
+    it('should filter on startedAt existing, so a claim-only reservation is excluded', async () => {
+      const findOne = vi.fn().mockResolvedValue(null);
+      const tracker = buildTracker(findOne, vi.fn(), vi.fn());
+
+      await tracker.findByImportId(importId);
+
+      expect(findOne).toHaveBeenCalledWith(
+        { importId, startedAt: { $exists: true } },
+        { projection: { _id: 0 } },
+      );
+    });
+
+    it('should return null, when the only matching document is a claim-only reservation with no startedAt', async () => {
+      // The mock stands in for the collection driver applying the startedAt filter: a claim-only
+      // row does not match { startedAt: { $exists: true } }, so findOne resolves null.
+      const findOne = vi.fn().mockResolvedValue(null);
+      const tracker = buildTracker(findOne, vi.fn(), vi.fn());
+
+      await expect(tracker.findByImportId(importId)).resolves.toBeNull();
+    });
+
+    it('should return the document, when it has startedAt set', async () => {
+      const document: IImportRunDocument = {
+        importId,
+        source: { type: 'download', archive: '2026-08-11-0.json.gz' },
+        status: 'started',
+        startedAt: new Date('2026-08-11T00:00:00Z'),
+      };
+      const findOne = vi.fn().mockResolvedValue(document);
+      const tracker = buildTracker(findOne, vi.fn(), vi.fn());
+
+      await expect(tracker.findByImportId(importId)).resolves.toBe(document);
+    });
   });
 
   describe('recordStarted', () => {
-    it('should insert a started document with the given source and startedAt, when called', async () => {
-      const insertOne = vi.fn().mockResolvedValue({ acknowledged: true });
-      const tracker = buildTracker(vi.fn(), insertOne, vi.fn());
+    it('should upsert a started document filtered on startedAt being absent, when called', async () => {
+      const updateOne = vi.fn().mockResolvedValue({ matchedCount: 0, upsertedCount: 1 });
+      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
       const startedAt = new Date('2026-08-11T00:00:00Z');
       const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
 
       await tracker.recordStarted(importId, source, startedAt);
 
-      expect(insertOne).toHaveBeenCalledWith({ importId, source, status: 'started', startedAt });
+      expect(updateOne).toHaveBeenCalledWith(
+        { importId, startedAt: { $exists: false } },
+        { $set: { importId, source, status: 'started', startedAt } },
+        { upsert: true },
+      );
+    });
+
+    it('should start a run that was previously only claimed', async () => {
+      const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+      const tracker = new ImportRunTracker({ updateOne } as never);
+
+      await expect(
+        tracker.recordStarted('11111111-1111-4111-8111-111111111111', SOURCE, STARTED_AT),
+      ).resolves.toBeUndefined();
+      expect(updateOne).toHaveBeenCalledWith(
+        { importId: '11111111-1111-4111-8111-111111111111', startedAt: { $exists: false } },
+        { $set: expect.objectContaining({ status: 'started' }) as unknown },
+        { upsert: true },
+      );
+    });
+
+    it('should raise ImportAlreadyClaimedError when the run already started', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const tracker = new ImportRunTracker({
+        updateOne: vi.fn().mockRejectedValue(duplicate),
+      } as never);
+
+      await expect(
+        tracker.recordStarted('11111111-1111-4111-8111-111111111111', SOURCE, STARTED_AT),
+      ).rejects.toBeInstanceOf(ImportAlreadyClaimedError);
+    });
+  });
+
+  describe('claim', () => {
+    it('should reserve a run for a new key', async () => {
+      const findOneAndUpdate = vi.fn().mockResolvedValue({
+        importId: '11111111-1111-4111-8111-111111111111',
+        idempotencyKey: 'k',
+      });
+      const tracker = new ImportRunTracker({ findOneAndUpdate } as never);
+
+      await expect(tracker.claim('k')).resolves.toEqual({
+        importId: '11111111-1111-4111-8111-111111111111',
+      });
+      expect(findOneAndUpdate).toHaveBeenCalledWith(
+        { idempotencyKey: 'k' },
+        { $setOnInsert: expect.objectContaining({ idempotencyKey: 'k' }) as unknown },
+        { upsert: true, returnDocument: 'after' },
+      );
+    });
+
+    it('should return the same importId for a replayed key', async () => {
+      const existing = { importId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', idempotencyKey: 'k' };
+      const tracker = new ImportRunTracker({
+        findOneAndUpdate: vi.fn().mockResolvedValue(existing),
+      } as never);
+
+      const first = await tracker.claim('k');
+      const second = await tracker.claim('k');
+
+      expect(second).toEqual(first);
+    });
+
+    it('should never return the key itself as the importId', async () => {
+      const tracker = new ImportRunTracker({
+        findOneAndUpdate: vi
+          .fn()
+          .mockImplementation((_filter, update: { $setOnInsert: { importId: string } }) =>
+            Promise.resolve({ importId: update.$setOnInsert.importId }),
+          ),
+      } as never);
+
+      const key = '22222222-2222-4222-8222-222222222222';
+
+      expect((await tracker.claim(key)).importId).not.toBe(key);
     });
   });
 
@@ -137,13 +251,34 @@ describe('ImportRunTracker', () => {
     });
   });
 
+  describe('expireStaleClaims', () => {
+    it('should delete claim-only rows older than the cutoff', async () => {
+      const deleteMany = vi.fn().mockResolvedValue({ deletedCount: 3 });
+      const tracker = new ImportRunTracker({ deleteMany } as never);
+      const cutoff = new Date('2026-08-11T00:00:00Z');
+
+      await expect(tracker.expireStaleClaims(cutoff)).resolves.toBe(3);
+      expect(deleteMany).toHaveBeenCalledWith({
+        claimedAt: { $lt: cutoff },
+        startedAt: { $exists: false },
+      });
+    });
+
+    it('should return 0, when nothing is stale', async () => {
+      const deleteMany = vi.fn().mockResolvedValue({ deletedCount: 0 });
+      const tracker = new ImportRunTracker({ deleteMany } as never);
+
+      await expect(tracker.expireStaleClaims(new Date())).resolves.toBe(0);
+    });
+  });
+
   describe('recordStarted duplicate handling', () => {
-    it('should throw ImportAlreadyClaimedError, when the unique importId index rejects the insert', async () => {
+    it('should throw ImportAlreadyClaimedError, when the unique importId index rejects the upsert', async () => {
       const duplicateKeyError = new MongoServerError({ message: 'E11000 duplicate key' });
       duplicateKeyError.code = 11_000;
 
       const collection = {
-        insertOne: vi.fn().mockRejectedValue(duplicateKeyError),
+        updateOne: vi.fn().mockRejectedValue(duplicateKeyError),
       } as unknown as Collection<IImportRunDocument>;
       const tracker = new ImportRunTracker(collection);
 
@@ -156,9 +291,9 @@ describe('ImportRunTracker', () => {
       ).rejects.toBeInstanceOf(ImportAlreadyClaimedError);
     });
 
-    it('should rethrow the original error, when the insert fails for any reason other than a duplicate key', async () => {
+    it('should rethrow the original error, when the upsert fails for any reason other than a duplicate key', async () => {
       const collection = {
-        insertOne: vi.fn().mockRejectedValue(new Error('connection reset')),
+        updateOne: vi.fn().mockRejectedValue(new Error('connection reset')),
       } as unknown as Collection<IImportRunDocument>;
       const tracker = new ImportRunTracker(collection);
 

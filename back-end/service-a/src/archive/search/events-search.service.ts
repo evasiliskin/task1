@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { type IEventView, type IGithubEventDocument } from '@task1/shared/github-archive/index';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { type Collection } from 'mongodb';
 
@@ -18,10 +18,11 @@ export class EventsSearchService {
     private readonly metricsService: MetricsService,
   ) {}
 
-  public async search(message: SearchEventsMessage): Promise<ICursorPage<IGithubEventDocument>> {
+  public async search(message: SearchEventsMessage): Promise<ICursorPage<IEventView>> {
     const result = await searchEvents(this.collection, message);
 
-    await this.metricsService.recordMetric(METRIC_SEARCH_REQUESTS, 1);
+    // eslint-disable-next-line no-void -- Not awaited: a Redis round trip does not belong on the latency path of a read, and `recordMetric` already handles and logs its own failures.
+    void this.metricsService.recordMetric(METRIC_SEARCH_REQUESTS, 1);
 
     return result;
   }

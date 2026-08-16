@@ -18,7 +18,7 @@ import storageConfig from './config/storage.config.js';
 import uploadConfig from './config/upload.config.js';
 import { ContractModule } from './contract/contract.module.js';
 import { ImportsModule } from './imports/imports.module.js';
-import { SERVICE_A_IMPORTS_RMQ_CLIENT } from './rmq/rmq-client.tokens.js';
+import { SERVICE_A_IMPORTS_RMQ_CLIENT, SERVICE_A_RMQ_CLIENT } from './rmq/rmq-client.tokens.js';
 import { RmqClientsModule } from './rmq/rmq-clients.module.js';
 
 type App = Parameters<typeof request>[0];
@@ -29,17 +29,19 @@ const IMPORT_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 describe('Correlation propagation (HTTP Integration)', () => {
   let app: INestApplication;
   let httpServer: App;
-  let serviceAClient: { emit: ReturnType<typeof vi.fn> };
+  let serviceAImportsClient: { emit: ReturnType<typeof vi.fn> };
+  let serviceAClient: { send: ReturnType<typeof vi.fn> };
 
   function emittedHeaders(): Record<string, string> {
-    const [, record] = serviceAClient.emit.mock.calls[0] as [string, unknown];
+    const [, record] = serviceAImportsClient.emit.mock.calls[0] as [string, unknown];
     const { options } = record as { options: { headers: Record<string, string> } };
 
     return options.headers;
   }
 
   beforeAll(async () => {
-    serviceAClient = { emit: vi.fn(() => of(undefined)) };
+    serviceAImportsClient = { emit: vi.fn(() => of(undefined)) };
+    serviceAClient = { send: vi.fn(() => of({ importId: IMPORT_ID })) };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -59,6 +61,8 @@ describe('Correlation propagation (HTTP Integration)', () => {
       ],
     })
       .overrideProvider(SERVICE_A_IMPORTS_RMQ_CLIENT)
+      .useValue(serviceAImportsClient as unknown as ClientProxy)
+      .overrideProvider(SERVICE_A_RMQ_CLIENT)
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -75,7 +79,9 @@ describe('Correlation propagation (HTTP Integration)', () => {
   });
 
   beforeEach(() => {
-    serviceAClient.emit.mockClear();
+    serviceAImportsClient.emit.mockClear();
+    serviceAClient.send.mockClear();
+    serviceAClient.send.mockReturnValue(of({ importId: IMPORT_ID }));
   });
 
   it('should forward the inbound correlation id onto the published message, when triggering an import', async () => {
@@ -86,7 +92,7 @@ describe('Correlation propagation (HTTP Integration)', () => {
       .send({ dateHour: '2026-08-11-0' })
       .expect(202);
 
-    expect(serviceAClient.emit).toHaveBeenCalledTimes(1);
+    expect(serviceAImportsClient.emit).toHaveBeenCalledTimes(1);
     // eslint-disable-next-line security/detect-object-injection -- CORRELATION_ID_HEADER is a fixed constant, not user input
     expect(emittedHeaders()[CORRELATION_ID_HEADER]).toBe(CORRELATION_ID);
   });

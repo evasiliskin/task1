@@ -1,7 +1,7 @@
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { DUPLICATE_KEY_ERROR_CODE } from '@task1/shared/mongo/duplicate-key.const';
 import { type Collection, type MongoBulkWriteError, type WriteError } from 'mongodb';
 
-const DUPLICATE_KEY_ERROR_CODE = 11000;
 /**
  * A failing batch usually fails the same way for every document. Sampling distinct failure modes
  * gives the reader the "why" that `errorCount` alone never could, without letting one bad archive

@@ -1,4 +1,5 @@
-import { InvalidCursorError } from './errors.js';
+import { InvalidCursorError } from '@task1/shared';
+
 import { decodeEventCursor, encodeEventCursor } from './event-cursor.util.js';
 
 describe('encodeEventCursor / decodeEventCursor', () => {

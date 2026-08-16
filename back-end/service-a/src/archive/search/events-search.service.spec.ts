@@ -37,4 +37,22 @@ describe('EventsSearchService', () => {
 
     expect(recordMetric).toHaveBeenCalledWith('service_a.archive.search.requests', 1);
   });
+
+  it('should not wait for the metric write before returning results', async () => {
+    let releaseMetric = (): void => undefined;
+    const recordMetric = vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        releaseMetric = resolve;
+      }),
+    );
+    const collection = buildCollection();
+    const metricsService = { recordMetric } as unknown as MetricsService;
+    const service = new EventsSearchService(collection, metricsService);
+
+    // Resolves even though the metric promise is still pending.
+    await expect(service.search({ limit: 50 })).resolves.toBeDefined();
+    expect(recordMetric).toHaveBeenCalledWith('service_a.archive.search.requests', 1);
+
+    releaseMetric();
+  });
 });

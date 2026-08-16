@@ -1,11 +1,13 @@
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
-import { type Collection, type WithId } from 'mongodb';
+import { type ILogView } from '@task1/shared/processing-log/contracts/log-view.dto';
+import { type Collection } from 'mongodb';
 
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
 import { buildLogsFilter } from './build-logs-filter.js';
 import { decodeLogCursor, encodeLogCursor } from './log-cursor.util.js';
 import { type SearchLogsMessage } from './search-logs-message.schema.js';
+import { toLogView } from './to-log-view.js';
 
 const LOG_PROJECTION = {
   _id: 1,
@@ -20,7 +22,7 @@ const LOG_PROJECTION = {
   errorInfo: 1,
 } as const;
 
-export type SearchLogsResult = ICursorPage<IProcessingLogDocument>;
+export type SearchLogsResult = ICursorPage<ILogView>;
 
 export async function searchLogs(
   collection: Collection<IProcessingLogDocument>,
@@ -37,7 +39,7 @@ export async function searchLogs(
 
   const hasNextPage = documents.length > message.limit;
   const pageDocuments = hasNextPage ? documents.slice(0, message.limit) : documents;
-  const data = pageDocuments.map(toLogEntry);
+  const data = pageDocuments.map(toLogView);
   const lastDocument = pageDocuments.at(-1);
 
   if (!hasNextPage || lastDocument === undefined) {
@@ -51,23 +53,4 @@ export async function searchLogs(
       id: lastDocument._id.toHexString(),
     }),
   };
-}
-
-function toLogEntry(document: WithId<IProcessingLogDocument>): IProcessingLogDocument {
-  const entry: IProcessingLogDocument = {
-    importId: document.importId,
-    eventType: document.eventType,
-    service: document.service,
-    status: document.status,
-    timestamp: document.timestamp,
-    correlationId: document.correlationId,
-    archive: document.archive,
-    metadata: document.metadata,
-  };
-
-  if (document.errorInfo !== undefined) {
-    entry.errorInfo = document.errorInfo;
-  }
-
-  return entry;
 }

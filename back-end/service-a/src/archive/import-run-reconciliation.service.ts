@@ -13,6 +13,8 @@ const STALENESS_MULTIPLIER = 3;
 const RECONCILED_LOG = 'Failed import runs abandoned in "started" by an interrupted process';
 const RECONCILE_FAILED_LOG = 'Could not reconcile abandoned import runs';
 const RECONCILE_REASON = 'Import run was interrupted before completing and has been reconciled';
+const CLAIMS_EXPIRED_LOG = 'Expired claimed-but-never-started import reservations';
+const CLAIMS_EXPIRE_FAILED_LOG = 'Could not expire stale import claims';
 
 @Injectable()
 export class ImportRunReconciliationService implements OnApplicationBootstrap {
@@ -45,6 +47,18 @@ export class ImportRunReconciliationService implements OnApplicationBootstrap {
       // A reconciliation failure must not stop the service booting — the stale documents are a
       // reporting defect, not a correctness one, and the next start will retry.
       this.logger.warn({ stalenessMs }, RECONCILE_FAILED_LOG, error);
+    }
+
+    try {
+      const expired = await this.importRunTracker.expireStaleClaims(cutoff);
+
+      if (expired > 0) {
+        this.logger.info({ count: expired, stalenessMs }, CLAIMS_EXPIRED_LOG);
+      }
+    } catch (error) {
+      // Same rationale as above: a claim a client never retried is a hygiene gap, not a
+      // correctness one (see expireStaleClaims's doc comment), so this must not block startup.
+      this.logger.warn({ stalenessMs }, CLAIMS_EXPIRE_FAILED_LOG, error);
     }
   }
 }

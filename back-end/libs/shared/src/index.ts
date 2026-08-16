@@ -26,12 +26,16 @@ export * from './messaging/retry-headers.util.js';
 export * from './messaging/retry-publisher.js';
 export * from './messaging/rmq-channel.types.js';
 
+export * from './processing-log/contracts/log-view.dto.js';
+
 export * from './pagination/cursor-codec.js';
 export * from './pagination/cursor-page.types.js';
 export * from './pagination/list-result.js';
 export * from './pagination/pagination.const.js';
 
 export * from './redis/create-redis-client.js';
+
+export * from './mongo/duplicate-key.const.js';
 
 export * from './logger/app-logger.js';
 export * from './logger/logger-factory.interface.js';

@@ -18,6 +18,7 @@ export interface IDownloadArchiveOptions {
   totalTimeoutMs: number;
   maxAttempts: number;
   retryDelayMs: number;
+  httpGet: HttpGetFunction;
 }
 
 export interface IDownloadArchiveResult {
@@ -28,13 +29,12 @@ export async function downloadArchive(
   dateHour: string,
   importId: string,
   options: IDownloadArchiveOptions,
-  httpGet?: HttpGetFunction,
 ): Promise<IDownloadArchiveResult> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
     try {
-      return await attemptDownload(dateHour, importId, options, httpGet);
+      return await attemptDownload(dateHour, importId, options);
     } catch (error) {
       lastError = error;
 
@@ -59,7 +59,6 @@ async function attemptDownload(
   dateHour: string,
   importId: string,
   options: IDownloadArchiveOptions,
-  httpGet?: HttpGetFunction,
 ): Promise<IDownloadArchiveResult> {
   const url = buildArchiveUrl(dateHour, options.baseUrl);
 
@@ -72,7 +71,7 @@ async function attemptDownload(
   await mkdir(options.storageDirectory, { recursive: true });
 
   try {
-    const responseStream = await fetchArchiveStream(url, options.timeoutMs, httpGet);
+    const responseStream = await fetchArchiveStream(url, options.timeoutMs, options.httpGet);
 
     await streamToTemporaryFile(responseStream, temporaryPath, options.totalTimeoutMs);
   } catch (error) {

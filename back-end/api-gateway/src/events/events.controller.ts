@@ -2,6 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { type IEventView } from '@task1/shared/github-archive/index';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { listResult } from '@task1/shared/pagination/list-result';
@@ -14,7 +15,6 @@ import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
-import { type EventView } from './schemas/event.schema.js';
 import { SearchEventsRequestSchema } from './schemas/search-events-request.schema.js';
 import {
   type SearchEventsResponse,
@@ -61,7 +61,7 @@ export class EventsController {
   ): Promise<SearchEventsResponse> {
     const result = await firstValueFrom(
       this.propagatingClient
-        .send<ICursorPage<EventView>>(this.serviceAClient, RPC_PATTERNS.EVENTS_SEARCH, bound.data)
+        .send<ICursorPage<IEventView>>(this.serviceAClient, RPC_PATTERNS.EVENTS_SEARCH, bound.data)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 

@@ -22,6 +22,30 @@ describe('ensureImportIndexes', () => {
     expect(createIndex).toHaveBeenCalledWith({ status: 1, startedAt: 1 });
   });
 
+  it('should create a partial unique index on idempotencyKey, when called', async () => {
+    const createIndex = vi.fn().mockResolvedValue('idempotencyKey_1');
+    const collection = { createIndex } as unknown as Collection<IImportRunDocument>;
+
+    await ensureImportIndexes(collection);
+
+    expect(createIndex).toHaveBeenCalledWith(
+      { idempotencyKey: 1 },
+      { unique: true, partialFilterExpression: { idempotencyKey: { $exists: true } } },
+    );
+  });
+
+  it('should create a partial index on claimedAt scoped to rows that have one, when called', async () => {
+    const createIndex = vi.fn().mockResolvedValue('claimedAt_1');
+    const collection = { createIndex } as unknown as Collection<IImportRunDocument>;
+
+    await ensureImportIndexes(collection);
+
+    expect(createIndex).toHaveBeenCalledWith(
+      { claimedAt: 1 },
+      { partialFilterExpression: { claimedAt: { $exists: true } } },
+    );
+  });
+
   it('should create every index without serialising the round trips', async () => {
     let inFlight = 0;
     let peak = 0;
@@ -34,7 +58,7 @@ describe('ensureImportIndexes', () => {
 
     await ensureImportIndexes({ createIndex } as never);
 
-    expect(createIndex).toHaveBeenCalledTimes(2);
+    expect(createIndex).toHaveBeenCalledTimes(4);
     expect(peak).toBeGreaterThan(1);
   });
 });

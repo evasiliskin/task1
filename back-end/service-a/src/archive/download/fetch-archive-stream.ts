@@ -1,5 +1,4 @@
 import { type ClientRequest, type IncomingMessage } from 'node:http';
-import { get as httpsGet } from 'node:https';
 
 import { ArchiveDownloadError } from './errors.js';
 
@@ -11,7 +10,7 @@ export type HttpGetFunction = (
 export function fetchArchiveStream(
   url: string,
   timeoutMs: number,
-  httpGet: HttpGetFunction = httpsGet,
+  httpGet: HttpGetFunction,
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const request = httpGet(url, (response) => {

@@ -5,6 +5,7 @@ import { type MetricsService } from '../infra/redis/metrics.service.js';
 import { type ImportRunTracker } from './import-run-tracker.service.js';
 import { type IImportRunDocument } from './import-run.types.js';
 import { ImportStatusController } from './import-status.controller.js';
+import { toImportStatusView } from './to-import-status-view.js';
 
 function buildRmqContext(): RmqContext {
   return {
@@ -25,8 +26,18 @@ describe('ImportStatusController', () => {
     return { metricsService: { recordMetric } as unknown as MetricsService, recordMetric };
   }
 
+  function buildDocument(): IImportRunDocument {
+    return {
+      importId,
+      source: { type: 'download', archive: '2026-08-11-0.json.gz' },
+      status: 'completed',
+      startedAt: new Date('2026-08-11T00:00:00.000Z'),
+      completedAt: new Date('2026-08-11T00:05:00.000Z'),
+    };
+  }
+
   it('should validate the payload and delegate to ImportRunTracker.findByImportId, when a valid message is received', async () => {
-    const document = { importId, status: 'completed' } as unknown as IImportRunDocument;
+    const document = buildDocument();
     const findByImportId = vi.fn().mockResolvedValue(document);
     const importRunTracker = { findByImportId } as unknown as ImportRunTracker;
     const { metricsService } = buildMetricsService();
@@ -34,7 +45,7 @@ describe('ImportStatusController', () => {
 
     const result = await controller.handleGetStatus({ importId }, buildRmqContext());
 
-    expect(result).toBe(document);
+    expect(result).toEqual(toImportStatusView(document));
     expect(findByImportId).toHaveBeenCalledWith(importId);
   });
 
@@ -84,5 +95,27 @@ describe('ImportStatusController', () => {
 
     await expect(controller.handleGetStatus({ importId }, context)).rejects.toThrow('boom');
     expect(ack).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not wait for the metric write before returning the result', async () => {
+    let releaseMetric = (): void => undefined;
+    const recordMetric = vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        releaseMetric = resolve;
+      }),
+    );
+    const document = buildDocument();
+    const findByImportId = vi.fn().mockResolvedValue(document);
+    const importRunTracker = { findByImportId } as unknown as ImportRunTracker;
+    const metricsService = { recordMetric } as unknown as MetricsService;
+    const controller = new ImportStatusController(importRunTracker, metricsService);
+
+    // Resolves even though the metric promise is still pending.
+    await expect(controller.handleGetStatus({ importId }, buildRmqContext())).resolves.toEqual(
+      toImportStatusView(document),
+    );
+    expect(recordMetric).toHaveBeenCalledWith('service_a.archive.status.requests', 1);
+
+    releaseMetric();
   });
 });

@@ -5,8 +5,10 @@ import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 
+import { ClaimImportController } from './claim/claim-import.controller.js';
 import { ArchiveDownloadService } from './download/archive-download.service.js';
 import { DownloadImportController } from './download/download-import.controller.js';
+import { httpGetProvider } from './download/http-get.provider.js';
 import { EnsureEventIndexesInitializer } from './ensure-event-indexes-initializer.service.js';
 import { EnsureImportIndexesInitializer } from './ensure-import-indexes-initializer.service.js';
 import { eventsCollectionProvider } from './events-collection.provider.js';
@@ -47,6 +49,7 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     DownloadImportController,
     EventsSearchController,
     ImportStatusController,
+    ClaimImportController,
   ],
   providers: [
     eventsCollectionProvider,
@@ -55,6 +58,7 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     EnsureImportIndexesInitializer,
     ArchiveProcessingService,
     ArchiveDownloadService,
+    httpGetProvider,
     ImportRunTracker,
     ImportRunReconciliationService,
     ImportOrchestrationService,

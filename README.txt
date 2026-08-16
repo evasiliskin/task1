@@ -115,7 +115,7 @@ completes normally and sets the status code, so no error envelope is produced.
 | `GET` | `/api/v1/health` | Aggregated health of gateway + all dependencies | Public | — |
 | `GET` | `/api/v1/health/live` | Liveness probe (process is running) | Public | — |
 | `GET` | `/api/v1/health/ready` | Readiness probe (`503` if RabbitMQ/service-a/service-b/Redis down) | Public | — |
-| `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported). `503` if the broker rejects the publish | Required | `archive.import.download` → service-a |
+| `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported). `503` if the broker rejects the publish | Required | `archive.import.download` → service-a, `imports.claim` → service-a (only when an `Idempotency-Key` header is supplied) |
 | `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart, max 512 MiB, gzip magic bytes verified). `503` if the broker rejects the publish | Required | `archive.process.upload` → service-a |
 | `GET` | `/api/v1/imports/:importId` | Get one import run's status/counters | Required | `imports.status.get` → service-a |
 | `GET` | `/api/v1/events` | Search imported GitHub events, cursor pagination | Required | `events.search` → service-a |
@@ -125,6 +125,14 @@ completes normally and sets the status code, so no error envelope is produced.
 
 See "GitHub Archive Import & Analytics" below for the data flow behind the imports/events/logs/
 stats/reports endpoints, and "Authentication" for what "Required" currently means in practice.
+
+`importId` on `POST /imports` is always server-generated — the client never picks it. The optional
+`Idempotency-Key` header is a separate, client-supplied UUID that is only ever used as a dedup key:
+it is stored on the `imports` document and resolved through the `imports.claim` RabbitMQ pattern
+(service-a, which owns the `imports` collection), not returned to the caller or reused as the
+`importId`. Replaying the same `Idempotency-Key` resolves to the same `importId` and starts no
+second import; a request without the header always mints a fresh `importId` locally and skips the
+`imports.claim` round trip entirely.
 
 ## Authentication
 
@@ -346,6 +354,15 @@ accepted the command (not once the import finishes — poll `GET /imports/:impor
 for status), or `503` if the broker rejects the publish (e.g. a queue-declaration mismatch on
 connect). `GET /events`, `GET /logs`, `GET /stats`, and `GET /reports/pdf` are RabbitMQ RPC
 (`.send`) — the gateway blocks until the downstream service replies.
+
+Every RPC reply is shaped by an explicit view contract exported from `@task1/shared`
+(`IEventView` for `events.search`, `IImportStatusView` for `imports.status.get`, `ILogView` for
+`logs.search`, `IImportClaimView` for `imports.claim`) rather than by the MongoDB document
+interface the owning service persists internally (`IGithubEventDocument`, `IImportRunDocument`,
+`IProcessingLogDocument`). The two disagree on shape — timestamps are `Date`s in a document and ISO
+strings on the wire, and a document can carry fields (e.g. Mongo's `_id`) that must never leave the
+service — so a document type is never returned directly from a `@MessagePattern`/RPC handler; each
+handler maps into its view contract first.
 
 `service-a` and `service-b` serve no HTTP traffic — reachable only through the gateway, over
 RabbitMQ. `service-a` does construct a Nest HTTP adapter internally (`NestFactory.create` with

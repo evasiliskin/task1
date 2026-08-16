@@ -31,6 +31,7 @@ describe('downloadArchive', () => {
     totalTimeoutMs: 5000,
     maxAttempts: 1,
     retryDelayMs: 10,
+    httpGet: buildHttpGet(),
     ...overrides,
   });
 
@@ -65,7 +66,7 @@ describe('downloadArchive', () => {
   it('should write the archive to the final path, when the download succeeds', async () => {
     const httpGet = buildSuccessfulHttpGet('fake gzip content');
 
-    const result = await downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet);
+    const result = await downloadArchive('2026-08-11-0', importId, buildOptions({ httpGet }));
 
     expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
@@ -79,7 +80,11 @@ describe('downloadArchive', () => {
   it('should write to an importId-keyed path so concurrent same-hour imports cannot collide', async () => {
     const importId = '11111111-1111-4111-8111-111111111111';
 
-    const result = await downloadArchive('2026-08-11-0', importId, buildOptions(), buildHttpGet());
+    const result = await downloadArchive(
+      '2026-08-11-0',
+      importId,
+      buildOptions({ httpGet: buildHttpGet() }),
+    );
 
     expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
   });
@@ -87,7 +92,7 @@ describe('downloadArchive', () => {
   it('should leave no temp file behind on success', async () => {
     const importId = '22222222-2222-4222-8222-222222222222';
 
-    await downloadArchive('2026-08-11-0', importId, buildOptions(), buildHttpGet());
+    await downloadArchive('2026-08-11-0', importId, buildOptions({ httpGet: buildHttpGet() }));
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(readdirSync(storageDirectory)).toEqual([`${importId}.json.gz`]);
@@ -96,9 +101,9 @@ describe('downloadArchive', () => {
   it('should throw InvalidDateHourError and write no file, when dateHour is malformed', async () => {
     const httpGet = buildSuccessfulHttpGet('unused');
 
-    await expect(downloadArchive('not-a-date', importId, buildOptions(), httpGet)).rejects.toThrow(
-      InvalidDateHourError,
-    );
+    await expect(
+      downloadArchive('not-a-date', importId, buildOptions({ httpGet })),
+    ).rejects.toThrow(InvalidDateHourError);
     expect(httpGet).not.toHaveBeenCalled();
   });
 
@@ -107,7 +112,7 @@ describe('downloadArchive', () => {
     const finalPath = join(storageDirectory, `${importId}.json.gz`);
 
     await expect(
-      downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet),
+      downloadArchive('2026-08-11-0', importId, buildOptions({ httpGet })),
     ).rejects.toThrow(ArchiveDownloadError);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(finalPath)).toBe(false);
@@ -134,7 +139,7 @@ describe('downloadArchive', () => {
     const finalPath = join(storageDirectory, `${importId}.json.gz`);
 
     await expect(
-      downloadArchive('2026-08-11-0', importId, buildOptions(), httpGet),
+      downloadArchive('2026-08-11-0', importId, buildOptions({ httpGet })),
     ).rejects.toThrow(ArchiveDownloadError);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(finalPath)).toBe(false);
@@ -150,7 +155,6 @@ describe('downloadArchive', () => {
     const realSetImmediate = setImmediate;
     vi.useFakeTimers();
 
-    const options = buildOptions();
     const stalledBody = new PassThrough();
     const httpGetMock = vi.fn((_url: string, callback: (response: IncomingMessage) => void) => {
       callback(
@@ -163,8 +167,9 @@ describe('downloadArchive', () => {
       return { setTimeout: vi.fn(), on: vi.fn(), destroy: vi.fn() } as unknown as ClientRequest;
     });
     const httpGet: HttpGetFunction = httpGetMock;
+    const options = buildOptions({ httpGet });
 
-    const promise = downloadArchive('2026-08-11-0', importId, options, httpGet);
+    const promise = downloadArchive('2026-08-11-0', importId, options);
 
     while (httpGetMock.mock.calls.length === 0) {
       await new Promise((resolve) => realSetImmediate(resolve));
@@ -179,19 +184,6 @@ describe('downloadArchive', () => {
   });
 
   describe('retries', () => {
-    let options: IDownloadArchiveOptions;
-
-    beforeEach(() => {
-      options = {
-        baseUrl: 'https://data.gharchive.org',
-        storageDirectory,
-        timeoutMs: 1000,
-        totalTimeoutMs: 5000,
-        maxAttempts: 3,
-        retryDelayMs: 10,
-      };
-    });
-
     const respondWith =
       (statusCode: number, body: Buffer | string = ''): HttpGetFunction =>
       (_url: string, callback: (response: IncomingMessage) => void): ClientRequest => {
@@ -208,8 +200,9 @@ describe('downloadArchive', () => {
         .fn()
         .mockImplementationOnce(respondWith(503))
         .mockImplementationOnce(respondWith(200, gzipSync(Buffer.from('{}'))));
+      const options = buildOptions({ maxAttempts: 3, httpGet });
 
-      await expect(downloadArchive('2026-08-11-0', importId, options, httpGet)).resolves.toEqual({
+      await expect(downloadArchive('2026-08-11-0', importId, options)).resolves.toEqual({
         filePath: join(storageDirectory, `${importId}.json.gz`),
       });
       expect(httpGet).toHaveBeenCalledTimes(2);
@@ -217,10 +210,9 @@ describe('downloadArchive', () => {
 
     it('should not retry a 404, because the archive hour does not exist and never will on this attempt cycle', async () => {
       const httpGet = vi.fn().mockImplementation(respondWith(404));
+      const options = buildOptions({ maxAttempts: 3, httpGet });
 
-      await expect(downloadArchive('2999-01-01-0', importId, options, httpGet)).rejects.toThrow(
-        /HTTP 404/,
-      );
+      await expect(downloadArchive('2999-01-01-0', importId, options)).rejects.toThrow(/HTTP 404/);
       expect(httpGet).toHaveBeenCalledTimes(1);
     });
   });

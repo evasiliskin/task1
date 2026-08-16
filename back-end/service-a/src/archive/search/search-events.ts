@@ -1,17 +1,18 @@
-import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
+import { type IEventView, type IGithubEventDocument } from '@task1/shared/github-archive/index';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { type Collection } from 'mongodb';
 
 import { buildEventsFilter } from './build-events-filter.js';
 import { decodeEventCursor, encodeEventCursor } from './event-cursor.util.js';
 import { type SearchEventsMessage } from './search-events-message.schema.js';
+import { toEventView } from './to-event-view.js';
 
 const EVENT_PROJECTION = { _id: 0 } as const;
 
 export async function searchEvents(
   collection: Collection<IGithubEventDocument>,
   message: SearchEventsMessage,
-): Promise<ICursorPage<IGithubEventDocument>> {
+): Promise<ICursorPage<IEventView>> {
   const cursor = message.cursor === undefined ? undefined : decodeEventCursor(message.cursor);
   const filter = buildEventsFilter(message, cursor);
 
@@ -22,15 +23,19 @@ export async function searchEvents(
     .toArray();
 
   const hasNextPage = documents.length > message.limit;
-  const data = hasNextPage ? documents.slice(0, message.limit) : documents;
-  const lastEvent = data.at(-1);
+  const documentsPage = hasNextPage ? documents.slice(0, message.limit) : documents;
+  const data = documentsPage.map(toEventView);
+  const lastDocument = documentsPage.at(-1);
 
-  if (!hasNextPage || lastEvent === undefined) {
+  if (!hasNextPage || lastDocument === undefined) {
     return { data };
   }
 
   return {
     data,
-    nextCursor: encodeEventCursor({ createdAt: lastEvent.createdAt, eventId: lastEvent.eventId }),
+    nextCursor: encodeEventCursor({
+      createdAt: lastDocument.createdAt,
+      eventId: lastDocument.eventId,
+    }),
   };
 }
