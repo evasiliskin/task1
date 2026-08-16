@@ -5,9 +5,15 @@ import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
+import archiveConfig from '../../config/archive.config.js';
 import mongodbConfig from '../../config/mongodb.config.js';
 import { EVENTS_COLLECTION } from '../events-collection.provider.js';
-import { type ImportResult, processArchive } from '../processing/process-archive.js';
+import { type OnInvalidLine } from '../processing/parse-and-validate.js';
+import {
+  type ImportResult,
+  type OnBatchErrors,
+  processArchive,
+} from '../processing/process-archive.js';
 
 const INVALID_LINE_LOG_MESSAGE = 'Skipped invalid archive line';
 const MAX_INVALID_LINE_LOGS = 10;
@@ -43,50 +49,69 @@ export class ArchiveProcessingService {
     @Inject(EVENTS_COLLECTION) private readonly collection: Collection<IGithubEventDocument>,
     @Inject(mongodbConfig.KEY)
     private readonly mongodbConfiguration: ConfigType<typeof mongodbConfig>,
+    @Inject(archiveConfig.KEY)
+    private readonly archiveConfiguration: ConfigType<typeof archiveConfig>,
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(ArchiveProcessingService.name);
   }
 
   public process(filePath: string, importId: string): Promise<ImportResult> {
-    // A drifted or truncated archive invalidates every line. Without a cap, one bad import emits
-    // hundreds of thousands of warnings carrying full raw JSON — enough to evict real logs from
-    // retention. The totals still reach the caller as `invalidEvents` / `errorCount`, which are
-    // the numbers worth alerting on.
-    const invalidLineCap = createLogCap(MAX_INVALID_LINE_LOGS);
-    const batchErrorCap = createLogCap(MAX_BATCH_ERROR_LOGS);
-
     return processArchive(
       filePath,
       importId,
-      { collection: this.collection, batchSize: this.mongodbConfiguration.batchSize },
-      (rawLine, error) => {
-        const cap = invalidLineCap();
-
-        if (cap === undefined) {
-          return;
-        }
-
-        this.logger.warn(
-          { importId, rawLinePreview: rawLine.slice(0, RAW_LINE_PREVIEW_LENGTH), ...cap },
-          INVALID_LINE_LOG_MESSAGE,
-          error,
-        );
+      {
+        collection: this.collection,
+        batchSize: this.mongodbConfiguration.batchSize,
+        insertConcurrency: this.mongodbConfiguration.insertConcurrency,
+        maxLineBytes: this.archiveConfiguration.maxLineBytes,
+        maxDecompressedBytes: this.archiveConfiguration.maxDecompressedBytes,
       },
-      (errorCount, errorSample) => {
-        const cap = batchErrorCap();
-
-        if (cap === undefined) {
-          return;
-        }
-
-        this.logger.warn(
-          { importId, errorCount, errorSample, ...cap },
-          BATCH_WRITE_ERRORS_LOG_MESSAGE,
-        );
-      },
+      this.buildInvalidLineLogger(importId),
+      this.buildBatchErrorLogger(importId),
     );
   }
 
   private readonly logger: AppLogger;
+
+  /**
+   * A drifted or truncated archive invalidates every line. Without a cap, one bad import emits
+   * hundreds of thousands of warnings carrying full raw JSON — enough to evict real logs from
+   * retention. The totals still reach the caller as `invalidEvents` / `errorCount`, which are the
+   * numbers worth alerting on.
+   */
+  private buildInvalidLineLogger(importId: string): OnInvalidLine {
+    const cap = createLogCap(MAX_INVALID_LINE_LOGS);
+
+    return (rawLine, error) => {
+      const capState = cap();
+
+      if (capState === undefined) {
+        return;
+      }
+
+      this.logger.warn(
+        { importId, rawLinePreview: rawLine.slice(0, RAW_LINE_PREVIEW_LENGTH), ...capState },
+        INVALID_LINE_LOG_MESSAGE,
+        error,
+      );
+    };
+  }
+
+  private buildBatchErrorLogger(importId: string): OnBatchErrors {
+    const cap = createLogCap(MAX_BATCH_ERROR_LOGS);
+
+    return (errorCount, errorSample) => {
+      const capState = cap();
+
+      if (capState === undefined) {
+        return;
+      }
+
+      this.logger.warn(
+        { importId, errorCount, errorSample, ...capState },
+        BATCH_WRITE_ERRORS_LOG_MESSAGE,
+      );
+    };
+  }
 }

@@ -17,7 +17,10 @@ export const rawGithubEventSchema = z.object({
   actor: rawGithubActorSchema,
   repo: rawGithubRepositorySchema,
   org: rawGithubActorSchema.optional(),
-  payload: z.record(z.string(), z.unknown()),
+  // `z.unknown()`, not `z.record(...)`: a record schema validates and deep-copies the whole GitHub
+  // payload for every line, and `buildPayload` then keeps two or three fields. That copy was the
+  // largest allocation cost of an import. `buildPayload` guards every field it reads.
+  payload: z.unknown(),
 });
 
 export type RawGithubEvent = z.infer<typeof rawGithubEventSchema>;

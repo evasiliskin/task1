@@ -42,6 +42,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@nestjs/cli": "^11.0.0",
+    "@testcontainers/mongodb": "^11.0.0",
     "@testcontainers/rabbitmq": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",

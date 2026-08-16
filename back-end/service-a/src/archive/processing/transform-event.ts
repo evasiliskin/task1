@@ -9,10 +9,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function buildPayload(rawEvent: RawGithubEvent): Record<string, unknown> {
+  const payload: Record<string, unknown> = isRecord(rawEvent.payload) ? rawEvent.payload : {};
+
   switch (rawEvent.type) {
     case 'PushEvent': {
-      const commits = rawEvent.payload.commits;
-      const reference = rawEvent.payload.ref;
+      const commits = payload.commits;
+      const reference = payload.ref;
 
       return {
         ref: typeof reference === 'string' ? reference : '',
@@ -21,8 +23,8 @@ function buildPayload(rawEvent: RawGithubEvent): Record<string, unknown> {
     }
 
     case 'IssuesEvent': {
-      const action = rawEvent.payload.action;
-      const issue = rawEvent.payload.issue;
+      const action = payload.action;
+      const issue = payload.issue;
       const issueTitle = isRecord(issue) && typeof issue.title === 'string' ? issue.title : '';
 
       return {

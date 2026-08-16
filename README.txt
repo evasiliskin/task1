@@ -688,9 +688,10 @@ For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlea
 
 - **Integration coverage is partial.** `pnpm test:int` exercises the real RabbitMQ broker via
   Testcontainers for import delivery, retry and dead-lettering (`back-end/service-a/test/int/`).
-  MongoDB and the Docker volume layout are still only covered by unit tests with mocked
-  collections, and the Docker volume layout is not covered at all. There is still no CI config in
-  this repo.
+  `pnpm test:int` also exercises real MongoDB via Testcontainers for archive ingestion —
+  decompression bounds, UTF-8 boundary correctness, payload shape and insert concurrency
+  (`back-end/service-a/test/int/archive-ingestion.int.spec.ts`). The Docker volume layout is still
+  not covered at all. There is still no CI config in this repo.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
   `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
   visible: each dead-lettered message is recorded as a `processing-logs` document with `status:

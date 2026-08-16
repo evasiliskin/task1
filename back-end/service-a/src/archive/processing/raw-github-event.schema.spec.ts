@@ -55,4 +55,33 @@ describe('rawGithubEventSchema', () => {
 
     expect(() => rawGithubEventSchema.parse(withoutPayload)).toThrow();
   });
+
+  it('should pass the payload through by reference rather than copying it', () => {
+    const payload = { commits: [{ sha: 'a' }] };
+    const result = rawGithubEventSchema.safeParse({
+      id: '1',
+      type: 'PushEvent',
+      created_at: '2026-08-11T00:00:00Z',
+      actor: { id: 1, login: 'octocat' },
+      repo: { id: 2, name: 'octocat/hello-world' },
+      payload,
+    });
+
+    expect(result.success).toBe(true);
+    // Identity, not equality: the copy is the allocation this change removes.
+    expect(result.success && result.data.payload).toBe(payload);
+  });
+
+  it('should accept a payload that is not an object', () => {
+    const result = rawGithubEventSchema.safeParse({
+      id: '1',
+      type: 'WatchEvent',
+      created_at: '2026-08-11T00:00:00Z',
+      actor: { id: 1, login: 'octocat' },
+      repo: { id: 2, name: 'octocat/hello-world' },
+      payload: null,
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

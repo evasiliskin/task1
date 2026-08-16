@@ -100,4 +100,20 @@ describe('transformEvent', () => {
 
     expect(transformEvent(event, 'import-1').payload).toEqual({});
   });
+
+  it('should produce an empty push payload when the raw payload is not an object', () => {
+    const document = transformEvent(
+      {
+        id: '1',
+        type: 'PushEvent',
+        created_at: '2026-08-11T00:00:00Z',
+        actor: { id: 1, login: 'octocat' },
+        repo: { id: 2, name: 'octocat/hello-world' },
+        payload: null,
+      },
+      'import-1',
+    );
+
+    expect(document.payload).toEqual({ ref: '', commitCount: 0 });
+  });
 });

@@ -3,10 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { type INestApplication } from '@nestjs/common';
 import { Transport, type MicroserviceOptions } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
+import { MONGO_CLIENT, REDIS_CLIENT } from '@task1/shared/infra/client-tokens';
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq';
 import { connect, type Channel, type ChannelModel } from 'amqplib';
-
-import { MONGO_CLIENT, REDIS_CLIENT } from '@task1/shared/infra/client-tokens';
 
 import { AppModule } from '../../src/app.module.js';
 import { ImportOrchestrationService } from '../../src/archive/import-orchestration.service.js';

@@ -45,6 +45,7 @@ function buildCappedService(warn: ReturnType<typeof vi.fn>): ArchiveProcessingSe
   return new ArchiveProcessingService(
     {} as never,
     { batchSize: 500 } as never,
+    { maxLineBytes: 1_048_576, maxDecompressedBytes: 4_294_967_296 } as never,
     { getLogger: () => ({ warn }) } as never,
   );
 }
@@ -67,12 +68,18 @@ describe('ArchiveProcessingService', () => {
     const mongodbConfiguration: MongodbConfiguration = {
       uri: 'mongodb://localhost:27017/service_a',
       batchSize: 250,
+      insertConcurrency: 2,
     };
     const loggerService = {
       getLogger: vi.fn().mockReturnValue({ warn: warnMock }),
     } as unknown as LoggerService;
 
-    return new ArchiveProcessingService(collection, mongodbConfiguration, loggerService);
+    return new ArchiveProcessingService(
+      collection,
+      mongodbConfiguration,
+      { maxLineBytes: 1_048_576, maxDecompressedBytes: 4_294_967_296 } as never,
+      loggerService,
+    );
   }
 
   function writeGzippedArchive(lines: string[]): string {
@@ -182,5 +189,39 @@ describe('ArchiveProcessingService', () => {
     const [fields] = warn.mock.calls[0] as [{ rawLinePreview: string }];
 
     expect(fields.rawLinePreview).toHaveLength(200);
+  });
+
+  it('should pass the configured bounds and concurrency through to processArchive', async () => {
+    vi.mocked(processArchive).mockResolvedValue({
+      eventsProcessed: 0,
+      validEvents: 0,
+      invalidEvents: 0,
+      duplicateEvents: 0,
+      errorCount: 0,
+    });
+
+    const service = new ArchiveProcessingService(
+      {} as never,
+      { batchSize: 7, insertConcurrency: 3 } as never,
+      { maxLineBytes: 45, maxDecompressedBytes: 123 } as never,
+      { getLogger: () => ({ warn: vi.fn() }) } as never,
+    );
+
+    await service.process('/tmp/a.json.gz', IMPORT_ID);
+
+    expect(processArchive).toHaveBeenCalledWith(
+      '/tmp/a.json.gz',
+      IMPORT_ID,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.anything() is typed `any` by vitest; the matcher only cares that the field is present, not its type.
+        collection: expect.anything(),
+        batchSize: 7,
+        insertConcurrency: 3,
+        maxLineBytes: 45,
+        maxDecompressedBytes: 123,
+      },
+      expect.any(Function),
+      expect.any(Function),
+    );
   });
 });
