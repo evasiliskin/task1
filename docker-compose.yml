@@ -50,6 +50,7 @@ services:
       SERVICE_NAME: service-b
       RABBITMQ_QUEUE: service_b_queue
       MONGODB_URI: mongodb://mongodb:27017/service_b
+      PROCESSING_LOG_RETENTION_MS: 2592000000
       REDIS_URL: redis://redis:6379
       REPORT_DIR: /data/reports
     volumes:

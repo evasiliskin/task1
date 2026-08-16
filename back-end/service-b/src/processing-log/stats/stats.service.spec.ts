@@ -4,10 +4,11 @@ import { type Collection } from 'mongodb';
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
 import { type StatsMetricsReader } from './stats-metrics-reader.service.js';
+import { type StatsRollupTracker } from './stats-rollup.tracker.js';
 import { StatsService } from './stats.service.js';
 
 describe('StatsService', () => {
-  it('should delegate to getStats with the injected collection, metrics reader, and logger, when getStats is called', async () => {
+  it('should delegate to getStats with the injected collection, metrics reader, rollup, and logger, when getStats is called', async () => {
     const aggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
     const find = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
     const collection = { aggregate, find } as unknown as Collection<IProcessingLogDocument>;
@@ -17,10 +18,13 @@ describe('StatsService', () => {
         .mockResolvedValue({ value: undefined, degraded: false }),
       readEventsTimeSeries: vi.fn().mockResolvedValue({ timeSeries: [], degraded: false }),
     } as unknown as StatsMetricsReader;
+    const statsRollup = {
+      read: vi.fn().mockResolvedValue(undefined),
+    } as unknown as StatsRollupTracker;
     const loggerService = {
       getLogger: vi.fn().mockReturnValue({ warn: vi.fn() }),
     } as unknown as LoggerService;
-    const service = new StatsService(collection, metricsReader, loggerService);
+    const service = new StatsService(collection, metricsReader, statsRollup, loggerService);
 
     const result = await service.getStats();
 

@@ -1,6 +1,9 @@
 import { type Collection } from 'mongodb';
 
-import { ensureProcessingLogIndexes } from './ensure-processing-log-indexes.js';
+import {
+  ensureProcessingLogIndexes,
+  ensureProcessingLogRetentionIndex,
+} from './ensure-processing-log-indexes.js';
 import { type IProcessingLogDocument } from './processing-log.types.js';
 
 describe('ensureProcessingLogIndexes', () => {
@@ -58,5 +61,58 @@ describe('ensureProcessingLogIndexes', () => {
     await ensureProcessingLogIndexes(collection);
 
     expect(createIndex).toHaveBeenCalledTimes(4);
+  });
+
+  it('should create every index without serialising the round trips', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const createIndex = vi.fn().mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+    });
+
+    await ensureProcessingLogIndexes({ createIndex } as never);
+
+    expect(createIndex).toHaveBeenCalledTimes(4);
+    expect(peak).toBeGreaterThan(1);
+  });
+
+  it('should not create a TTL index', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+
+    await ensureProcessingLogIndexes({ createIndex } as never);
+
+    expect(createIndex).not.toHaveBeenCalledWith(
+      { timestamp: 1 },
+      expect.objectContaining({ expireAfterSeconds: expect.any(Number) as number }),
+    );
+  });
+});
+
+describe('ensureProcessingLogRetentionIndex', () => {
+  it('should create a TTL index on timestamp from the configured retention', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+
+    await ensureProcessingLogRetentionIndex({ createIndex } as never, 86_400_000);
+
+    expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
+  });
+
+  it('should round a sub-second retention up to one second', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+
+    await ensureProcessingLogRetentionIndex({ createIndex } as never, 500);
+
+    expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 1 });
+  });
+
+  it('should create exactly one index, when called', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+
+    await ensureProcessingLogRetentionIndex({ createIndex } as never, 2_592_000_000);
+
+    expect(createIndex).toHaveBeenCalledTimes(1);
   });
 });

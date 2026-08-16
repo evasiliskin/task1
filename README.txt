@@ -385,8 +385,42 @@ single-filter access pattern — `{eventType:1, createdAt:-1}`, `{'repo.name':1,
 document per import run, tracking status/counters/error samples. `processing-logs` (owned by
 `service-b`):
 `{importId:1, status:1}` unique (makes RabbitMQ redelivery a no-op), `{timestamp:-1, _id:-1}`
-(default pagination), `{importId:1, timestamp:-1}`, `{status:1, timestamp:-1}`. Each service only
-ever queries its own collections — cross-service Mongo access never happens.
+(default pagination), `{importId:1, timestamp:-1}`, `{status:1, timestamp:-1}`, plus a TTL index on
+`{timestamp:1}` (`expireAfterSeconds` from `PROCESSING_LOG_RETENTION_MS`, default 30 days) that
+bounds the collection's growth. All five indexes are created concurrently. Each service only ever
+queries its own collections — cross-service Mongo access never happens.
+
+`GET /stats`'s aggregate figures (no `importId`) are served from `stats-rollups`, a single
+incrementally maintained document (`{_id: 'processing-log'}`) rather than a `$group` aggregation
+over `processing-logs` — each `processing-logs` insert that is a genuine new document (never a
+redelivery no-op) applies its delta to the rollup with `$inc`. An `OnApplicationBootstrap` seeder
+backfills the rollup once from the historical `$group` the first time a service-b instance boots
+against an unseeded collection (marked done via `seededAt`); the old aggregation remains as that
+one-time seed and as a fallback for the still-unseeded window. Because `processing-logs` is bounded
+by `PROCESSING_LOG_RETENTION_MS`'s TTL, the rollup — not the collection — is the durable record of
+all-time totals; `GET /stats?importId=...` still reads `processing-logs` directly (at most four
+documents, one per status) and is unaffected by expiry beyond that import's own documents aging out.
+
+**Operations notes:**
+
+- Changing `PROCESSING_LOG_RETENTION_MS` on an existing deployment makes MongoDB reject
+  `createIndex` on the existing TTL index with a different `expireAfterSeconds`
+  (`IndexOptionsConflict`), which makes `ensureProcessingLogIndexes` reject in `onModuleInit()` and
+  prevents service-b from booting. Before deploying the new value, either run
+  `db.runCommand({ collMod: 'processing-logs', index: { keyPattern: { timestamp: 1 }, expireAfterSeconds: <new-value-in-seconds> } })`
+  or drop the index and let startup recreate it.
+- During a rolling deploy, an older instance can still be incrementing the rollup via `$inc` after
+  a newer instance has already seeded it; since the seeder is gated on `seededAt` it won't re-run
+  automatically. Force a re-seed with:
+  ```
+  docker compose exec mongodb mongosh service_b --eval '
+    db["stats-rollups"].deleteOne({ _id: "processing-log" });
+  ' && docker compose restart service-b
+  ```
+  The same command is also a recovery lever any time the rollup is found to disagree with reality
+  (`read()` only serves totals once `seededAt` is set, so a partially incremented, never-seeded
+  rollup already falls back to the live aggregation instead of under-reporting — but the lever
+  remains for the rolling-deploy race above).
 
 ### RabbitMQ event flow
 
@@ -704,6 +738,9 @@ For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlea
   (`back-end/service-a/test/int/archive-ingestion.int.spec.ts`).
   Filesystem ownership across the shared archive volume is covered by
   `back-end/service-a/test/int/storage-ownership.int.spec.ts`.
+  service-b's `pnpm test:int` covers the processing-log stats rollup against real MongoDB —
+  equivalence with the previous aggregation, redelivery idempotency and the retention TTL
+  (`back-end/service-b/test/int/stats-rollup.int.spec.ts`).
   The Docker volume layout is still not covered at all. There is still no CI config in this repo.
 - **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
   `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now

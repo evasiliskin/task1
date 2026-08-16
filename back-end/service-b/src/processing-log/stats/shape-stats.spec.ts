@@ -1,4 +1,6 @@
-import { shapeStats } from './shape-stats.js';
+import { type IProcessingLogDocument } from '../processing-log.types.js';
+
+import { shapeStats, shapeStatsFromDocuments } from './shape-stats.js';
 
 describe('shapeStats', () => {
   it('should return all zeros, when no groups are given', () => {
@@ -97,5 +99,57 @@ describe('shapeStats', () => {
     ];
 
     expect(shapeStats(groups).archivesProcessed).toBe(1);
+  });
+});
+
+describe('shapeStatsFromDocuments', () => {
+  function buildDocument(
+    status: IProcessingLogDocument['status'],
+    metadata: Record<string, number> = {},
+  ): IProcessingLogDocument {
+    return {
+      importId: 'i1',
+      eventType: 'e',
+      service: 'service-a',
+      status,
+      timestamp: new Date('2026-08-11T00:00:00Z'),
+      correlationId: 'c1',
+      archive: 'a.json.gz',
+      metadata,
+    };
+  }
+
+  it('should produce zeroes for no documents', () => {
+    expect(shapeStatsFromDocuments([])).toEqual({
+      archivesProcessed: 0,
+      eventsProcessed: 0,
+      successfulEvents: 0,
+      invalidEvents: 0,
+      errors: 0,
+    });
+  });
+
+  it('should match shapeStats for the same single import', () => {
+    const documents = [
+      buildDocument('started'),
+      buildDocument('completed', {
+        eventsProcessed: 50,
+        validEvents: 45,
+        invalidEvents: 3,
+        errorCount: 2,
+      }),
+    ];
+
+    expect(shapeStatsFromDocuments(documents)).toEqual({
+      archivesProcessed: 1,
+      eventsProcessed: 50,
+      successfulEvents: 45,
+      invalidEvents: 3,
+      errors: 2,
+    });
+  });
+
+  it('should count a failed document as one error', () => {
+    expect(shapeStatsFromDocuments([buildDocument('failed')])).toMatchObject({ errors: 1 });
   });
 });

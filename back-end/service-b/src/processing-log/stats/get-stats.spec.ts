@@ -1,11 +1,11 @@
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { type Collection } from 'mongodb';
+import { MongoNetworkError, type Collection } from 'mongodb';
 
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
-import { buildStatsPipeline } from './build-stats-pipeline.js';
 import { getStats } from './get-stats.js';
 import { type StatsMetricsReader } from './stats-metrics-reader.service.js';
+import { type StatsRollupTracker } from './stats-rollup.tracker.js';
 
 describe('getStats', () => {
   const importId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -35,9 +35,18 @@ describe('getStats', () => {
     };
   }
 
+  function buildRollup(stats: unknown = undefined): {
+    rollup: StatsRollupTracker;
+    read: ReturnType<typeof vi.fn>;
+  } {
+    const read = vi.fn().mockResolvedValue(stats);
+
+    return { rollup: { read } as unknown as StatsRollupTracker, read };
+  }
+
   function buildMetricsReader(
-    processingDurationMs: number | undefined,
-    timeSeries: { timestamp: string; value: number }[],
+    processingDurationMs: number | undefined = undefined,
+    timeSeries: { timestamp: string; value: number }[] = [],
     degraded = false,
   ): {
     reader: StatsMetricsReader;
@@ -61,9 +70,10 @@ describe('getStats', () => {
 
   it('should return zeroed stats and empty timeSeries, when nothing matches and no importId is given', async () => {
     const { collection } = buildCollection([]);
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, []);
 
-    const result = await getStats(collection, reader);
+    const result = await getStats({ collection, rollup, metricsReader: reader });
 
     expect(result).toEqual({
       archivesProcessed: 0,
@@ -76,7 +86,7 @@ describe('getStats', () => {
     });
   });
 
-  it('should combine mongo aggregation stats with Redis metrics, when no importId is given', async () => {
+  it('should combine mongo aggregation stats with Redis metrics, when the rollup is unseeded and no importId is given', async () => {
     const groups = [
       {
         _id: 'completed',
@@ -88,10 +98,11 @@ describe('getStats', () => {
       },
     ];
     const { collection } = buildCollection(groups);
+    const { rollup } = buildRollup(undefined);
     const timeSeries = [{ timestamp: '2026-08-11T00:00:00.000Z', value: 100 }];
     const { reader } = buildMetricsReader(15_000, timeSeries);
 
-    const result = await getStats(collection, reader);
+    const result = await getStats({ collection, rollup, metricsReader: reader });
 
     expect(result).toEqual({
       archivesProcessed: 2,
@@ -106,16 +117,6 @@ describe('getStats', () => {
   });
 
   it('should query find() and derive duration from timestamps, when importId is given', async () => {
-    const groups = [
-      {
-        _id: 'completed',
-        count: 1,
-        eventsProcessed: 500,
-        validEvents: 480,
-        invalidEvents: 20,
-        errorCount: 0,
-      },
-    ];
     const documents: IProcessingLogDocument[] = [
       {
         importId,
@@ -144,15 +145,16 @@ describe('getStats', () => {
         },
       },
     ];
-    const { collection, aggregate, find, findCursor } = buildCollection(groups, documents);
+    const { collection, aggregate, find, findCursor } = buildCollection([], documents);
+    const { rollup } = buildRollup(undefined);
     const { reader, readAverageProcessingDuration, readEventsTimeSeries } = buildMetricsReader(
       undefined,
       [],
     );
 
-    const result = await getStats(collection, reader, importId);
+    const result = await getStats({ collection, rollup, metricsReader: reader, importId });
 
-    expect(aggregate).toHaveBeenCalledWith(buildStatsPipeline(importId));
+    expect(aggregate).not.toHaveBeenCalled();
     expect(find).toHaveBeenCalledWith({ importId });
     expect(findCursor.limit).toHaveBeenCalledWith(4);
     expect(readAverageProcessingDuration).not.toHaveBeenCalled();
@@ -183,26 +185,29 @@ describe('getStats', () => {
       },
     ];
     const { collection } = buildCollection([], documents);
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, []);
 
-    const result = await getStats(collection, reader, importId);
+    const result = await getStats({ collection, rollup, metricsReader: reader, importId });
 
     expect(result.processingDurationMs).toBeUndefined();
     expect(result.timeSeries).toEqual([]);
   });
 
-  it('should still read Redis metrics and resolve with zeroed Mongo stats instead of throwing, when the Mongo aggregation fails and no importId is given', async () => {
-    const aggregate = vi.fn().mockReturnValue({
-      toArray: vi.fn().mockRejectedValue(new Error('connection refused')),
-    });
-    const collection = { aggregate } as unknown as Collection<IProcessingLogDocument>;
+  it('should still read Redis metrics and resolve with zeroed Mongo stats instead of throwing, when the rollup read fails with a network error and no importId is given', async () => {
+    const { collection } = buildCollection([]);
+    const rollup = { read: vi.fn().mockRejectedValue(new MongoNetworkError('connection refused')) };
     const timeSeries = [{ timestamp: '2026-08-11T00:00:00.000Z', value: 100 }];
     const { reader, readAverageProcessingDuration, readEventsTimeSeries } = buildMetricsReader(
       15_000,
       timeSeries,
     );
 
-    const result = await getStats(collection, reader);
+    const result = await getStats({
+      collection,
+      rollup: rollup as unknown as StatsRollupTracker,
+      metricsReader: reader,
+    });
 
     expect(result).toEqual({
       archivesProcessed: 0,
@@ -218,15 +223,15 @@ describe('getStats', () => {
     expect(readEventsTimeSeries).toHaveBeenCalled();
   });
 
-  it('should resolve with zeroed stats instead of throwing, when the Mongo aggregation fails for a specific importId', async () => {
-    const aggregate = vi.fn().mockReturnValue({
-      toArray: vi.fn().mockRejectedValue(new Error('connection refused')),
+  it('should resolve with zeroed stats instead of throwing, when the find() query fails with a network error for a specific importId', async () => {
+    const find = vi.fn().mockImplementation(() => {
+      throw new MongoNetworkError('connection refused');
     });
-    const find = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
-    const collection = { aggregate, find } as unknown as Collection<IProcessingLogDocument>;
+    const collection = { find } as unknown as Collection<IProcessingLogDocument>;
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, []);
 
-    const result = await getStats(collection, reader, importId);
+    const result = await getStats({ collection, rollup, metricsReader: reader, importId });
 
     expect(result).toEqual({
       archivesProcessed: 0,
@@ -239,15 +244,17 @@ describe('getStats', () => {
     });
   });
 
-  it('should mark the result as degraded, when the MongoDB aggregation fails', async () => {
-    const collection = {
-      aggregate: () => ({ toArray: vi.fn().mockRejectedValue(new Error('mongo down')) }),
-      find: () => ({ toArray: vi.fn().mockResolvedValue([]) }),
-    } as unknown as Collection<IProcessingLogDocument>;
+  it('should mark the result as degraded, when the rollup read fails with a network error and the rollup is unseeded fallback also degrades', async () => {
+    const rollup = { read: vi.fn().mockRejectedValue(new MongoNetworkError('mongo down')) };
     const { reader } = buildMetricsReader(undefined, []);
     const logger = { warn: vi.fn() } as unknown as AppLogger;
 
-    const result = await getStats(collection, reader, undefined, logger);
+    const result = await getStats({
+      collection: {} as unknown as Collection<IProcessingLogDocument>,
+      rollup: rollup as unknown as StatsRollupTracker,
+      metricsReader: reader,
+      logger,
+    });
 
     expect(result.degraded).toBe(true);
     expect(result.eventsProcessed).toBe(0);
@@ -255,25 +262,28 @@ describe('getStats', () => {
 
   it('should not mark the result as degraded, when every source responds', async () => {
     const { collection } = buildCollection([]);
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, []);
     const logger = { warn: vi.fn() } as unknown as AppLogger;
 
-    const result = await getStats(collection, reader, undefined, logger);
+    const result = await getStats({ collection, rollup, metricsReader: reader, logger });
 
     expect(result.degraded).toBe(false);
   });
 
   it('should mark the result as degraded, when Redis fails to read the average processing duration', async () => {
     const { collection } = buildCollection([]);
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, [], true);
 
-    const result = await getStats(collection, reader);
+    const result = await getStats({ collection, rollup, metricsReader: reader });
 
     expect(result.degraded).toBe(true);
   });
 
   it('should mark the result as degraded, when Redis fails to read the events time series', async () => {
     const { collection } = buildCollection([]);
+    const { rollup } = buildRollup(undefined);
     const readAverageProcessingDuration = vi
       .fn()
       .mockResolvedValue({ value: undefined, degraded: false });
@@ -283,7 +293,7 @@ describe('getStats', () => {
       readEventsTimeSeries,
     } as unknown as StatsMetricsReader;
 
-    const result = await getStats(collection, reader);
+    const result = await getStats({ collection, rollup, metricsReader: reader });
 
     expect(result.degraded).toBe(true);
   });
@@ -291,10 +301,95 @@ describe('getStats', () => {
   it('should not mark the result as degraded due to Redis, when scoped to an importId (Redis is not queried)', async () => {
     const documents: IProcessingLogDocument[] = [];
     const { collection } = buildCollection([], documents);
+    const { rollup } = buildRollup(undefined);
     const { reader } = buildMetricsReader(undefined, [], true);
 
-    const result = await getStats(collection, reader, importId);
+    const result = await getStats({ collection, rollup, metricsReader: reader, importId });
 
     expect(result.degraded).toBe(false);
+  });
+
+  it('should serve aggregate stats from the rollup without touching the collection', async () => {
+    const aggregate = vi.fn();
+    const find = vi.fn();
+    const rollup = {
+      read: vi.fn().mockResolvedValue({
+        archivesProcessed: 3,
+        eventsProcessed: 30,
+        successfulEvents: 28,
+        invalidEvents: 1,
+        errors: 1,
+      }),
+    };
+
+    const result = await getStats({
+      collection: { aggregate, find } as never,
+      rollup: rollup as never,
+      metricsReader: buildMetricsReader().reader,
+    });
+
+    expect(aggregate).not.toHaveBeenCalled();
+    expect(find).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ archivesProcessed: 3, eventsProcessed: 30, degraded: false });
+  });
+
+  it('should fall back to the aggregation when the rollup has never been seeded', async () => {
+    const toArray = vi.fn().mockResolvedValue([]);
+    const aggregate = vi.fn().mockReturnValue({ toArray });
+
+    await getStats({
+      collection: { aggregate } as never,
+      rollup: { read: vi.fn().mockResolvedValue(undefined) } as never,
+      metricsReader: buildMetricsReader().reader,
+    });
+
+    expect(aggregate).toHaveBeenCalled();
+  });
+
+  it('should query the collection exactly once for a single import', async () => {
+    const toArray = vi.fn().mockResolvedValue([]);
+    const limit = vi.fn().mockReturnValue({ toArray });
+    const find = vi.fn().mockReturnValue({ limit });
+    const aggregate = vi.fn();
+
+    await getStats({
+      collection: { find, aggregate } as never,
+      rollup: { read: vi.fn() } as never,
+      metricsReader: buildMetricsReader().reader,
+      importId: 'i1',
+    });
+
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(aggregate).not.toHaveBeenCalled();
+  });
+
+  it('should mark the result degraded when the database is unreachable', async () => {
+    const find = vi.fn().mockImplementation(() => {
+      throw new MongoNetworkError('unreachable');
+    });
+
+    const result = await getStats({
+      collection: { find } as never,
+      rollup: { read: vi.fn() } as never,
+      metricsReader: buildMetricsReader().reader,
+      importId: 'i1',
+    });
+
+    expect(result.degraded).toBe(true);
+  });
+
+  it('should let a programming error propagate instead of hiding it behind degraded', async () => {
+    const find = vi.fn().mockImplementation(() => {
+      throw new TypeError('bad projection');
+    });
+
+    await expect(
+      getStats({
+        collection: { find } as never,
+        rollup: { read: vi.fn() } as never,
+        metricsReader: buildMetricsReader().reader,
+        importId: 'i1',
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
   });
 });

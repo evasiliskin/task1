@@ -544,6 +544,9 @@ importers:
       '@swc/core':
         specifier: ^1.7.39
         version: 1.15.47(@swc/helpers@0.5.23)
+      '@testcontainers/mongodb':
+        specifier: ^11.0.0
+        version: 11.14.0(supports-color@8.1.1)
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
@@ -610,6 +613,9 @@ importers:
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
+      testcontainers:
+        specifier: ^11.0.0
+        version: 11.14.0(supports-color@8.1.1)
       ts-loader:
         specifier: ^9.5.2
         version: 9.6.2(loader-utils@3.3.1)(typescript@5.7.3)(webpack@5.106.2(@swc/core@1.15.47(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.26))

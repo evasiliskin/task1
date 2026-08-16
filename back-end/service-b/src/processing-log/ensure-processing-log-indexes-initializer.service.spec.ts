@@ -20,6 +20,19 @@ describe('EnsureProcessingLogIndexesInitializer', () => {
     expect(infoMock).toHaveBeenCalledWith({}, 'Ensured processing-logs collection indexes');
   });
 
+  it('should create exactly four indexes (no TTL index), when the module initializes', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+    const collection = { createIndex } as unknown as Collection<IProcessingLogDocument>;
+    const loggerService = {
+      getLogger: vi.fn().mockReturnValue({ info: vi.fn() }),
+    } as unknown as LoggerService;
+    const initializer = new EnsureProcessingLogIndexesInitializer(collection, loggerService);
+
+    await initializer.onModuleInit();
+
+    expect(createIndex).toHaveBeenCalledTimes(4);
+  });
+
   it('should propagate the error, when index creation fails', async () => {
     const createIndex = vi.fn().mockRejectedValue(new Error('connection refused'));
     const collection = { createIndex } as unknown as Collection<IProcessingLogDocument>;

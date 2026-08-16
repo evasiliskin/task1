@@ -21,4 +21,20 @@ describe('ensureImportIndexes', () => {
 
     expect(createIndex).toHaveBeenCalledWith({ status: 1, startedAt: 1 });
   });
+
+  it('should create every index without serialising the round trips', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const createIndex = vi.fn().mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+    });
+
+    await ensureImportIndexes({ createIndex } as never);
+
+    expect(createIndex).toHaveBeenCalledTimes(2);
+    expect(peak).toBeGreaterThan(1);
+  });
 });
