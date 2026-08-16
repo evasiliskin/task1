@@ -24,6 +24,12 @@ export default registerAs('logger', (): ILoggerConfiguration => {
     serviceName: requireInProduction(process.env.SERVICE_NAME, 'SERVICE_NAME', 'unknown-service'),
   });
 
+  if (parsed.transport === 'pretty' && isProduction()) {
+    throw new Error(
+      'APP_LOG_TRANSPORT=pretty is not supported in production; pino-pretty is a development-only dependency',
+    );
+  }
+
   return {
     level: parsed.level ?? (isProduction() ? 'info' : 'trace'),
     transport: parsed.transport,

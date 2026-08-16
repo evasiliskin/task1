@@ -103,6 +103,14 @@ stack-specific examples.
 - Full endpoint list and RabbitMQ message-pattern names: see [README.txt](README.txt)'s
   "API reference" section.
 
+### Dependency notes
+
+- `amqplib` is a direct dependency of all three services and of `@task1/shared`. `@task1/shared`
+  imports it in `messaging/queue-topology.initializer.ts`; the services depend on it transitively
+  through `@nestjs/microservices`' RMQ transport and declare it explicitly so the version is pinned.
+- `pino-pretty` is a development-only log transport. `APP_LOG_TRANSPORT=pretty` therefore works only
+  in development, where devDependencies are installed.
+
 ## Commits
 
 **Never create git commits.** The user commits their own work manually — leave changes

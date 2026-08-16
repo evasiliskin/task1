@@ -114,7 +114,7 @@ completes normally and sets the status code, so no error envelope is produced.
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | Aggregated health of gateway + all dependencies | Public | — |
 | `GET` | `/api/v1/health/live` | Liveness probe (process is running) | Public | — |
-| `GET` | `/api/v1/health/ready` | Readiness probe (`503` if RabbitMQ/service-a/service-b down) | Public | — |
+| `GET` | `/api/v1/health/ready` | Readiness probe (`503` if RabbitMQ/service-a/service-b/Redis down) | Public | — |
 | `POST` | `/api/v1/imports` | Trigger a download import for one GH Archive hour (`Idempotency-Key` header supported). `503` if the broker rejects the publish | Required | `archive.import.download` → service-a |
 | `POST` | `/api/v1/imports/upload` | Upload a `.json.gz` archive file to import (multipart, max 512 MiB, gzip magic bytes verified). `503` if the broker rejects the publish | Required | `archive.process.upload` → service-a |
 | `GET` | `/api/v1/imports/:importId` | Get one import run's status/counters | Required | `imports.status.get` → service-a |
@@ -191,12 +191,12 @@ restarted. Readiness answers "can this process currently do its job" — it's wh
 traffic. A gateway with a dead RabbitMQ connection is alive but not ready: restarting it would not
 help, but it also shouldn't receive requests it cannot fulfill.
 
-**Critical vs informational dependencies.** `/health/ready` treats RabbitMQ, service-a, and
-service-b as critical — the gateway's only purpose is routing requests to those services through
-the broker, so if any of them is unreachable, `/health/ready` returns `503`. Redis is
-reported for visibility but is informational only — nothing in the gateway's request path uses
-it today (there is no persistence layer or caching configured), so its failure never causes
-`/health/ready` to fail.
+**Critical dependencies.** `/health/ready` treats RabbitMQ, service-a, service-b, and Redis as
+critical — the gateway's only purpose is routing requests to those services through the broker, so
+if any of them is unreachable, `/health/ready` returns `503`. Redis is critical, not merely
+informational, because the global `ThrottlerGuard` is backed by `ThrottlerStorageRedisService`: a
+Redis outage turns every throttled request into a `500`, so readiness that stayed green through
+that would give the orchestrator nothing to act on.
 
 **Why the gateway never accesses service-a/b's databases directly.** The gateway has no visibility
 into, or dependency on, service-a/b's internal storage. Checking their databases directly would
@@ -204,7 +204,22 @@ violate the module boundary (each service owns its own persistence) and would re
 even if the service's own RabbitMQ consumer had crashed — the opposite of what a caller needs to
 know. Instead, the gateway sends a dedicated `health.check` RabbitMQ message to each service and
 waits (with a timeout) for a reply — the same transport and pattern used for every other
-inter-service call, exercising the actual path a real request would take.
+inter-service call, exercising the actual path a real request would take. Each service answers
+that message with its *own* infrastructure status: service-a and service-b each check their own
+MongoDB and Redis connections (`DependencyHealthService`, `@task1/shared/health`) and report
+`down` if either is unreachable — they no longer answer unconditionally.
+
+**Container healthchecks assert process readiness, not broker reachability.** Docker's own
+`HEALTHCHECK` for service-a and service-b (defined in each service's `Dockerfile`) stats a
+readiness-marker file (`/tmp/service-ready`) written once at the end of bootstrap, after
+`startAllMicroservices()`/`listen()` has resolved and every RMQ listener is consuming. It
+previously opened a throwaway AMQP connection to prove the *broker* was reachable, which said
+nothing about whether that specific container's Mongo connection or consumer channel was actually
+healthy — a container whose Mongo was down, or whose consumer had crashed, would report healthy
+indefinitely. The marker-file check only asserts the process finished booting; it does not
+re-probe Mongo/Redis on every interval (that's `/health/ready`'s job on the gateway, and the
+`health.check` RPC's job for callers of service-a/b directly) — liveness beyond "did it boot" is
+already covered by the orchestrator restarting a dead process.
 
 Example — `GET /health`, everything healthy (see "Response format" above for the envelope shape):
 

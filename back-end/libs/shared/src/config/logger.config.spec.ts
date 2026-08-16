@@ -82,5 +82,19 @@ describe('loggerConfig', () => {
 
       expect(() => loggerConfig()).toThrow('SERVICE_NAME');
     });
+
+    it('should throw, when APP_LOG_TRANSPORT is "pretty" and NODE_ENV is "production"', () => {
+      process.env.APP_LOG_TRANSPORT = 'pretty';
+      process.env.NODE_ENV = 'production';
+
+      expect(() => loggerConfig()).toThrow(/APP_LOG_TRANSPORT=pretty is not supported/);
+    });
+
+    it('should not throw, when APP_LOG_TRANSPORT is "pretty" and NODE_ENV is not "production"', () => {
+      process.env.APP_LOG_TRANSPORT = 'pretty';
+      process.env.NODE_ENV = 'development';
+
+      expect(loggerConfig().transport).toBe('pretty');
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
-import { requireInProduction } from '@task1/shared';
 import { z } from 'zod';
+
+import { requireInProduction } from './require-in-production.js';
 
 const SEVEN_DAYS_MS = 604_800_000;
 

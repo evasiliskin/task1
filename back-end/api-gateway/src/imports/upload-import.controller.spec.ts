@@ -162,4 +162,47 @@ describe('UploadImportController', () => {
       expect(existsSync(temporaryFilePath)).toBe(false);
     });
   });
+
+  describe('upload throttling', () => {
+    const originalEnvironment = { ...process.env };
+
+    afterEach(() => {
+      process.env = { ...originalEnvironment };
+    });
+
+    const readThrottleMetadata = (): Record<string, { limit: unknown; ttl: unknown }> => {
+      // @Throttle stores limit and ttl under separate metadata keys.
+      // Extract them and return an object matching the expected structure.
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- used only as a Reflect metadata target, never invoked, so unbound `this` is not a risk
+      const uploadMethod = UploadImportController.prototype.upload;
+      const limitFn = Reflect.getMetadata('THROTTLER:LIMITdefault', uploadMethod) as unknown;
+      const ttlFn = Reflect.getMetadata('THROTTLER:TTLdefault', uploadMethod) as unknown;
+
+      return {
+        default: {
+          limit: limitFn,
+          ttl: ttlFn,
+        },
+      };
+    };
+
+    it('should resolve the upload limit from configuration at request time', () => {
+      process.env.THROTTLE_UPLOAD_LIMIT = '9';
+
+      const metadata = readThrottleMetadata();
+      const resolve = metadata.default.limit as () => number;
+
+      expect(typeof resolve).toBe('function');
+      expect(resolve()).toBe(9);
+    });
+
+    it('should resolve the upload ttl from configuration at request time', () => {
+      process.env.THROTTLE_TTL_MS = '15000';
+
+      const metadata = readThrottleMetadata();
+      const resolve = metadata.default.ttl as () => number;
+
+      expect(resolve()).toBe(15_000);
+    });
+  });
 });

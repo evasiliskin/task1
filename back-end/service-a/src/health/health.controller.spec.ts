@@ -1,52 +1,46 @@
 import { type RmqContext } from '@nestjs/microservices';
-import { TerminusModule } from '@nestjs/terminus';
-import { Test, type TestingModule } from '@nestjs/testing';
 
 import { HealthController } from './health.controller.js';
 
-function buildRmqContext(): RmqContext {
+function buildContext(ack = vi.fn()): { context: RmqContext; ack: ReturnType<typeof vi.fn> } {
+  const message = { content: Buffer.from('{}'), properties: {} };
+
   return {
-    getChannelRef: () => ({ ack: vi.fn() }),
-    getMessage: () => ({ fields: { deliveryTag: 1 } }),
-  } as unknown as RmqContext;
+    ack,
+    context: {
+      getChannelRef: () => ({ ack }),
+      getMessage: () => message,
+    } as unknown as RmqContext,
+  };
 }
 
 describe('HealthController', () => {
-  let controller: HealthController;
+  it('should check its real dependencies with the configured timeout', async () => {
+    const result = { status: 'ok', details: { mongodb: { status: 'up' } } };
+    const check = vi.fn().mockResolvedValue(result);
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 2500 });
+    const { context } = buildContext();
 
-  beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [TerminusModule],
-      controllers: [HealthController],
-    }).compile();
-
-    controller = moduleRef.get(HealthController);
+    await expect(controller.check(context)).resolves.toBe(result);
+    expect(check).toHaveBeenCalledWith(2500);
   });
 
-  describe('check', () => {
-    it('should return ok health check result, when health.check message is handled', async () => {
-      const result = await controller.check(buildRmqContext());
+  it('should ack the message even when a dependency is down', async () => {
+    const check = vi.fn().mockResolvedValue({ status: 'error', details: {} });
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
+    const { context, ack } = buildContext();
 
-      expect(result).toEqual({
-        status: 'ok',
-        info: {},
-        error: {},
-        details: {},
-      });
-    });
+    await controller.check(context);
 
-    it('should ack the message, even when the handler throws', async () => {
-      const ack = vi.fn();
-      const context = {
-        getChannelRef: () => ({ ack }),
-        getMessage: () => ({ fields: { deliveryTag: 1 } }),
-      } as unknown as RmqContext;
-      const brokenController = new HealthController({
-        check: vi.fn().mockRejectedValue(new Error('boom')),
-      } as never);
+    expect(ack).toHaveBeenCalled();
+  });
 
-      await expect(brokenController.check(context)).rejects.toThrow('boom');
-      expect(ack).toHaveBeenCalledTimes(1);
-    });
+  it('should ack the message even when the check throws', async () => {
+    const check = vi.fn().mockRejectedValue(new Error('boom'));
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
+    const { context, ack } = buildContext();
+
+    await expect(controller.check(context)).rejects.toThrow('boom');
+    expect(ack).toHaveBeenCalled();
   });
 });

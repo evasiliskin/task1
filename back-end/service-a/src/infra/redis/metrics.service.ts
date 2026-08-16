@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
+import redisConfig, { type RedisConfiguration } from '@task1/shared/config/redis.config';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
 import { type Redis } from 'ioredis';
 
-import redisConfig, { type RedisConfiguration } from '../../config/redis.config.js';
 import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
 const AUTOMATIC_TIMESTAMP = '*';

@@ -48,13 +48,8 @@ RUN mkdir -p /data/reports && chown node:node /data/reports
 
 USER node
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD node -e "\
-    const amqp = require('amqplib'); \
-    amqp.connect(process.env.RABBITMQ_URL) \
-      .then((c) => c.close()) \
-      .then(() => process.exit(0)) \
-      .catch(() => process.exit(1));"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "require('node:fs').statSync('/tmp/service-ready')" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 

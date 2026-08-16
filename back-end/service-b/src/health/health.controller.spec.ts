@@ -1,49 +1,46 @@
 import { type RmqContext } from '@nestjs/microservices';
-import { TerminusModule } from '@nestjs/terminus';
-import { Test, type TestingModule } from '@nestjs/testing';
 
 import { HealthController } from './health.controller.js';
 
+function buildContext(ack = vi.fn()): { context: RmqContext; ack: ReturnType<typeof vi.fn> } {
+  const message = { content: Buffer.from('{}'), properties: {} };
+
+  return {
+    ack,
+    context: {
+      getChannelRef: () => ({ ack }),
+      getMessage: () => message,
+    } as unknown as RmqContext,
+  };
+}
+
 describe('HealthController', () => {
-  let controller: HealthController;
+  it('should check its real dependencies with the configured timeout', async () => {
+    const result = { status: 'ok', details: { mongodb: { status: 'up' } } };
+    const check = vi.fn().mockResolvedValue(result);
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 2500 });
+    const { context } = buildContext();
 
-  beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [TerminusModule],
-      controllers: [HealthController],
-    }).compile();
-
-    controller = moduleRef.get(HealthController);
+    await expect(controller.check(context)).resolves.toBe(result);
+    expect(check).toHaveBeenCalledWith(2500);
   });
 
-  function buildContext(): {
-    context: RmqContext;
-    message: Record<string, unknown>;
-    ack: ReturnType<typeof vi.fn>;
-  } {
-    const message = { content: Buffer.from('{}'), properties: { headers: {} } };
-    const ack = vi.fn();
-    const context = {
-      getChannelRef: vi.fn().mockReturnValue({ ack }),
-      getMessage: vi.fn().mockReturnValue(message),
-    } as unknown as RmqContext;
+  it('should ack the message even when a dependency is down', async () => {
+    const check = vi.fn().mockResolvedValue({ status: 'error', details: {} });
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
+    const { context, ack } = buildContext();
 
-    return { context, message, ack };
-  }
+    await controller.check(context);
 
-  describe('check', () => {
-    it('should return ok health check result and ack the message, when health.check message is handled', async () => {
-      const { context, message, ack } = buildContext();
+    expect(ack).toHaveBeenCalled();
+  });
 
-      const result = await controller.check(context);
+  it('should ack the message even when the check throws', async () => {
+    const check = vi.fn().mockRejectedValue(new Error('boom'));
+    const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
+    const { context, ack } = buildContext();
 
-      expect(result).toEqual({
-        status: 'ok',
-        info: {},
-        error: {},
-        details: {},
-      });
-      expect(ack).toHaveBeenCalledWith(message);
-    });
+    await expect(controller.check(context)).rejects.toThrow('boom');
+    expect(ack).toHaveBeenCalled();
   });
 });

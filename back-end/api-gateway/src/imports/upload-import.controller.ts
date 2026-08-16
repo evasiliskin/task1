@@ -19,6 +19,7 @@ import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/cont
 import { type Request } from 'express';
 
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
+import throttleConfig from '../config/throttle.config.js';
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { EmptyRequestSchema } from '../contract/schemas/empty.schema.js';
@@ -43,11 +44,15 @@ export class UploadImportController {
     this.logger = loggerService.getLogger(UploadImportController.name);
   }
 
-  // Tighter than the global default (100/min) — literal here must be kept in
-  // sync with throttle.config.ts's uploadLimit/ttlMs defaults; @Throttle's
-  // metadata is a compile-time decorator argument, not something that can
-  // read injected config at request time.
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // Tighter than the global default. `Resolvable` values are evaluated per request, so the limit
+  // comes from validated configuration rather than a literal that a comment asked humans to keep in
+  // sync with `throttle.config.ts` — `THROTTLE_UPLOAD_LIMIT` is now genuinely live.
+  @Throttle({
+    default: {
+      limit: () => throttleConfig().uploadLimit,
+      ttl: () => throttleConfig().ttlMs,
+    },
+  })
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FileInterceptor('file'))

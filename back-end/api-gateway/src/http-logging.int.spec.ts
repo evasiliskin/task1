@@ -27,7 +27,6 @@ import { HealthModule } from './health/health.module.js';
 import { REDIS_CLIENT } from './health/infra-clients.tokens.js';
 import { ImportsModule } from './imports/imports.module.js';
 import {
-  RABBITMQ_CONNECTION_MANAGER,
   SERVICE_A_IMPORTS_RMQ_CLIENT,
   SERVICE_A_RMQ_CLIENT,
   SERVICE_B_RMQ_CLIENT,
@@ -238,7 +237,6 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
   let httpServer: App;
   let serviceAClient: { emit: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
-  let connectionManager: { isConnected: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
   let redisClient: { ping: ReturnType<typeof vi.fn> };
   let logged: LoggedCall[];
 
@@ -252,10 +250,6 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
     logged = [];
     serviceAClient = { emit: vi.fn(() => of(undefined)), send: vi.fn(() => of({ status: 'ok' })) };
     serviceBClient = { send: vi.fn(() => of({ status: 'ok' })) };
-    connectionManager = {
-      isConnected: vi.fn(() => true),
-      close: vi.fn().mockResolvedValue(undefined),
-    };
     redisClient = { ping: vi.fn().mockResolvedValue('PONG') };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -282,8 +276,6 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(SERVICE_B_RMQ_CLIENT)
       .useValue(serviceBClient as unknown as ClientProxy)
-      .overrideProvider(RABBITMQ_CONNECTION_MANAGER)
-      .useValue(connectionManager)
       .overrideProvider(REDIS_CLIENT)
       .useValue(redisClient)
       .overrideProvider(AuthGuard)

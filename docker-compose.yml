@@ -53,6 +53,7 @@ services:
       PROCESSING_LOG_RETENTION_MS: 2592000000
       REDIS_URL: redis://redis:6379
       REPORT_DIR: /data/reports
+      HEALTH_PING_TIMEOUT_MS: 3000
     volumes:
       - report-storage:/data/reports
     depends_on:
@@ -82,6 +83,7 @@ services:
       MONGO_BATCH_SIZE: 500
       MONGO_INSERT_CONCURRENCY: 2
       REDIS_URL: redis://redis:6379
+      HEALTH_PING_TIMEOUT_MS: 3000
       STORAGE_DIR: /data/archives
       ARCHIVE_MAX_DECOMPRESSED_BYTES: 4294967296
       ARCHIVE_MAX_LINE_BYTES: 1048576

@@ -1,7 +1,11 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthCheckService as TerminusHealthCheckService } from '@nestjs/terminus';
+import { type RedisHealthIndicator } from '@task1/shared/health/redis.health-indicator';
 import { type LoggerService } from '@task1/shared/logger/logger.service';
+
+import { type default as redisConfig } from '../config/redis.config.js';
 
 import {
   HEALTH_CHECK_FAILED_LOG,
@@ -9,8 +13,6 @@ import {
   HealthCheckService,
 } from './health-check.service.js';
 import { type GatewayHealthIndicator } from './indicators/gateway.health-indicator.js';
-import { type RabbitMqConnectionHealthIndicator } from './indicators/rabbitmq-connection.health-indicator.js';
-import { type RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 import { type RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js';
 
 const ALL_KEYS = ['gateway', 'rabbitmq', 'serviceA', 'serviceB', 'redis'];
@@ -46,12 +48,34 @@ function buildService(
     terminusCheck?: ReturnType<typeof vi.fn>;
     error?: ReturnType<typeof vi.fn>;
     info?: ReturnType<typeof vi.fn>;
+    gatewayIndicator?: { isHealthy: ReturnType<typeof vi.fn> };
+    redisIndicator?: { isHealthy: ReturnType<typeof vi.fn> };
+    redisConfiguration?: ConfigType<typeof redisConfig>;
+    pingResults?: { serviceA?: 'up' | 'down'; serviceB?: 'down' | 'up' };
   } = {},
 ): HealthCheckService {
   const {
-    terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis'])),
     error = vi.fn(),
     info = vi.fn(),
+    gatewayIndicator = { isHealthy: vi.fn().mockResolvedValue({ gateway: { status: 'up' } }) },
+    redisIndicator = { isHealthy: vi.fn().mockResolvedValue({ redis: { status: 'up' } }) },
+    redisConfiguration = { pingTimeoutMs: 3000 } as ConfigType<typeof redisConfig>,
+    pingResults = {},
+  } = overrides;
+  const {
+    // Default terminusCheck genuinely runs the indicator-check functions it's given, so that a
+    // real `redisIndicator.isHealthy` mock (e.g. Step 1's test) is actually invoked and asserted
+    // on. Every existing test below supplies its own `terminusCheck` override and never exercises
+    // this default, so its behavior is safe to change.
+    terminusCheck = vi.fn().mockImplementation(async (indicatorFns: (() => Promise<object>)[]) => {
+      const results = await Promise.all(indicatorFns.map((fn) => fn()));
+      const details = results.reduce<Record<string, unknown>>(
+        (accumulated, result) => ({ ...accumulated, ...result }),
+        {},
+      );
+
+      return { status: 'ok', details };
+    }),
   } = overrides;
   const terminus = { check: terminusCheck } as unknown as TerminusHealthCheckService;
   const loggerService = {
@@ -64,12 +88,21 @@ function buildService(
     }),
   } as unknown as LoggerService;
 
+  // rabbitMqPingIndicator.isHealthy is called with 'serviceA' and 'serviceB' separately; pingResults
+  // lets a test override the resolved status per service (defaults to 'up' for both).
+  const { serviceA: serviceAPingStatus = 'up', serviceB: serviceBPingStatus = 'up' } = pingResults;
+  const rabbitMqPingIndicator = {
+    isHealthy: vi.fn().mockImplementation((name: 'serviceA' | 'serviceB') => ({
+      [name]: { status: name === 'serviceA' ? serviceAPingStatus : serviceBPingStatus },
+    })),
+  };
+
   return new HealthCheckService(
     terminus,
-    {} as GatewayHealthIndicator,
-    {} as RabbitMqConnectionHealthIndicator,
-    {} as RabbitMqPingHealthIndicator,
-    {} as RedisHealthIndicator,
+    gatewayIndicator as unknown as GatewayHealthIndicator,
+    rabbitMqPingIndicator as unknown as RabbitMqPingHealthIndicator,
+    redisIndicator as unknown as RedisHealthIndicator,
+    redisConfiguration,
     {} as ClientProxy,
     {} as ClientProxy,
     loggerService,
@@ -145,20 +178,6 @@ describe('HealthCheckService', () => {
       });
     });
 
-    it('should mark rabbitmq as unavailable and report the rest as ok, when the broker is unreachable', async () => {
-      const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['rabbitmq']));
-
-      const result = await buildService({ terminusCheck }).getHealth();
-
-      expect(result.services).toEqual({
-        gateway: 'ok',
-        rabbitmq: 'unavailable',
-        serviceA: 'ok',
-        serviceB: 'ok',
-        redis: 'ok',
-      });
-    });
-
     it('should mark redis as unavailable and report the rest as ok, when Redis is unreachable', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
 
@@ -217,8 +236,9 @@ describe('HealthCheckService', () => {
     });
 
     it('should not duplicate the correlation fields the pino mixin already stamps', async () => {
+      const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
       const error = vi.fn();
-      const service = buildService({ error });
+      const service = buildService({ terminusCheck, error });
 
       await service.getHealth();
 
@@ -256,6 +276,35 @@ describe('HealthCheckService', () => {
       });
     });
 
+    it('should ping redis with the configured timeout', async () => {
+      const redisIndicator = { isHealthy: vi.fn().mockResolvedValue({ redis: { status: 'up' } }) };
+      const service = buildService({
+        redisIndicator,
+        redisConfiguration: { pingTimeoutMs: 1500 },
+      });
+
+      await service.getHealth();
+
+      expect(redisIndicator.isHealthy).toHaveBeenCalledWith('redis', 1500);
+    });
+
+    it('should report rabbitmq up when at least one service ping succeeds', async () => {
+      const service = buildService({
+        pingResults: { serviceA: 'up', serviceB: 'down' },
+      });
+
+      const result = await service.getHealth();
+
+      expect(result.services.rabbitmq).toBe('ok');
+      expect(result.services.serviceB).toBe('unavailable');
+    });
+
+    it('should report rabbitmq unavailable when no service ping succeeds', async () => {
+      const service = buildService({ pingResults: { serviceA: 'down', serviceB: 'down' } });
+
+      expect((await service.getHealth()).services.rabbitmq).toBe('unavailable');
+    });
+
     it('should log recovery, when a previously down dependency comes back', async () => {
       const terminusCheck = vi.fn();
       const error = vi.fn();
@@ -273,16 +322,62 @@ describe('HealthCheckService', () => {
         HEALTH_CHECK_RECOVERED_LOG,
       );
     });
+
+    it('should run one check for probes that overlap', async () => {
+      let release = (): void => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const isHealthy = vi.fn().mockImplementation(async () => {
+        await gate;
+
+        return { gateway: { status: 'up' } };
+      });
+      const service = buildService({ gatewayIndicator: { isHealthy } });
+
+      const first = service.getHealth();
+      const second = service.getHealth();
+
+      release();
+      await Promise.all([first, second]);
+
+      expect(isHealthy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should run a fresh check once the previous one settled', async () => {
+      const service = buildService({});
+
+      await service.getHealth();
+      await service.getHealth();
+
+      expect(service.hasCheckInFlight()).toBe(false);
+    });
+
+    it('should not hold a failed check for later probes', async () => {
+      const isHealthy = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+      const service = buildService({ gatewayIndicator: { isHealthy } });
+
+      await expect(service.getHealth()).rejects.toThrow('boom');
+      await expect(service.getHealth()).resolves.toBeDefined();
+    });
   });
 
   describe('getReadiness', () => {
-    it('should be ready, when only redis (non-critical) is unavailable', async () => {
-      const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
+    it('should not be ready when redis is down', async () => {
+      const service = buildService({
+        redisIndicator: { isHealthy: vi.fn().mockResolvedValue({ redis: { status: 'down' } }) },
+      });
 
-      const { ready, result } = await buildService({ terminusCheck }).getReadiness();
+      const { ready, result } = await service.getReadiness();
+
+      expect(ready).toBe(false);
+      expect(result.services.redis).toBe('unavailable');
+    });
+
+    it('should be ready when every dependency is up', async () => {
+      const { ready } = await buildService({}).getReadiness();
 
       expect(ready).toBe(true);
-      expect(result.services.redis).toBe('unavailable');
     });
 
     it('should not be ready, when service-a (critical) is unavailable', async () => {
@@ -293,7 +388,7 @@ describe('HealthCheckService', () => {
       expect(ready).toBe(false);
     });
 
-    it('should not be ready, when rabbitmq (critical) is unavailable even if redis (non-critical) is also down', async () => {
+    it('should not be ready, when rabbitmq (critical) is unavailable even if redis is also down', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['rabbitmq', 'redis']));
 
       const { ready, result } = await buildService({ terminusCheck }).getReadiness();

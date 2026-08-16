@@ -1,3 +1,7 @@
+import { writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { type INestMicroservice } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -10,6 +14,11 @@ import { type Logger } from 'pino';
 
 import { AppModule } from './app.module.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
+
+// `tmpdir()` resolves to `/tmp` in the container (matching the Dockerfile HEALTHCHECK's hard-coded
+// path) but to a real per-platform temp directory in local dev — a hard-coded '/tmp' resolves to
+// `<drive>:\tmp` on Windows, which may not exist and would otherwise crash bootstrap.
+const READINESS_MARKER_PATH = join(tmpdir(), 'service-ready');
 
 async function bootstrap(): Promise<void> {
   let app: INestMicroservice | undefined;
@@ -43,6 +52,18 @@ async function bootstrap(): Promise<void> {
     app.enableShutdownHooks();
 
     await app.listen();
+
+    // A file the container healthcheck can stat. `listen()` has resolved, so the listener is
+    // consuming and every OnApplicationBootstrap hook has run — which is the thing a healthcheck
+    // should assert, and precisely what connecting to the broker from outside cannot.
+    // Non-fatal: a diagnostic marker failing to write should leave the container correctly
+    // unhealthy, not crash a process whose RMQ listener is otherwise up and consuming.
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- READINESS_MARKER_PATH is built from os.tmpdir() and a fixed filename, never from request/user input
+      await writeFile(READINESS_MARKER_PATH, new Date().toISOString(), 'utf8');
+    } catch (markerError) {
+      bootstrapLogger.warn({}, 'Failed to write readiness marker', markerError);
+    }
 
     // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
     // RpcExceptionFilter, shutdown notices — belongs to message handling, not to startup, so it

@@ -53,8 +53,15 @@ export * from './request-context/resolve-request-context.util.js';
 export * from './request-context/rmq/context-propagating.client.js';
 
 export * from './config/environment.helper.js';
+export * from './config/health.config.js';
 export * from './config/logger.config.js';
+export * from './config/redis.config.js';
 export * from './config/require-in-production.js';
+
+export * from './health/dependency-health.service.js';
+export * from './health/health.module.js';
+export * from './health/mongo.health-indicator.js';
+export * from './health/redis.health-indicator.js';
 
 export * from './security/helmet.config.js';
 

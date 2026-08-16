@@ -1,25 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type ConfigType } from '@nestjs/config';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import { type Redis } from 'ioredis';
 import { firstValueFrom, from, timeout } from 'rxjs';
 
-import redisConfig from '../../config/redis.config.js';
-import { REDIS_CLIENT } from '../infra-clients.tokens.js';
+import { REDIS_CLIENT } from '../infra/client-tokens.js';
 
+/**
+ * Reports whether this process can actually reach its Redis.
+ *
+ * `timeoutMs` is a parameter rather than injected config: the same indicator serves service-a and
+ * service-b, and shared infrastructure should not depend on either one's configuration shape. This
+ * mirrors the gateway's RabbitMQ ping indicator, which takes its client the same way.
+ */
 @Injectable()
 export class RedisHealthIndicator {
   public constructor(
     private readonly healthIndicatorService: HealthIndicatorService,
     @Inject(REDIS_CLIENT) private readonly client: Redis,
-    @Inject(redisConfig.KEY) private readonly config: ConfigType<typeof redisConfig>,
   ) {}
 
-  public async isHealthy(key: string): Promise<HealthIndicatorResult> {
+  public async isHealthy(key: string, timeoutMs: number): Promise<HealthIndicatorResult> {
     const indicator = this.healthIndicatorService.check(key);
 
     try {
-      await firstValueFrom(from(this.client.ping()).pipe(timeout(this.config.pingTimeoutMs)));
+      await firstValueFrom(from(this.client.ping()).pipe(timeout(timeoutMs)));
 
       return indicator.up();
     } catch (error) {

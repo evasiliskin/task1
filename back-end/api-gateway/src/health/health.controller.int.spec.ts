@@ -13,11 +13,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import redisConfig from '../config/redis.config.js';
 import { ContractModule } from '../contract/contract.module.js';
-import {
-  RABBITMQ_CONNECTION_MANAGER,
-  SERVICE_A_RMQ_CLIENT,
-  SERVICE_B_RMQ_CLIENT,
-} from '../rmq/rmq-client.tokens.js';
+import { SERVICE_A_RMQ_CLIENT, SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { type IAggregatedHealth } from './health-check.service.js';
@@ -31,13 +27,11 @@ describe('HealthController (HTTP Integration)', () => {
   let httpServer: App;
   let serviceAClient: { send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
-  let connectionManager: { isConnected: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
   let redisClient: { ping: ReturnType<typeof vi.fn> };
 
   beforeAll(async () => {
     serviceAClient = { send: vi.fn() };
     serviceBClient = { send: vi.fn() };
-    connectionManager = { isConnected: vi.fn(), close: vi.fn().mockResolvedValue(undefined) };
     redisClient = { ping: vi.fn() };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -60,8 +54,6 @@ describe('HealthController (HTTP Integration)', () => {
       .useValue(serviceAClient as unknown as ClientProxy)
       .overrideProvider(SERVICE_B_RMQ_CLIENT)
       .useValue(serviceBClient as unknown as ClientProxy)
-      .overrideProvider(RABBITMQ_CONNECTION_MANAGER)
-      .useValue(connectionManager)
       .overrideProvider(REDIS_CLIENT)
       .useValue(redisClient)
       .compile();
@@ -81,7 +73,6 @@ describe('HealthController (HTTP Integration)', () => {
 
     serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
     serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
-    connectionManager.isConnected.mockReturnValue(true);
     redisClient.ping.mockResolvedValue('PONG');
   });
 
@@ -157,12 +148,12 @@ describe('HealthController (HTTP Integration)', () => {
   });
 
   describe('GET /health/ready', () => {
-    it('should return 200, when all critical dependencies are healthy even if redis is down', async () => {
+    it('should return 503, when redis is down', async () => {
       redisClient.ping.mockRejectedValue(new Error('connection refused'));
 
       const response = await request(httpServer).get('/health/ready');
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
       expect(
         (response.body as { result: { data: IAggregatedHealth } }).result.data.services.redis,
       ).toBe('unavailable');

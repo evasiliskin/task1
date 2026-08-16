@@ -62,7 +62,7 @@ export class HealthController {
   @ApiOperation({
     summary: 'Readiness probe — can the gateway currently serve requests',
     description:
-      'Critical for readiness: rabbitmq, serviceA, serviceB. redis is reported but never fails readiness.',
+      'Every reported dependency must be up: rabbitmq, serviceA, serviceB and redis (the request throttler is Redis-backed).',
   })
   @ApiSingleResponse(HealthResponseSchema)
   @ApiServiceUnavailableResponse({ schema: { example: DEGRADED_EXAMPLE } })
