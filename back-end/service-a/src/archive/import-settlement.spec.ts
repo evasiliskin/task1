@@ -123,6 +123,26 @@ describe('settleImportResult', () => {
     expect(options.retryPublisher.settleFailure).not.toHaveBeenCalled();
   });
 
+  it('should ack without dead-lettering, when the broker redelivers a message whose import already completed', async () => {
+    const options = buildOptions({
+      message: {
+        content: Buffer.from('{}'),
+        properties: { headers: {} },
+        fields: { redelivered: true },
+      },
+      run: vi
+        .fn()
+        .mockRejectedValue(new ImportAlreadyClaimedError('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')),
+    });
+
+    await settleImportResult(options);
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
+    expect(options.channel.ack).toHaveBeenCalledWith(options.message);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
+    expect(options.retryPublisher.settleFailure).not.toHaveBeenCalled();
+  });
+
   it('should delegate to RetryPublisher without acking, when the import fails for any other reason', async () => {
     const failure = new Error('mongo down');
     const options = buildOptions({ run: vi.fn().mockRejectedValue(failure) });

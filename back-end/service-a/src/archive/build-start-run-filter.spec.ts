@@ -30,12 +30,22 @@ describe('buildReopenRunFilter', () => {
     });
   });
 
-  it('should match any started or failed run but never a completed one, when the broker redelivered the same message', () => {
+  it('should only match a settled or stale, not-completed run, when the broker redelivered the same message', () => {
     expect(buildReopenRunFilter(IMPORT_ID, 'redelivery', STALE_BEFORE)).toEqual({
       importId: IMPORT_ID,
       startedAt: { $exists: true },
       status: { $ne: 'completed' },
+      $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: STALE_BEFORE } }],
     });
+  });
+
+  it('should exclude a run another consumer started within the staleness window, when the broker redelivered the same message', () => {
+    const filter = buildReopenRunFilter(IMPORT_ID, 'redelivery', STALE_BEFORE);
+
+    expect(filter?.$or).toEqual([
+      { status: { $ne: 'started' } },
+      { startedAt: { $lt: STALE_BEFORE } },
+    ]);
   });
 });
 
@@ -69,6 +79,7 @@ describe('buildRecordStartedFilter', () => {
           importId: IMPORT_ID,
           startedAt: { $exists: true },
           status: { $ne: 'completed' },
+          $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: STALE_BEFORE } }],
         },
       ],
     });

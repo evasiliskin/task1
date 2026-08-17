@@ -17,6 +17,7 @@ export interface IRetryPolicy {
   maxRetries: number;
   retryDelayMs: number;
   maxRetryDelayMs: number;
+  publishConfirmTimeoutMs: number;
 }
 
 export const RETRY_SCHEDULED_LOG = 'handler failed, republishing with an incremented retry count';
@@ -82,6 +83,7 @@ export class RetryPublisher {
       queue: this.topology.retry,
       content: message.content,
       headers: buildRetryHeaders(message, attempt),
+      timeoutMs: this.policy.publishConfirmTimeoutMs,
       expiration: String(delayMs),
     });
   }
@@ -96,6 +98,7 @@ export class RetryPublisher {
       queue: this.topology.deadLetter,
       content: message.content,
       headers: buildRetryHeaders(message, attempt),
+      timeoutMs: this.policy.publishConfirmTimeoutMs,
     });
   }
 

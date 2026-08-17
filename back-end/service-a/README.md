@@ -86,6 +86,7 @@ HTTP call in the system) · `@task1/shared`.
 | `RABBITMQ_RPC_PREFETCH` / `RABBITMQ_IMPORT_PREFETCH`        | `20` / `2`                                                     | Concurrency per listener      |
 | `RABBITMQ_MAX_RETRIES`                                      | `5`                                                            | Retries before dead-lettering |
 | `RABBITMQ_RETRY_DELAY_MS` / `RABBITMQ_MAX_RETRY_DELAY_MS`   | `5000` / `600000`                                              | Backoff base and cap          |
+| `RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS`                       | `10000`                                                        | Publisher-confirm deadline    |
 | `MONGODB_URI`                                               | `mongodb://localhost:27017/service_a` (required in production) | Database                      |
 | `MONGO_BATCH_SIZE` / `MONGO_INSERT_CONCURRENCY`             | `500` / `2` (max 8)                                            | Bulk insert tuning            |
 | `REDIS_URL`                                                 | localhost (required in production)                             | Metrics                       |

@@ -12,18 +12,10 @@ export function buildReopenRunFilter(
     return undefined;
   }
 
-  const notCompleted: Filter<IImportRunDocument> = {
+  return {
     importId,
     startedAt: { $exists: true },
     status: { $ne: 'completed' },
-  };
-
-  if (delivery === 'redelivery') {
-    return notCompleted;
-  }
-
-  return {
-    ...notCompleted,
     $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: staleBefore } }],
   };
 }

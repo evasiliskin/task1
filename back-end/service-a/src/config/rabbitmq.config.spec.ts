@@ -18,6 +18,7 @@ describe('rabbitmqConfig', () => {
       delete process.env.RABBITMQ_MAX_RETRIES;
       delete process.env.RABBITMQ_RETRY_DELAY_MS;
       delete process.env.RABBITMQ_MAX_RETRY_DELAY_MS;
+      delete process.env.RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS;
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://guest:guest@localhost:5672',
@@ -29,6 +30,7 @@ describe('rabbitmqConfig', () => {
         maxRetries: 5,
         retryDelayMs: 5000,
         maxRetryDelayMs: 600_000,
+        publishConfirmTimeoutMs: 10_000,
       });
     });
 
@@ -50,6 +52,7 @@ describe('rabbitmqConfig', () => {
       process.env.RABBITMQ_MAX_RETRIES = '3';
       process.env.RABBITMQ_RETRY_DELAY_MS = '1000';
       process.env.RABBITMQ_MAX_RETRY_DELAY_MS = '60000';
+      process.env.RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS = '15000';
 
       expect(rabbitmqConfig()).toEqual({
         url: 'amqp://user:pass@rabbit-host:5672',
@@ -61,6 +64,7 @@ describe('rabbitmqConfig', () => {
         maxRetries: 3,
         retryDelayMs: 1000,
         maxRetryDelayMs: 60000,
+        publishConfirmTimeoutMs: 15_000,
       });
     });
   });
@@ -86,6 +90,12 @@ describe('rabbitmqConfig', () => {
 
     it('should throw, when RABBITMQ_SERVICE_B_QUEUE is an empty string', () => {
       process.env.RABBITMQ_SERVICE_B_QUEUE = '';
+
+      expect(() => rabbitmqConfig()).toThrow();
+    });
+
+    it('should throw, when RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS is not a positive number', () => {
+      process.env.RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS = '0';
 
       expect(() => rabbitmqConfig()).toThrow();
     });

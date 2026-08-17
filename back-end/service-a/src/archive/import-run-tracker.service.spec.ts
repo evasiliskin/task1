@@ -150,7 +150,7 @@ describe('ImportRunTracker', () => {
       );
     });
 
-    it('should reopen a started or failed run but never a completed one, when the broker redelivered the same message', async () => {
+    it('should only reopen a settled or stale run, when the broker redelivered the same message', async () => {
       const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
       const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
 
@@ -160,7 +160,12 @@ describe('ImportRunTracker', () => {
         {
           $or: [
             { importId, startedAt: { $exists: false } },
-            { importId, startedAt: { $exists: true }, status: { $ne: 'completed' } },
+            {
+              importId,
+              startedAt: { $exists: true },
+              status: { $ne: 'completed' },
+              $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: STALE_BEFORE } }],
+            },
           ],
         },
         { $set: { importId, source: SOURCE, status: 'started', startedAt: STARTED_AT } },
@@ -171,21 +176,58 @@ describe('ImportRunTracker', () => {
     it('should throw ImportRunInProgressError, when a retry collides with a run another consumer still holds', async () => {
       const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
       const updateOne = vi.fn().mockRejectedValue(duplicate);
-      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
+      const findOne = vi.fn().mockResolvedValue({ status: 'started' });
+      const tracker = buildTracker(findOne, vi.fn(), updateOne);
 
       await expect(
         tracker.recordStarted(importId, SOURCE, STARTED_AT, 'retry'),
       ).rejects.toBeInstanceOf(ImportRunInProgressError);
     });
 
-    it('should throw ImportRunInProgressError, when a redelivery collides with a run already completed', async () => {
+    it('should throw ImportRunInProgressError, when a redelivery collides with a run another consumer still holds', async () => {
       const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
       const updateOne = vi.fn().mockRejectedValue(duplicate);
-      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
+      const findOne = vi.fn().mockResolvedValue({ status: 'started' });
+      const tracker = buildTracker(findOne, vi.fn(), updateOne);
 
       await expect(
         tracker.recordStarted(importId, SOURCE, STARTED_AT, 'redelivery'),
       ).rejects.toBeInstanceOf(ImportRunInProgressError);
+    });
+
+    it('should throw ImportAlreadyClaimedError, when a redelivery collides with an already-completed run', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const updateOne = vi.fn().mockRejectedValue(duplicate);
+      const findOne = vi.fn().mockResolvedValue({ status: 'completed' });
+      const tracker = buildTracker(findOne, vi.fn(), updateOne);
+
+      await expect(
+        tracker.recordStarted(importId, SOURCE, STARTED_AT, 'redelivery'),
+      ).rejects.toBeInstanceOf(ImportAlreadyClaimedError);
+      expect(findOne).toHaveBeenCalledWith({ importId }, { projection: { _id: 0, status: 1 } });
+    });
+
+    it('should throw ImportAlreadyClaimedError, when a retry collides with an already-completed run', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const updateOne = vi.fn().mockRejectedValue(duplicate);
+      const findOne = vi.fn().mockResolvedValue({ status: 'completed' });
+      const tracker = buildTracker(findOne, vi.fn(), updateOne);
+
+      await expect(
+        tracker.recordStarted(importId, SOURCE, STARTED_AT, 'retry'),
+      ).rejects.toBeInstanceOf(ImportAlreadyClaimedError);
+    });
+
+    it('should not read the conflicting run back, when a fresh delivery collides', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const updateOne = vi.fn().mockRejectedValue(duplicate);
+      const findOne = vi.fn();
+      const tracker = buildTracker(findOne, vi.fn(), updateOne);
+
+      await expect(tracker.recordStarted(importId, SOURCE, STARTED_AT)).rejects.toBeInstanceOf(
+        ImportAlreadyClaimedError,
+      );
+      expect(findOne).not.toHaveBeenCalled();
     });
 
     it('should throw ImportAlreadyClaimedError, when the run has already started', async () => {

@@ -87,6 +87,7 @@ MongoDB · Redis (RedisTimeSeries reads; metrics writes from the shared RMQ inte
 | `RABBITMQ_PREFETCH_COUNT`                                 | `10`                                                           | Concurrency                          |
 | `RABBITMQ_MAX_RETRIES`                                    | `5`                                                            | Retries before dead-lettering        |
 | `RABBITMQ_RETRY_DELAY_MS` / `RABBITMQ_MAX_RETRY_DELAY_MS` | `5000` / `600000`                                              | Backoff base and cap                 |
+| `RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS`                     | `10000`                                                        | Publisher-confirm deadline           |
 | `MONGODB_URI`                                             | `mongodb://localhost:27017/service_b` (required in production) | Database                             |
 | `PROCESSING_LOG_RETENTION_MS`                             | `2592000000` (30 days)                                         | TTL index on `processing-logs`       |
 | `REDIS_URL`                                               | localhost (required in production)                             | Metrics reads                        |

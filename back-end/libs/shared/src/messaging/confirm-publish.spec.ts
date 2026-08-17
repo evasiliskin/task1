@@ -36,6 +36,7 @@ function buildChannel(sendToQueue: IRmqChannel['sendToQueue']): IFakeChannel {
 const fixture = {
   content: Buffer.from('{"importId":"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"}'),
   headers: { 'x-retry-count': 1 },
+  timeoutMs: 10_000,
 };
 
 describe('publishConfirmed', () => {
@@ -54,6 +55,7 @@ describe('publishConfirmed', () => {
         queue: 'q.retry',
         content: fixture.content,
         headers: fixture.headers,
+        timeoutMs: fixture.timeoutMs,
       }),
     ).resolves.toBeUndefined();
   });
@@ -80,6 +82,7 @@ describe('publishConfirmed', () => {
       queue: 'q.retry',
       content: fixture.content,
       headers: fixture.headers,
+      timeoutMs: fixture.timeoutMs,
       expiration: '1000',
     });
 
@@ -107,6 +110,7 @@ describe('publishConfirmed', () => {
         queue: 'q.retry',
         content: fixture.content,
         headers: fixture.headers,
+        timeoutMs: fixture.timeoutMs,
       }),
     ).rejects.toThrow(MessagePublishFailedError);
   });
@@ -126,6 +130,7 @@ describe('publishConfirmed', () => {
         queue: 'q.retry',
         content: fixture.content,
         headers: fixture.headers,
+        timeoutMs: fixture.timeoutMs,
       }),
     ).rejects.toThrow(MessagePublishFailedError);
   });
@@ -151,6 +156,7 @@ describe('publishConfirmed', () => {
         queue: 'q.retry',
         content: fixture.content,
         headers: fixture.headers,
+        timeoutMs: fixture.timeoutMs,
       }),
     ).resolves.toBeUndefined();
   });
@@ -169,8 +175,61 @@ describe('publishConfirmed', () => {
       queue: 'q.retry',
       content: fixture.content,
       headers: fixture.headers,
+      timeoutMs: fixture.timeoutMs,
     });
 
     expect(channel.listenerCount()).toBe(0);
+  });
+
+  it('should reject with MessagePublishFailedError, when the broker never confirms within the deadline', async () => {
+    const channel = buildChannel(() => true);
+
+    await expect(
+      publishConfirmed({
+        channel,
+        queue: 'q.retry',
+        content: fixture.content,
+        headers: fixture.headers,
+        timeoutMs: 5,
+      }),
+    ).rejects.toThrow(MessagePublishFailedError);
+  });
+
+  it('should remove its return listener, when the publish times out', async () => {
+    const channel = buildChannel(() => true);
+
+    await expect(
+      publishConfirmed({
+        channel,
+        queue: 'q.retry',
+        content: fixture.content,
+        headers: fixture.headers,
+        timeoutMs: 5,
+      }),
+    ).rejects.toThrow(MessagePublishFailedError);
+
+    expect(channel.listenerCount()).toBe(0);
+  });
+
+  it('should resolve without waiting for the deadline, when the broker confirms late but before it expires', async () => {
+    const channel = buildChannel(
+      (_queue: string, _content: Buffer, _options?: unknown, callback?: RmqPublishCallback) => {
+        setTimeout(() => {
+          callback?.(null);
+        }, 5);
+
+        return true;
+      },
+    );
+
+    await expect(
+      publishConfirmed({
+        channel,
+        queue: 'q.retry',
+        content: fixture.content,
+        headers: fixture.headers,
+        timeoutMs: 1000,
+      }),
+    ).resolves.toBeUndefined();
   });
 });

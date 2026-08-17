@@ -43,11 +43,14 @@ function buildMessage(retryCount?: number): IRmqMessage {
   };
 }
 
-function buildPublisher(channelOverrides: Partial<IRmqChannel> = {}) {
+function buildPublisher(
+  channelOverrides: Partial<IRmqChannel> = {},
+  publishConfirmTimeoutMs = 10_000,
+) {
   const logger = { warn: vi.fn(), error: vi.fn() };
   const publisher = new RetryPublisher(
     { main: 'q', retry: 'q.retry', deadLetter: 'q.dlq' },
-    { maxRetries: 2, retryDelayMs: 1000, maxRetryDelayMs: 60_000 },
+    { maxRetries: 2, retryDelayMs: 1000, maxRetryDelayMs: 60_000, publishConfirmTimeoutMs },
     { getLogger: () => logger },
   );
 
@@ -132,7 +135,12 @@ describe('RetryPublisher.settleFailure', () => {
 
     const publisher = new RetryPublisher(
       { main: 'q', retry: 'q.retry', deadLetter: 'q.dlq' },
-      { maxRetries: 2, retryDelayMs: 1000, maxRetryDelayMs: 60_000 },
+      {
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        maxRetryDelayMs: 60_000,
+        publishConfirmTimeoutMs: 10_000,
+      },
       { getLogger: () => ({ warn: vi.fn(), error: vi.fn() }) },
     );
 
@@ -158,6 +166,30 @@ describe('RetryPublisher.settleFailure', () => {
     expect(outcome).toBe('rejected');
     // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
     expect(channel.nack).toHaveBeenCalledWith(expect.anything(), false, false);
+  });
+
+  it('should nack without requeue instead of hanging, when the broker never confirms the republish', async () => {
+    const { publisher, channel } = buildPublisher({ sendToQueue: vi.fn(() => true) }, 5);
+    const message = buildMessage();
+
+    const outcome = await publisher.settleFailure(channel, message, new Error('boom'));
+
+    expect(outcome).toBe('rejected');
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
+    expect(channel.nack).toHaveBeenCalledWith(message, false, false);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
+    expect(channel.ack).not.toHaveBeenCalled();
+  });
+
+  it('should nack without requeue instead of hanging, when the broker never confirms the dead-letter publish', async () => {
+    const { publisher, channel } = buildPublisher({ sendToQueue: vi.fn(() => true) }, 5);
+    const message = buildMessage(2);
+
+    const outcome = await publisher.settleFailure(channel, message, new Error('boom'));
+
+    expect(outcome).toBe('rejected');
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
+    expect(channel.nack).toHaveBeenCalledWith(message, false, false);
   });
 
   it('should not call assertQueue, when a failure is settled', async () => {

@@ -45,6 +45,7 @@ import { RedisModule } from './infra/redis/redis.module.js';
           maxRetries: config.maxRetries,
           retryDelayMs: config.retryDelayMs,
           maxRetryDelayMs: config.maxRetryDelayMs,
+          publishConfirmTimeoutMs: config.publishConfirmTimeoutMs,
         },
       }),
     }),

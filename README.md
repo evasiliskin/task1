@@ -102,6 +102,10 @@ handler throws, `RetryPublisher` republishes the message to `<queue>.retry` with
 `x-retry-count` header; once `RABBITMQ_MAX_RETRIES` is exceeded, the message goes to `<queue>.dlq`.
 This retry topology is wired for `service_a_imports_queue` and `service_b_queue` — `service_a_queue`
 (RPC only) has a DLQ but no retry queue, because RPC failures are propagated to the caller instead.
+Every republish is a mandatory, persistent publish awaited under a publisher confirm bounded by
+`RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS`; a broker that is reachable but not confirming (a resource
+alarm, for example) makes the republish fail rather than hang, and the original delivery is nacked
+to the dead-letter exchange instead of being left unsettled.
 
 **Error propagation.** A microservice handler's exception is caught by the shared
 `RpcAppExceptionFilter`, which serialises it to `{ statusCode, code, category, message, … }` and

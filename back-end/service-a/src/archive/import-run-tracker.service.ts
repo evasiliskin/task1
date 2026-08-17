@@ -7,13 +7,18 @@ import { type Collection, MongoServerError } from 'mongodb';
 import archiveConfig, { type ArchiveConfiguration } from '../config/archive.config.js';
 
 import { buildRecordStartedFilter } from './build-start-run-filter.js';
-import { ImportAlreadyClaimedError } from './import-claim.error.js';
+import { type ImportAlreadyClaimedError } from './import-claim.error.js';
 import { type ImportDeliveryKind } from './import-delivery-kind.js';
-import { ImportRunInProgressError } from './import-run-in-progress.error.js';
+import { type ImportRunInProgressError } from './import-run-in-progress.error.js';
 import { computeImportRunStalenessMs } from './import-run-staleness.js';
-import { type IImportRunDocument, type ImportSourceRecord } from './import-run.types.js';
+import {
+  type IImportRunDocument,
+  type ImportRunStatus,
+  type ImportSourceRecord,
+} from './import-run.types.js';
 import { IMPORTS_COLLECTION } from './imports-collection.provider.js';
 import { type ImportResult } from './processing/process-archive.js';
+import { resolveStartConflictError } from './resolve-start-conflict-error.js';
 
 const ERROR_SAMPLE_MAX_LENGTH = 500;
 const ERROR_SAMPLES_LIMIT = 5;
@@ -71,9 +76,7 @@ export class ImportRunTracker {
       );
     } catch (error) {
       if (error instanceof MongoServerError && error.code === DUPLICATE_KEY_ERROR_CODE) {
-        throw delivery === 'fresh'
-          ? new ImportAlreadyClaimedError(importId)
-          : new ImportRunInProgressError(importId);
+        throw await this.buildStartConflictError(importId, delivery);
       }
 
       throw error;
@@ -130,6 +133,24 @@ export class ImportRunTracker {
     });
 
     return result.deletedCount;
+  }
+
+  private async buildStartConflictError(
+    importId: string,
+    delivery: ImportDeliveryKind,
+  ): Promise<ImportAlreadyClaimedError | ImportRunInProgressError> {
+    const status = delivery === 'fresh' ? undefined : await this.readRunStatus(importId);
+
+    return resolveStartConflictError(importId, delivery, status);
+  }
+
+  private async readRunStatus(importId: string): Promise<ImportRunStatus | undefined> {
+    const existing = await this.collection.findOne(
+      { importId },
+      { projection: { _id: 0, status: 1 } },
+    );
+
+    return existing?.status;
   }
 
   private async readClaimedImportId(
