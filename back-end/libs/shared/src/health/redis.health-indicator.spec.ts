@@ -8,7 +8,7 @@ function buildIndicatorService() {
 }
 
 describe('RedisHealthIndicator', () => {
-  it('should report up when the ping command succeeds', async () => {
+  it('should report up, when the ping command succeeds', async () => {
     const service = buildIndicatorService();
     const ping = vi.fn().mockResolvedValue('PONG');
     const indicator = new RedisHealthIndicator(service as never, { ping } as never);
@@ -19,7 +19,7 @@ describe('RedisHealthIndicator', () => {
     expect(service.up).toHaveBeenCalled();
   });
 
-  it('should report down with the error message when the ping fails', async () => {
+  it('should report down with the error message, when the ping fails', async () => {
     const service = buildIndicatorService();
     const indicator = new RedisHealthIndicator(
       service as never,
@@ -33,7 +33,7 @@ describe('RedisHealthIndicator', () => {
     expect(service.down).toHaveBeenCalledWith({ message: 'connection refused' });
   });
 
-  it('should report down when the ping exceeds the timeout', async () => {
+  it('should report down, when the ping exceeds the timeout', async () => {
     const service = buildIndicatorService();
     const indicator = new RedisHealthIndicator(
       service as never,

@@ -15,7 +15,7 @@ function buildEntry(
     service: 'service-a',
     status,
     timestamp: new Date('2026-08-11T00:00:00Z'),
-    correlationId: 'c1',
+    correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
     archive: '2026-08-11-0.json.gz',
     metadata,
   };
@@ -79,11 +79,11 @@ describe('ProcessingLogTracker', () => {
       expect(upsertCalls[0]).toEqual(upsertCalls[1]);
     });
 
-    it('should apply the rollup delta when the claim on rolledUpAt succeeds', async () => {
+    it('should apply the rollup delta, when the claim on rolledUpAt succeeds', async () => {
       const updateOne = vi
         .fn()
-        .mockResolvedValueOnce({ modifiedCount: 0 }) // upsert of the log document
-        .mockResolvedValueOnce({ modifiedCount: 1 }); // claim of rolledUpAt succeeds
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 });
       const applyEntry = vi.fn().mockResolvedValue(undefined);
       const { tracker } = buildTracker({ updateOne, applyEntry });
       const testEntry = buildEntry('completed');
@@ -99,11 +99,11 @@ describe('ProcessingLogTracker', () => {
       expect(updateOne).toHaveBeenCalledTimes(2);
     });
 
-    it('should not apply the rollup delta when the claim on rolledUpAt fails (already applied)', async () => {
+    it('should not apply the rollup delta, when the claim on rolledUpAt fails', async () => {
       const updateOne = vi
         .fn()
-        .mockResolvedValueOnce({ modifiedCount: 0 }) // upsert of the log document
-        .mockResolvedValueOnce({ modifiedCount: 0 }); // claim fails: already rolled up
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 0 });
       const applyEntry = vi.fn();
       const { tracker } = buildTracker({ updateOne, applyEntry });
 
@@ -116,9 +116,9 @@ describe('ProcessingLogTracker', () => {
     it('should revert the claim and re-throw, when applyEntry fails', async () => {
       const updateOne = vi
         .fn()
-        .mockResolvedValueOnce({ modifiedCount: 0 }) // upsert of the log document
-        .mockResolvedValueOnce({ modifiedCount: 1 }) // claim succeeds
-        .mockResolvedValueOnce({ modifiedCount: 1 }); // revert
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 })
+        .mockResolvedValueOnce({ modifiedCount: 1 });
       const applyError = new Error('transient mongo error');
       const applyEntry = vi.fn().mockRejectedValue(applyError);
       const { tracker } = buildTracker({ updateOne, applyEntry });

@@ -37,7 +37,7 @@ describe('RequestContractViolationFormatStrategy', () => {
     ]);
   });
 
-  it('should use a client-safe message that omits controller and method names', () => {
+  it('should omit controller and method names from the message, when it formats the violation', () => {
     const error = new RequestContractViolationError({
       controllerName: 'EventsController',
       methodName: 'search',

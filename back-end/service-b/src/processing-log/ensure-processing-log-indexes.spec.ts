@@ -34,7 +34,7 @@ describe('ensureProcessingLogIndexes', () => {
     expect(createIndex).toHaveBeenCalledWith({ status: 1, timestamp: -1, _id: -1 });
   });
 
-  it('should include the _id tiebreaker in every compound index, so the keyset sort is index-covered', async () => {
+  it('should include the _id tiebreaker in every compound index, when the indexes are ensured', async () => {
     const createIndex = vi.fn().mockResolvedValue('ok');
 
     await ensureProcessingLogIndexes({
@@ -63,7 +63,7 @@ describe('ensureProcessingLogIndexes', () => {
     expect(createIndex).toHaveBeenCalledTimes(4);
   });
 
-  it('should create every index without serialising the round trips', async () => {
+  it('should create every index concurrently, when the indexes are ensured', async () => {
     let inFlight = 0;
     let peak = 0;
     const createIndex = vi.fn().mockImplementation(async () => {
@@ -79,7 +79,7 @@ describe('ensureProcessingLogIndexes', () => {
     expect(peak).toBeGreaterThan(1);
   });
 
-  it('should not create a TTL index', async () => {
+  it('should not create a TTL index, when no retention is configured', async () => {
     const createIndex = vi.fn().mockResolvedValue('ok');
 
     await ensureProcessingLogIndexes({ createIndex } as never);
@@ -92,7 +92,7 @@ describe('ensureProcessingLogIndexes', () => {
 });
 
 describe('ensureProcessingLogRetentionIndex', () => {
-  it('should create a TTL index on timestamp from the configured retention', async () => {
+  it('should create a TTL index on timestamp, when a retention is configured', async () => {
     const createIndex = vi.fn().mockResolvedValue('ok');
 
     await ensureProcessingLogRetentionIndex({ createIndex } as never, 86_400_000);
@@ -100,7 +100,7 @@ describe('ensureProcessingLogRetentionIndex', () => {
     expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
   });
 
-  it('should round a sub-second retention up to one second', async () => {
+  it('should round the expiry up to one second, when the configured retention is sub-second', async () => {
     const createIndex = vi.fn().mockResolvedValue('ok');
 
     await ensureProcessingLogRetentionIndex({ createIndex } as never, 500);

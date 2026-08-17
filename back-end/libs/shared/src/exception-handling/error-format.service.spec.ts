@@ -12,7 +12,7 @@ function strategy(canHandle: boolean, result: IFormattedError): IErrorFormatStra
 }
 
 describe('ErrorFormatService', () => {
-  it('should format with the first strategy that can handle the exception', () => {
+  it('should format with the first matching strategy, when several strategies are registered', () => {
     const matching: IFormattedError = {
       statusCode: 404,
       error: { code: 'NOT_FOUND', category: 'NOT_FOUND', message: 'missing' },

@@ -5,17 +5,17 @@ import { decodeCursor, encodeCursor } from './cursor-codec.js';
 const payloadSchema = z.object({ id: z.string() });
 
 describe('cursor codec', () => {
-  it('should round-trip a payload through base64url', () => {
+  it('should return the original payload, when an encoded cursor is decoded', () => {
     const encoded = encodeCursor({ id: 'abc' });
 
     expect(decodeCursor(encoded, payloadSchema)).toEqual({ id: 'abc' });
   });
 
-  it('should return null for a cursor that is not valid base64url JSON', () => {
+  it('should return null, when the cursor is not valid base64url JSON', () => {
     expect(decodeCursor('!!!not-base64!!!', payloadSchema)).toBeNull();
   });
 
-  it('should return null for a well-formed cursor whose payload fails the schema', () => {
+  it('should return null, when a well-formed cursor payload fails the schema', () => {
     expect(decodeCursor(encodeCursor({ wrong: 1 }), payloadSchema)).toBeNull();
   });
 });

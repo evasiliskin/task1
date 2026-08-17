@@ -11,7 +11,7 @@ describe('insertBatch', () => {
       createdAt: new Date('2026-08-11T00:00:00Z'),
       actor: { id: 1, login: 'octocat' },
       repo: { id: 2, name: 'octocat/hello-world' },
-      importId: 'import-1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       payload: {},
     };
   }
@@ -86,7 +86,7 @@ describe('insertBatch', () => {
     });
   });
 
-  it('should return a de-duplicated sample of non-duplicate write errors', async () => {
+  it('should return a de-duplicated sample, when the batch produces non-duplicate write errors', async () => {
     const bulkError = Object.assign(new Error('bulk write failed'), {
       name: 'MongoBulkWriteError',
       insertedCount: 1,

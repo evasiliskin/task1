@@ -57,7 +57,7 @@ describe('ImportRunTracker', () => {
       await expect(tracker.findByImportId(importId)).resolves.toBeNull();
     });
 
-    it('should filter on startedAt existing, so a claim-only reservation is excluded', async () => {
+    it('should exclude the run, when it is a claim-only reservation with no startedAt', async () => {
       const findOne = vi.fn().mockResolvedValue(null);
       const tracker = buildTracker(findOne, vi.fn(), vi.fn());
 
@@ -70,8 +70,6 @@ describe('ImportRunTracker', () => {
     });
 
     it('should return null, when the only matching document is a claim-only reservation with no startedAt', async () => {
-      // The mock stands in for the collection driver applying the startedAt filter: a claim-only
-      // row does not match { startedAt: { $exists: true } }, so findOne resolves null.
       const findOne = vi.fn().mockResolvedValue(null);
       const tracker = buildTracker(findOne, vi.fn(), vi.fn());
 
@@ -108,7 +106,7 @@ describe('ImportRunTracker', () => {
       );
     });
 
-    it('should start a run that was previously only claimed', async () => {
+    it('should start the run, when it was previously only claimed', async () => {
       const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
       const tracker = new ImportRunTracker({ updateOne } as never);
 
@@ -122,7 +120,7 @@ describe('ImportRunTracker', () => {
       );
     });
 
-    it('should raise ImportAlreadyClaimedError when the run already started', async () => {
+    it('should throw ImportAlreadyClaimedError, when the run has already started', async () => {
       const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
       const tracker = new ImportRunTracker({
         updateOne: vi.fn().mockRejectedValue(duplicate),
@@ -135,7 +133,7 @@ describe('ImportRunTracker', () => {
   });
 
   describe('claim', () => {
-    it('should reserve a run for a new key', async () => {
+    it('should reserve a run, when the idempotency key is new', async () => {
       const findOneAndUpdate = vi.fn().mockResolvedValue({
         importId: '11111111-1111-4111-8111-111111111111',
         idempotencyKey: 'k',
@@ -152,8 +150,8 @@ describe('ImportRunTracker', () => {
       );
     });
 
-    it('should return the same importId for a replayed key', async () => {
-      const existing = { importId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', idempotencyKey: 'k' };
+    it('should return the same importId, when the idempotency key is replayed', async () => {
+      const existing = { importId: 'e2d5a7c4-1b83-4f60-9a2e-7c5b4d1f8a03', idempotencyKey: 'k' };
       const tracker = new ImportRunTracker({
         findOneAndUpdate: vi.fn().mockResolvedValue(existing),
       } as never);
@@ -164,7 +162,7 @@ describe('ImportRunTracker', () => {
       expect(second).toEqual(first);
     });
 
-    it('should never return the key itself as the importId', async () => {
+    it('should return an importId distinct from the key, when a run is reserved', async () => {
       const tracker = new ImportRunTracker({
         findOneAndUpdate: vi
           .fn()
@@ -237,7 +235,7 @@ describe('ImportRunTracker', () => {
   });
 
   describe('failStaleRuns', () => {
-    it('should fail every run left started before the cutoff', async () => {
+    it('should fail the runs, when they were left started before the cutoff', async () => {
       const updateMany = vi.fn().mockResolvedValue({ modifiedCount: 2 });
       const tracker = new ImportRunTracker({ updateMany } as never);
       const cutoff = new Date('2026-08-11T00:00:00Z');
@@ -252,7 +250,7 @@ describe('ImportRunTracker', () => {
   });
 
   describe('expireStaleClaims', () => {
-    it('should delete claim-only rows older than the cutoff', async () => {
+    it('should delete the rows, when they are claim-only and older than the cutoff', async () => {
       const deleteMany = vi.fn().mockResolvedValue({ deletedCount: 3 });
       const tracker = new ImportRunTracker({ deleteMany } as never);
       const cutoff = new Date('2026-08-11T00:00:00Z');

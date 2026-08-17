@@ -13,7 +13,7 @@ describe('searchEvents', () => {
       createdAt: new Date(createdAt),
       actor: { id: 1, login: 'octocat' },
       repo: { id: 2, name: 'octocat/hello-world' },
-      importId: 'import-1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       payload: {},
     };
   }
@@ -34,7 +34,7 @@ describe('searchEvents', () => {
   }
 
   it('should return every document and no nextCursor, when fewer documents exist than the limit', async () => {
-    const documents = [buildDocument('e1', '2026-08-11T00:02:00.000Z')];
+    const documents = [buildDocument('48291832741', '2026-08-11T00:02:00.000Z')];
     const { collection } = buildCollection(documents);
 
     const result = await searchEvents(collection, { limit: 50 });
@@ -44,9 +44,9 @@ describe('searchEvents', () => {
 
   it('should return a nextCursor derived from the last returned document, when more documents exist than the limit', async () => {
     const documents = [
-      buildDocument('e1', '2026-08-11T00:02:00.000Z'),
-      buildDocument('e2', '2026-08-11T00:01:00.000Z'),
-      buildDocument('e3', '2026-08-11T00:00:00.000Z'),
+      buildDocument('48291832741', '2026-08-11T00:02:00.000Z'),
+      buildDocument('48291832742', '2026-08-11T00:01:00.000Z'),
+      buildDocument('48291832743', '2026-08-11T00:00:00.000Z'),
     ];
     const { collection } = buildCollection(documents);
 
@@ -74,7 +74,7 @@ describe('searchEvents', () => {
   it('should decode the cursor and build a keyset filter, when a cursor is provided', async () => {
     const { collection, find } = buildCollection([]);
     const priorCreatedAt = new Date('2026-08-11T00:00:00.000Z');
-    const priorCursor = encodeEventCursor({ createdAt: priorCreatedAt, eventId: 'e3' });
+    const priorCursor = encodeEventCursor({ createdAt: priorCreatedAt, eventId: '48291832743' });
 
     await searchEvents(collection, { limit: 50, cursor: priorCursor });
 
@@ -85,7 +85,7 @@ describe('searchEvents', () => {
           {
             $or: [
               { createdAt: { $lt: priorCreatedAt } },
-              { createdAt: priorCreatedAt, eventId: { $lt: 'e3' } },
+              { createdAt: priorCreatedAt, eventId: { $lt: '48291832743' } },
             ],
           },
         ],

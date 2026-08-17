@@ -62,7 +62,7 @@ describe('buildEventsFilter', () => {
   });
 
   it('should wrap the filter in a keyset $and/$or clause, when a cursor is provided', () => {
-    const cursor = { createdAt: new Date('2026-08-11T00:00:00.000Z'), eventId: 'e1' };
+    const cursor = { createdAt: new Date('2026-08-11T00:00:00.000Z'), eventId: '48291832741' };
 
     expect(buildEventsFilter({ ...baseMessage, type: 'PushEvent' }, cursor)).toEqual({
       $and: [

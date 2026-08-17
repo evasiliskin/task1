@@ -25,10 +25,16 @@ describe('ResponseEnvelopeInterceptor', () => {
 
   it('should wrap the payload in a success envelope, when the handler returns an object', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       async () =>
         await firstValueFrom(
-          interceptor.intercept(contextWithStatus(200), { handle: () => of({ importId: 'abc' }) }),
+          interceptor.intercept(contextWithStatus(200), {
+            handle: () => of({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
+          }),
         ),
     );
 
@@ -36,14 +42,18 @@ describe('ResponseEnvelopeInterceptor', () => {
       status: 'SUCCESS',
       code: 200,
       message: 'OK',
-      result: { data: { importId: 'abc' } },
+      result: { data: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' } },
       meta: { tracing: { correlationId: CORRELATION_ID } },
     });
   });
 
   it('should emit items and pagination, when the handler returns a list result', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(200), {
@@ -62,7 +72,11 @@ describe('ResponseEnvelopeInterceptor', () => {
     const file = new StreamableFile(Buffer.from('pdf'));
 
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(200), { handle: () => of(file) }),
@@ -74,7 +88,11 @@ describe('ResponseEnvelopeInterceptor', () => {
 
   it('should report the status the handler set, when it overrode it to 503', async () => {
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithStatus(503), {
@@ -92,7 +110,11 @@ describe('ResponseEnvelopeInterceptor', () => {
     } as unknown as ExecutionContext;
 
     const result = await requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       async () =>
         await firstValueFrom(
           interceptor.intercept(contextWithNoStatus, { handle: () => of({ ok: true }) }),

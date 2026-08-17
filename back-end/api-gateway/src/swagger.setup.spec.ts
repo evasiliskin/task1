@@ -18,13 +18,10 @@ describe('applySwagger', () => {
     return { app: { use, getHttpAdapter: () => ({ get: vi.fn() }) } as never, use };
   }
 
-  it('should mount the documentation outside production', async () => {
+  it('should mount the documentation, when not running in production', async () => {
     delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'development';
 
-    // A plain fake app cannot stand in here: SwaggerModule.createDocument (real, unmocked,
-    // unlike the production-path tests below) calls app.getHttpAdapter().getType() and walks the
-    // DI container, so this needs an actual Nest application instance.
     const moduleRef = await Test.createTestingModule({}).compile();
     const app: INestApplication = moduleRef.createNestApplication();
     await app.init();
@@ -36,7 +33,7 @@ describe('applySwagger', () => {
     }
   });
 
-  it('should not mount the documentation in production', () => {
+  it('should not mount the documentation, when running in production', () => {
     delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'production';
 
@@ -45,7 +42,7 @@ describe('applySwagger', () => {
     expect(applySwagger(app)).toBe(false);
   });
 
-  it('should not build the OpenAPI document at all in production', () => {
+  it('should not build the OpenAPI document, when running in production', () => {
     delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'production';
 

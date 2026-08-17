@@ -35,9 +35,13 @@ describe('AppError', () => {
     });
 
     it('should include params, when a non-empty params object was supplied', () => {
-      const error = new TestError('failed', { params: { importId: 'i-1' } });
+      const error = new TestError('failed', {
+        params: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+      });
 
-      expect(error.toDetail()).toMatchObject({ params: { importId: 'i-1' } });
+      expect(error.toDetail()).toMatchObject({
+        params: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+      });
     });
 
     it('should omit params, when params is an empty object', () => {

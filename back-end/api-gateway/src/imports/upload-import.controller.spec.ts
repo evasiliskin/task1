@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -74,21 +73,25 @@ describe('UploadImportController', () => {
   });
 
   describe('upload', () => {
-    it('should derive the import id from the namespaced upload temp filename', async () => {
+    it('should derive the import id from the upload temp filename, when the upload is finalized', async () => {
       const warn: LogMock = vi.fn();
       const error: LogMock = vi.fn();
       const { controller, requestContextService } = buildController(storageDirectory, {
         warn,
         error,
       });
-      const importId = '11111111-1111-4111-8111-111111111111';
+      const importId = '3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a51';
       const temporaryFilePath = join(storageDirectory, `${importId}.upload.tmp`);
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- temporaryFilePath is this spec's own mkdtempSync'd fixture path, never external input.
       writeFileSync(temporaryFilePath, Buffer.from('gzipped-content'));
       isGzipFileMock.mockResolvedValue(true);
 
       const result = await requestContextService.run(
-        { correlationId: randomUUID(), requestId: 'req-1', correlationIdSource: 'inbound' },
+        {
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
         () =>
           controller.upload(
             { rejectedFilename: undefined } as unknown as Parameters<
@@ -109,8 +112,8 @@ describe('UploadImportController', () => {
       const warn: LogMock = vi.fn();
       const error: LogMock = vi.fn();
       const { controller } = buildController(storageDirectory, { warn, error });
-      // A path that never existed: the real fs unlink() call this exercises fails with ENOENT.
-      const missingFilePath = join(storageDirectory, `${randomUUID()}.tmp`);
+      const rejectedImportId = 'c56a4180-65aa-42ec-a945-5fd21dec0538';
+      const missingFilePath = join(storageDirectory, `${rejectedImportId}.tmp`);
       isGzipFileMock.mockResolvedValue(false);
 
       await expect(
@@ -121,7 +124,7 @@ describe('UploadImportController', () => {
           {
             path: missingFilePath,
             originalname: 'archive.json.gz',
-            filename: `${randomUUID()}.tmp`,
+            filename: `${rejectedImportId}.tmp`,
           } as unknown as Express.Multer.File,
         ),
       ).rejects.toBeInstanceOf(UnsupportedArchiveFormatError);
@@ -136,10 +139,9 @@ describe('UploadImportController', () => {
     it('should throw an ArchiveUploadError and clean up the temp file, when finalizing the upload fails to rename', async () => {
       const warn: LogMock = vi.fn();
       const error: LogMock = vi.fn();
-      // A storage directory that does not exist makes the controller's rename() call fail.
       const missingStorageDirectory = join(storageDirectory, 'does-not-exist');
       const { controller } = buildController(missingStorageDirectory, { warn, error });
-      const importId = randomUUID();
+      const importId = '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04';
       const temporaryFilePath = join(storageDirectory, `${importId}.tmp`);
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- temporaryFilePath is this spec's own mkdtempSync'd fixture path, never external input.
       writeFileSync(temporaryFilePath, Buffer.from('gzipped-content'));
@@ -171,8 +173,6 @@ describe('UploadImportController', () => {
     });
 
     const readThrottleMetadata = (): Record<string, { limit: unknown; ttl: unknown }> => {
-      // @Throttle stores limit and ttl under separate metadata keys.
-      // Extract them and return an object matching the expected structure.
       // eslint-disable-next-line @typescript-eslint/unbound-method -- used only as a Reflect metadata target, never invoked, so unbound `this` is not a risk
       const uploadMethod = UploadImportController.prototype.upload;
       const limitFn = Reflect.getMetadata('THROTTLER:LIMITdefault', uploadMethod) as unknown;
@@ -186,7 +186,7 @@ describe('UploadImportController', () => {
       };
     };
 
-    it('should resolve the upload limit from configuration at request time', () => {
+    it('should resolve the upload limit from configuration, when a request is handled', () => {
       process.env.THROTTLE_UPLOAD_LIMIT = '9';
 
       const metadata = readThrottleMetadata();
@@ -196,7 +196,7 @@ describe('UploadImportController', () => {
       expect(resolve()).toBe(9);
     });
 
-    it('should resolve the upload ttl from configuration at request time', () => {
+    it('should resolve the upload ttl from configuration, when a request is handled', () => {
       process.env.THROTTLE_TTL_MS = '15000';
 
       const metadata = readThrottleMetadata();

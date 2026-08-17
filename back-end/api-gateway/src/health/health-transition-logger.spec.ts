@@ -15,7 +15,7 @@ const down = { redis: { status: 'down', message: 'ECONNREFUSED' } } as never;
 const up = { redis: { status: 'up' } } as never;
 
 describe('HealthTransitionLogger', () => {
-  it('should log the first time a dependency goes down', () => {
+  it('should log once, when a dependency first goes down', () => {
     const { logger, error } = buildLogger();
 
     logger.record(down, 12);
@@ -26,7 +26,7 @@ describe('HealthTransitionLogger', () => {
     );
   });
 
-  it('should not repeat the line while the dependency stays down', () => {
+  it('should not log again, when the dependency stays down', () => {
     const { logger, error } = buildLogger();
 
     logger.record(down, 12);
@@ -36,7 +36,7 @@ describe('HealthTransitionLogger', () => {
     expect(error).toHaveBeenCalledTimes(1);
   });
 
-  it('should log once when the dependency recovers', () => {
+  it('should log once, when the dependency recovers', () => {
     const { logger, info } = buildLogger();
 
     logger.record(down, 12);
@@ -50,7 +50,7 @@ describe('HealthTransitionLogger', () => {
     );
   });
 
-  it('should log nothing while everything stays up', () => {
+  it('should log nothing, when every dependency stays up', () => {
     const { logger, error, info } = buildLogger();
 
     logger.record(up, 5);
@@ -60,7 +60,7 @@ describe('HealthTransitionLogger', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('should track dependencies independently', () => {
+  it('should track each dependency independently, when several change state', () => {
     const { logger, error } = buildLogger();
 
     logger.record({ redis: { status: 'down' }, serviceA: { status: 'up' } } as never, 5);

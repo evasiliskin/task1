@@ -15,7 +15,7 @@ function buildService(
 }
 
 describe('ImportRunReconciliationService', () => {
-  it('should fail runs older than the staleness threshold', async () => {
+  it('should fail the runs, when they are older than the staleness threshold', async () => {
     const failStaleRuns = vi.fn().mockResolvedValue(3);
 
     await buildService(failStaleRuns).onApplicationBootstrap();
@@ -26,7 +26,7 @@ describe('ImportRunReconciliationService', () => {
     );
   });
 
-  it('should log only when something was reconciled', async () => {
+  it('should log, when at least one run was reconciled', async () => {
     const info = vi.fn();
 
     await buildService(vi.fn().mockResolvedValue(0), info).onApplicationBootstrap();
@@ -34,13 +34,13 @@ describe('ImportRunReconciliationService', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('should not prevent startup when the update fails', async () => {
+  it('should not prevent startup, when the update fails', async () => {
     const failStaleRuns = vi.fn().mockRejectedValue(new Error('mongo down'));
 
     await expect(buildService(failStaleRuns).onApplicationBootstrap()).resolves.toBeUndefined();
   });
 
-  it('should also expire stale claim-only reservations, using the same cutoff', async () => {
+  it('should expire stale claim-only reservations with the same cutoff, when reconciliation runs', async () => {
     const expireStaleClaims = vi.fn().mockResolvedValue(2);
 
     await buildService(
@@ -52,7 +52,7 @@ describe('ImportRunReconciliationService', () => {
     expect(expireStaleClaims).toHaveBeenCalledWith(expect.any(Date));
   });
 
-  it('should log only when a claim was expired', async () => {
+  it('should not log, when no claim was expired', async () => {
     const info = vi.fn();
 
     await buildService(
@@ -64,7 +64,7 @@ describe('ImportRunReconciliationService', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('should log when claims were expired', async () => {
+  it('should log, when claims were expired', async () => {
     const info = vi.fn();
 
     await buildService(
@@ -79,7 +79,7 @@ describe('ImportRunReconciliationService', () => {
     );
   });
 
-  it('should not prevent startup when expiring stale claims fails', async () => {
+  it('should not prevent startup, when expiring stale claims fails', async () => {
     const expireStaleClaims = vi.fn().mockRejectedValue(new Error('mongo down'));
 
     await expect(
@@ -91,7 +91,7 @@ describe('ImportRunReconciliationService', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('should run failStaleRuns even when expireStaleClaims fails, and vice versa', async () => {
+  it('should still run the other reconciliation step, when one of them fails', async () => {
     const failStaleRuns = vi.fn().mockResolvedValue(0);
     const expireStaleClaims = vi.fn().mockRejectedValue(new Error('mongo down'));
 

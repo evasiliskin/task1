@@ -77,7 +77,7 @@ describe('downloadArchive', () => {
     expect(existsSync(join(storageDirectory, `${importId}.download.tmp`))).toBe(false);
   });
 
-  it('should write to an importId-keyed path so concurrent same-hour imports cannot collide', async () => {
+  it('should write to an importId-keyed path, when two imports share the same archive hour', async () => {
     const importId = '11111111-1111-4111-8111-111111111111';
 
     const result = await downloadArchive(
@@ -89,7 +89,7 @@ describe('downloadArchive', () => {
     expect(result.filePath).toBe(join(storageDirectory, `${importId}.json.gz`));
   });
 
-  it('should leave no temp file behind on success', async () => {
+  it('should leave no temp file behind, when the download succeeds', async () => {
     const importId = '22222222-2222-4222-8222-222222222222';
 
     await downloadArchive('2026-08-11-0', importId, buildOptions({ httpGet: buildHttpGet() }));
@@ -148,10 +148,6 @@ describe('downloadArchive', () => {
   });
 
   it('should abort the download and clean up the temp file, when the body stalls past the total timeout', async () => {
-    // Captured before faking timers: downloadArchive awaits a real fs/promises mkdir() before
-    // the total-timeout guard is armed, so we need a real (unfaked) tick to let that I/O settle
-    // before advancing the fake clock — otherwise the timer is armed after the virtual-time jump
-    // and never fires.
     const realSetImmediate = setImmediate;
     vi.useFakeTimers();
 
@@ -195,7 +191,7 @@ describe('downloadArchive', () => {
         return { on: vi.fn(), setTimeout: vi.fn(), destroy: vi.fn() } as unknown as ClientRequest;
       };
 
-    it('should retry a 503 and succeed on the second attempt', async () => {
+    it('should succeed on the second attempt, when the first responds 503', async () => {
       const httpGet = vi
         .fn()
         .mockImplementationOnce(respondWith(503))
@@ -208,7 +204,7 @@ describe('downloadArchive', () => {
       expect(httpGet).toHaveBeenCalledTimes(2);
     });
 
-    it('should not retry a 404, because the archive hour does not exist and never will on this attempt cycle', async () => {
+    it('should not retry, when the response is 404', async () => {
       const httpGet = vi.fn().mockImplementation(respondWith(404));
       const options = buildOptions({ maxAttempts: 3, httpGet });
 

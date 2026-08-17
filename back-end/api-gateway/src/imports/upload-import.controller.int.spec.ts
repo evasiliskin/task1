@@ -146,6 +146,7 @@ describe('UploadImportController (HTTP Integration)', () => {
         .attach('file', Buffer.from('not gzip'), 'archive.txt');
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 400 });
       expect(serviceAClient.emit).not.toHaveBeenCalled();
     });
 
@@ -153,41 +154,50 @@ describe('UploadImportController (HTTP Integration)', () => {
       const response = await request(httpServer).post('/imports/upload');
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 400 });
       expect(serviceAClient.emit).not.toHaveBeenCalled();
     });
 
-    it('should reject a non-archive filename with 400 without writing it to storage', async () => {
-      await request(httpServer)
+    it('should return 400 and write nothing to storage, when the filename is not an archive', async () => {
+      const response = await request(httpServer)
         .post('/imports/upload')
-        .attach('file', Buffer.from('hello'), 'notes.txt')
-        .expect(400);
+        .attach('file', Buffer.from('hello'), 'notes.txt');
 
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 400 });
       expect(renameMock).not.toHaveBeenCalled();
     });
 
-    it('should reject a file that is not gzip-encoded, even when it is named .json.gz, and remove the rejected temp file from storage', async () => {
+    it('should return 400 and remove the temp file, when a .json.gz file is not gzip-encoded', async () => {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- storageDirectory is this spec's own mkdtempSync'd fixture directory, never external input.
       const filesBefore = readdirSync(storageDirectory).length;
 
-      await request(httpServer)
+      const response = await request(httpServer)
         .post('/imports/upload')
-        .attach('file', Buffer.from('not gzip at all'), 'archive.json.gz')
-        .expect(400);
+        .attach('file', Buffer.from('not gzip at all'), 'archive.json.gz');
 
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 400 });
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       expect(readdirSync(storageDirectory)).toHaveLength(filesBefore);
     });
 
-    it('should accept a well-formed gzip archive', async () => {
+    it('should return 201 and the claimed importId, when the upload is a well-formed gzip archive', async () => {
       const gzip = gzipSync(Buffer.from('{"id":"1"}\n'));
 
-      await request(httpServer)
+      const response = await request(httpServer)
         .post('/imports/upload')
-        .attach('file', gzip, 'archive.json.gz')
-        .expect(201);
+        .attach('file', gzip, 'archive.json.gz');
+
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({
+        status: 'SUCCESS',
+        code: 201,
+        result: { data: { importId: expect.any(String) as string } },
+      });
     });
 
-    it('should return 503 when the broker rejects the publish', async () => {
+    it('should return 503, when the broker rejects the publish', async () => {
       const publishError = new Error('broker unavailable');
       serviceAClient.emit.mockReturnValue(throwError(() => publishError));
 
@@ -200,7 +210,7 @@ describe('UploadImportController (HTTP Integration)', () => {
       expect((response.body as { status: string; code: number }).code).toBe(503);
     });
 
-    it('should respect the injected storage config directory when renaming the upload', async () => {
+    it('should rename the upload into the configured storage directory, when the upload succeeds', async () => {
       const overrideDirectory = mkdtempSync(join(tmpdir(), 'upload-import-override-'));
       const gzip = gzipSync(Buffer.from('gzipped-content'));
 
@@ -245,8 +255,8 @@ describe('UploadImportController (HTTP Integration)', () => {
           .attach('file', gzip, 'archive.json.gz');
 
         expect(response.status).toBe(201);
+        expect(response.body).toMatchObject({ status: 'SUCCESS', code: 201 });
 
-        // Verify the rename was called with the override directory
         const [, to] = renameMock.mock.calls[renameMock.mock.calls.length - 1] as [string, string];
         expect(to).toContain(overrideDirectory);
       } finally {
@@ -257,22 +267,6 @@ describe('UploadImportController (HTTP Integration)', () => {
   });
 });
 
-/**
- * A hermetic in-memory stand-in for the single `ioredis` method
- * `ThrottlerStorageRedisService.increment()` actually calls —
- * `redis.call('eval', <lua script>, 2, hitKey, blockKey, throttlerName, ttl, limit, blockDuration)`.
- * It reimplements that library's own Lua script (INCR + PTTL + block-on-exceed) in JS so the
- * throttling test below doesn't need a real Redis reachable in this environment (the
- * docker-compose `redis` service publishes no host port) — while still exercising the exact
- * increment/block/expiry semantics `ThrottlerStorageRedisService` relies on, not a hand-rolled
- * approximation of `ThrottlerGuard`'s own behavior.
- *
- * `ThrottlerStorageRedisService`'s constructor only skips opening its own connection when the
- * value passed `instanceof Redis` — a plain duck-typed object falls through to its
- * `new Redis(optionsLookingObject)` branch and attempts a real network connection. So this
- * builds a real, lazily-connected `Redis` instance (never actually connected) and overrides only
- * its `call()` method, keeping `instanceof Redis` true while avoiding any network I/O.
- */
 function createFakeRedisClient(): Redis {
   const hits = new Map<string, { count: number; expiresAt: number }>();
   const blocks = new Map<string, number>();
@@ -329,9 +323,6 @@ function createFakeRedisClient(): Redis {
 
   const client = new Redis({ lazyConnect: true });
 
-  // Never connected (lazyConnect + call() is overridden below), but ioredis
-  // still attaches an 'error' listener requirement — see the identical
-  // pattern and justification in health.module.ts.
   // eslint-disable-next-line @typescript-eslint/no-empty-function -- deliberately swallowed; test double never connects.
   client.on('error', () => {});
   client.call = call as unknown as Redis['call'];
@@ -401,7 +392,7 @@ describe('UploadImportController rate limiting (HTTP Integration)', () => {
     delete process.env.STORAGE_DIR;
   });
 
-  it('should return 429 once the per-minute upload quota is exhausted, and never reach the handler', async () => {
+  it('should return 429 without reaching the handler, when the per-minute upload quota is exhausted', async () => {
     const gzip = gzipSync(Buffer.from('{}\n'));
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -416,5 +407,6 @@ describe('UploadImportController rate limiting (HTTP Integration)', () => {
       .attach('file', gzip, 'a.json.gz');
 
     expect(response.status).toBe(429);
+    expect(response.body).toMatchObject({ status: 'FAILED', code: 429 });
   });
 });

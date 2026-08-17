@@ -41,7 +41,7 @@ describe('StorageCleanupService', () => {
     );
   }
 
-  it('should remove a stale download temp file', async () => {
+  it('should remove the file, when it is a stale download temp file', async () => {
     const path = writeFileInStorage('aaa.download.tmp', 'partial');
 
     setMtimeMinutesAgo(path, 60);
@@ -51,7 +51,7 @@ describe('StorageCleanupService', () => {
     expect(existsSync(path)).toBe(false);
   });
 
-  it('should not remove the gateway upload temp files it does not own', async () => {
+  it('should leave the file in place, when it is a gateway upload temp file', async () => {
     const path = writeFileInStorage('bbb.upload.tmp', 'partial');
 
     setMtimeMinutesAgo(path, 60);
@@ -61,7 +61,7 @@ describe('StorageCleanupService', () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it('should not remove a finalised archive', async () => {
+  it('should leave the file in place, when it is a finalised archive', async () => {
     const path = writeFileInStorage('ccc.json.gz', 'gz');
 
     setMtimeMinutesAgo(path, 60);
@@ -71,7 +71,7 @@ describe('StorageCleanupService', () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it('should not remove a download temp file that could still be streaming', async () => {
+  it('should leave the file in place, when the download temp file could still be streaming', async () => {
     const path = writeFileInStorage('ddd.download.tmp', 'partial');
 
     await buildService().onModuleInit();
@@ -80,7 +80,7 @@ describe('StorageCleanupService', () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it('should not remove a legacy bare .tmp file', async () => {
+  it('should leave the file in place, when it is a legacy bare .tmp file', async () => {
     const path = writeFileInStorage('eee.tmp', 'legacy');
 
     setMtimeMinutesAgo(path, 60);
@@ -90,13 +90,11 @@ describe('StorageCleanupService', () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it('should return false when stat throws (file deleted concurrently)', async () => {
+  it('should return false, when stat throws because the file vanished concurrently', async () => {
     const nonExistentPath = join(storageDirectory, 'phantom.download.tmp');
     const service = buildService();
-    const cutoff = Date.now() - 1_000_000; // Far in the past
+    const cutoff = Date.now() - 1_000_000;
 
-    // Call removeIfOlderThan on a path that doesn't exist
-    // The catch block should catch the ENOENT and return false without crashing
     const result = await (
       service as unknown as {
         removeIfOlderThan: (path: string, cutoff: number) => Promise<boolean>;

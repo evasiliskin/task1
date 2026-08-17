@@ -309,7 +309,7 @@ describe('getStats', () => {
     expect(result.degraded).toBe(false);
   });
 
-  it('should serve aggregate stats from the rollup without touching the collection', async () => {
+  it('should serve stats from the rollup without querying the collection, when the rollup is seeded', async () => {
     const aggregate = vi.fn();
     const find = vi.fn();
     const rollup = {
@@ -333,7 +333,7 @@ describe('getStats', () => {
     expect(result).toMatchObject({ archivesProcessed: 3, eventsProcessed: 30, degraded: false });
   });
 
-  it('should fall back to the aggregation when the rollup has never been seeded', async () => {
+  it('should fall back to the aggregation, when the rollup has never been seeded', async () => {
     const toArray = vi.fn().mockResolvedValue([]);
     const aggregate = vi.fn().mockReturnValue({ toArray });
 
@@ -346,7 +346,7 @@ describe('getStats', () => {
     expect(aggregate).toHaveBeenCalled();
   });
 
-  it('should query the collection exactly once for a single import', async () => {
+  it('should query the collection exactly once, when stats are scoped to a single import', async () => {
     const toArray = vi.fn().mockResolvedValue([]);
     const limit = vi.fn().mockReturnValue({ toArray });
     const find = vi.fn().mockReturnValue({ limit });
@@ -356,14 +356,14 @@ describe('getStats', () => {
       collection: { find, aggregate } as never,
       rollup: { read: vi.fn() } as never,
       metricsReader: buildMetricsReader().reader,
-      importId: 'i1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     });
 
     expect(find).toHaveBeenCalledTimes(1);
     expect(aggregate).not.toHaveBeenCalled();
   });
 
-  it('should mark the result degraded when the database is unreachable', async () => {
+  it('should mark the result degraded, when the database is unreachable', async () => {
     const find = vi.fn().mockImplementation(() => {
       throw new MongoNetworkError('unreachable');
     });
@@ -372,13 +372,13 @@ describe('getStats', () => {
       collection: { find } as never,
       rollup: { read: vi.fn() } as never,
       metricsReader: buildMetricsReader().reader,
-      importId: 'i1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     });
 
     expect(result.degraded).toBe(true);
   });
 
-  it('should let a programming error propagate instead of hiding it behind degraded', async () => {
+  it('should propagate the error, when it is a programming error rather than a database failure', async () => {
     const find = vi.fn().mockImplementation(() => {
       throw new TypeError('bad projection');
     });
@@ -388,7 +388,7 @@ describe('getStats', () => {
         collection: { find } as never,
         rollup: { read: vi.fn() } as never,
         metricsReader: buildMetricsReader().reader,
-        importId: 'i1',
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       }),
     ).rejects.toBeInstanceOf(TypeError);
   });

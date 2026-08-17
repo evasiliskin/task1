@@ -1,7 +1,7 @@
 import { RPC_PATTERNS } from './rpc-patterns.const.js';
 
 describe('RPC_PATTERNS', () => {
-  it('should expose the exact wire strings currently in production, so the constant is a rename-safe alias and not a contract change', () => {
+  it('should expose the exact wire strings, when the pattern constants are read', () => {
     expect(RPC_PATTERNS).toEqual({
       EVENTS_SEARCH: 'events.search',
       LOGS_SEARCH: 'logs.search',

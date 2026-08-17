@@ -131,7 +131,7 @@ describe('HealthController (HTTP Integration)', () => {
   });
 
   describe('GET /health/live', () => {
-    it('should return 200 and status ok, without checking any dependency', async () => {
+    it('should return 200 and status ok, when liveness is probed without checking dependencies', async () => {
       const response = await request(httpServer).get('/health/live');
 
       expect(response.status).toBe(200);

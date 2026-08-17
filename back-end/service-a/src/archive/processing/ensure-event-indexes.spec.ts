@@ -49,7 +49,7 @@ describe('ensureEventIndexes', () => {
     expect(createIndex).toHaveBeenCalledWith({ 'actor.login': 1, createdAt: -1, eventId: -1 });
   });
 
-  it('should include the eventId tiebreaker in every compound index, so the keyset sort is index-covered', async () => {
+  it('should include the eventId tiebreaker in every compound index, when the indexes are ensured', async () => {
     const createIndex = vi.fn().mockResolvedValue('ok');
 
     await ensureEventIndexes({ createIndex } as unknown as Collection<IGithubEventDocument>);
@@ -68,7 +68,7 @@ describe('ensureEventIndexes', () => {
     expect(createIndex).toHaveBeenCalledTimes(5);
   });
 
-  it('should create every index without serialising the round trips', async () => {
+  it('should create every index concurrently, when the indexes are ensured', async () => {
     let inFlight = 0;
     let peak = 0;
     const createIndex = vi.fn().mockImplementation(async () => {

@@ -10,7 +10,7 @@ function buildContext(ack = vi.fn()): RmqContext {
 }
 
 describe('ClaimImportController', () => {
-  it('should return the claimed importId for a valid key', async () => {
+  it('should return the claimed importId, when the key is valid', async () => {
     const claim = vi.fn().mockResolvedValue({ importId: '11111111-1111-4111-8111-111111111111' });
     const controller = new ClaimImportController({ claim } as never);
 
@@ -20,7 +20,7 @@ describe('ClaimImportController', () => {
     expect(claim).toHaveBeenCalledWith('k');
   });
 
-  it('should ack even when the claim throws', async () => {
+  it('should ack the message, even when the claim throws', async () => {
     const ack = vi.fn();
     const controller = new ClaimImportController({
       claim: vi.fn().mockRejectedValue(new Error('mongo down')),
@@ -32,7 +32,7 @@ describe('ClaimImportController', () => {
     expect(ack).toHaveBeenCalled();
   });
 
-  it('should reject a payload without a key', async () => {
+  it('should throw, when the payload has no idempotency key', async () => {
     const controller = new ClaimImportController({ claim: vi.fn() } as never);
 
     await expect(controller.handleClaim({}, buildContext())).rejects.toBeDefined();

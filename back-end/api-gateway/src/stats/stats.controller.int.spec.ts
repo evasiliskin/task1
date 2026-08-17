@@ -191,6 +191,11 @@ describe('StatsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/stats').query({ importId: 'not-a-uuid' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
 
@@ -198,6 +203,11 @@ describe('StatsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/stats').query({ unknown: 'value' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
 

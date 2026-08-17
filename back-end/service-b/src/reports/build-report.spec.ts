@@ -10,7 +10,6 @@ import { type IStatsResult } from '../processing-log/stats/get-stats.js';
 
 import { buildReport } from './build-report.js';
 
-// Mock the fs and fs/promises modules
 vi.mock('node:fs', async () => {
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- generic type argument needs the actual module shape; a separate `import type` of the same specifier would collide with the value import above (import/no-duplicates).
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -121,13 +120,6 @@ describe('buildReport', () => {
       degraded: false,
     };
 
-    // Use a real PassThrough stream so PDFDocument's pipe() behaves normally,
-    // but spy on destroy() so we can assert it was called. The stream emits an
-    // 'error' synchronously in response to its own 'pipe' event — that event
-    // fires synchronously inside document.pipe(writeStream), i.e. strictly
-    // after build-report.ts has already attached its 'error' listener and
-    // strictly before document.end() writes any data, so this reliably
-    // exercises the failure path without racing real PDF generation.
     const passThroughStream = new PassThrough();
     const destroySpy = vi
       .spyOn(passThroughStream, 'destroy')

@@ -19,21 +19,21 @@ async function collect(source: AsyncIterable<Buffer>): Promise<string> {
 }
 
 describe('limitDecompressedBytes', () => {
-  it('should pass every chunk through when the total stays within budget', async () => {
+  it('should pass every chunk through, when the total stays within budget', async () => {
     expect(await collect(limitDecompressedBytes(chunksOf('abc', 'def'), 10))).toBe('abcdef');
   });
 
-  it('should pass through a stream sitting exactly on the budget', async () => {
+  it('should pass every chunk through, when the total sits exactly on the budget', async () => {
     expect(await collect(limitDecompressedBytes(chunksOf('abcde'), 5))).toBe('abcde');
   });
 
-  it('should raise once the cumulative size exceeds the budget', async () => {
+  it('should throw, when the cumulative size exceeds the budget', async () => {
     await expect(collect(limitDecompressedBytes(chunksOf('abc', 'def'), 5))).rejects.toBeInstanceOf(
       ArchiveTooLargeError,
     );
   });
 
-  it('should stop pulling from the source once the budget is exceeded', async () => {
+  it('should stop pulling from the source, when the budget is exceeded', async () => {
     const pulled: string[] = [];
 
     // eslint-disable-next-line @typescript-eslint/require-await -- must be an async generator to satisfy AsyncIterable<Buffer>, even though it never awaits.
@@ -50,8 +50,7 @@ describe('limitDecompressedBytes', () => {
     expect(pulled).toEqual(['aaa', 'bbb']);
   });
 
-  it('should count bytes, not characters', async () => {
-    // '✅' is three bytes in UTF-8, so two of them exceed a five-byte budget.
+  it('should count bytes rather than characters, when chunks hold multi-byte characters', async () => {
     await expect(collect(limitDecompressedBytes(chunksOf('✅', '✅'), 5))).rejects.toBeInstanceOf(
       ArchiveTooLargeError,
     );

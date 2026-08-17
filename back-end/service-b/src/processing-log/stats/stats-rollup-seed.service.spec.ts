@@ -35,7 +35,7 @@ function buildService(options: {
 }
 
 describe('StatsRollupSeedService', () => {
-  it('should seed the rollup from the aggregation when it has never been seeded', async () => {
+  it('should seed the rollup from the aggregation, when it has never been seeded', async () => {
     const { service, updateOne } = buildService({
       groups: [
         {
@@ -77,7 +77,7 @@ describe('StatsRollupSeedService', () => {
     );
   });
 
-  it('should not re-seed a rollup that already carries seededAt', async () => {
+  it('should not re-seed the rollup, when it already carries seededAt', async () => {
     const { service, updateOne, aggregate } = buildService({
       existing: { _id: STATS_ROLLUP_ID, seededAt: new Date() },
     });
@@ -88,7 +88,7 @@ describe('StatsRollupSeedService', () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 
-  it('should correct a partial rollup created by an increment before the first seed', async () => {
+  it('should correct the rollup, when an increment created it before the first seed', async () => {
     const { service, updateOne } = buildService({
       existing: { _id: STATS_ROLLUP_ID, errors: 1 },
       groups: [],
@@ -99,7 +99,7 @@ describe('StatsRollupSeedService', () => {
     expect(updateOne).toHaveBeenCalled();
   });
 
-  it('should not prevent startup when the aggregation fails', async () => {
+  it('should not prevent startup, when the aggregation fails', async () => {
     const warn = vi.fn();
     const { service } = buildService({
       aggregate: vi.fn().mockReturnValue({
@@ -112,7 +112,7 @@ describe('StatsRollupSeedService', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it('should create the TTL retention index on processing-logs after the seed attempt succeeds', async () => {
+  it('should create the TTL retention index, when the seed attempt succeeds', async () => {
     const { service, createIndex } = buildService({
       groups: [],
       processingLogRetentionMs: 86_400_000,
@@ -123,7 +123,7 @@ describe('StatsRollupSeedService', () => {
     expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
   });
 
-  it('should create the TTL retention index even when the seed aggregation fails', async () => {
+  it('should create the TTL retention index, even when the seed aggregation fails', async () => {
     const { service, createIndex } = buildService({
       aggregate: vi.fn().mockReturnValue({
         toArray: vi.fn().mockRejectedValue(new Error('mongo down')),
@@ -137,7 +137,7 @@ describe('StatsRollupSeedService', () => {
     expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
   });
 
-  it('should propagate a failure creating the retention index (fail startup closed)', async () => {
+  it('should propagate the failure, when creating the retention index fails', async () => {
     const createIndex = vi.fn().mockRejectedValue(new Error('index creation failed'));
     const { service } = buildService({ groups: [], createIndex });
 

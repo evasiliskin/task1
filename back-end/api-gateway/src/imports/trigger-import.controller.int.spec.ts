@@ -40,8 +40,6 @@ describe('TriggerImportController (HTTP Integration)', () => {
   };
 
   beforeAll(async () => {
-    // Keeps the claim-RPC-timeout test fast: the real default (10s) would make that single test
-    // slow without adding coverage — only that the timeout() operator fires and gets mapped.
     process.env.RABBITMQ_RPC_TIMEOUT_MS = '50';
 
     serviceAImportsClient = { emit: vi.fn(() => of(undefined)) };
@@ -116,8 +114,8 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(record.data.dateHour).toBe('2026-08-11-0');
     });
 
-    it('should return the claimed importId, not the supplied Idempotency-Key', async () => {
-      const key = '22222222-2222-4222-8222-222222222222';
+    it('should return the claimed importId, when an Idempotency-Key is supplied', async () => {
+      const key = '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04';
 
       const response = await request(httpServer)
         .post('/imports')
@@ -136,8 +134,8 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(record.data.importId).toBe('11111111-1111-4111-8111-111111111111');
     });
 
-    it('should still emit on a replayed key so a failed first publish can recover', async () => {
-      const key = '22222222-2222-4222-8222-222222222222';
+    it('should still emit the message, when the Idempotency-Key is replayed', async () => {
+      const key = '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04';
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
         await request(httpServer)
@@ -147,12 +145,9 @@ describe('TriggerImportController (HTTP Integration)', () => {
       }
 
       expect(serviceAImportsClient.emit).toHaveBeenCalledTimes(2);
-      // Replay-safety itself (skipping a second real import) is enforced inside
-      // service-a's DownloadImportController (Task 10) via the imports collection —
-      // the gateway's only job is deterministic importId resolution, asserted above.
     });
 
-    it('should not call the claim RPC when no Idempotency-Key is supplied', async () => {
+    it('should not call the claim RPC, when no Idempotency-Key is supplied', async () => {
       await request(httpServer).post('/imports').send({ dateHour: '2026-08-11-0' });
 
       expect(serviceAClient.send).not.toHaveBeenCalled();
@@ -166,6 +161,11 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .send({ dateHour: '2026-08-11-0' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'INVALID_IDEMPOTENCY_KEY',
+      });
       expect(serviceAImportsClient.emit).not.toHaveBeenCalled();
     });
 
@@ -175,6 +175,11 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .send({ dateHour: 'not-a-date-hour' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAImportsClient.emit).not.toHaveBeenCalled();
     });
 
@@ -182,10 +187,15 @@ describe('TriggerImportController (HTTP Integration)', () => {
       const response = await request(httpServer).post('/imports').send({});
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAImportsClient.emit).not.toHaveBeenCalled();
     });
 
-    it('should return 503 when the broker rejects the publish', async () => {
+    it('should return 503, when the broker rejects the publish', async () => {
       const publishError = new Error('broker unavailable');
       serviceAImportsClient.emit.mockReturnValue(throwError(() => publishError));
 
@@ -199,7 +209,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
     });
 
     it('should return 503, in the same error shape as a publish failure, when the claim RPC errors', async () => {
-      const key = '22222222-2222-4222-8222-222222222222';
+      const key = '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04';
       const rpcError = new Error('service-a unreachable');
       serviceAClient.send.mockReturnValue(throwError(() => rpcError));
 
@@ -215,8 +225,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
     });
 
     it('should return 503, when the claim RPC times out', async () => {
-      const key = '33333333-3333-4333-8333-333333333333';
-      // Never emits, so the controller's timeout() operator fires a TimeoutError.
+      const key = '3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a51';
       serviceAClient.send.mockReturnValue(new Observable<never>());
 
       const response = await request(httpServer)
@@ -225,6 +234,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .send({ dateHour: '2026-08-11-0' });
 
       expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 503 });
     });
   });
 });

@@ -241,7 +241,7 @@ describe('importArchive', () => {
       expect(dependencies.downloadArchive).not.toHaveBeenCalled();
     });
 
-    it('should emit IMPORT_STARTED only after the claim succeeds', async () => {
+    it('should emit IMPORT_STARTED, when the claim has succeeded', async () => {
       const callOrder: string[] = [];
       const dependencies = buildDependencies({
         recordImportStarted: vi.fn().mockImplementation(() => {
@@ -262,7 +262,7 @@ describe('importArchive', () => {
   });
 
   describe('archive cleanup', () => {
-    it('should delete the downloaded archive after a successful import', async () => {
+    it('should delete the downloaded archive, when the import succeeds', async () => {
       const dependencies = buildDependencies();
 
       await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
@@ -272,7 +272,7 @@ describe('importArchive', () => {
       );
     });
 
-    it('should delete the downloaded archive even when processing fails, because it can be re-downloaded', async () => {
+    it('should delete the downloaded archive, even when processing fails', async () => {
       const dependencies = buildDependencies({
         processArchive: vi.fn().mockRejectedValue(new Error('corrupt gzip')),
       });
@@ -286,7 +286,7 @@ describe('importArchive', () => {
       );
     });
 
-    it('should keep an uploaded archive when processing fails, because it cannot be re-obtained', async () => {
+    it('should keep the uploaded archive, when processing fails', async () => {
       const dependencies = buildDependencies({
         processArchive: vi.fn().mockRejectedValue(new Error('mongo down')),
       });
@@ -302,7 +302,7 @@ describe('importArchive', () => {
       expect(dependencies.deleteArchive).not.toHaveBeenCalled();
     });
 
-    it('should not fail the import when deletion fails', async () => {
+    it('should not fail the import, when deleting the archive fails', async () => {
       const dependencies = buildDependencies({
         deleteArchive: vi.fn().mockRejectedValue(new Error('EBUSY')),
       });

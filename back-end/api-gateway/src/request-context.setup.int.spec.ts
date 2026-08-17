@@ -56,10 +56,6 @@ describe('Request context production wiring (HTTP Integration)', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    // bodyParser: false mirrors main.ts — the parser is mounted by applyRequestContext, after the
-    // context middleware, which is the whole point of this test: it exercises both the
-    // adapter-level mount and LoggerModule's module-level RequestContextMiddleware together, the
-    // way production actually wires them.
     app = moduleFixture.createNestApplication({ bodyParser: false });
     applyRequestContext(app);
     app.setGlobalPrefix('api');
@@ -77,7 +73,7 @@ describe('Request context production wiring (HTTP Integration)', () => {
     vi.clearAllMocks();
   });
 
-  it('should return one correlation id and use that same id on the outbound RMQ message', async () => {
+  it('should reuse one correlation id on the response and the outbound RMQ message, when none is supplied', async () => {
     const response = await request(httpServer)
       .post('/api/v1/imports')
       .send({ dateHour: '2024-01-01-0' })
@@ -87,7 +83,6 @@ describe('Request context production wiring (HTTP Integration)', () => {
     const echoed = response.headers[CORRELATION_ID_HEADER];
 
     expect(echoed).toBeDefined();
-    // The envelope carries it at meta.tracing.correlationId — see `buildSuccessEnvelope`.
     expect(response.body).toMatchObject({ meta: { tracing: { correlationId: echoed } } });
 
     const [, record] = serviceAClient.emit.mock.calls[0] as [string, unknown];
@@ -97,7 +92,7 @@ describe('Request context production wiring (HTTP Integration)', () => {
     expect(options.headers[CORRELATION_ID_HEADER]).toBe(echoed);
   });
 
-  it('should adopt a client-supplied correlation id end to end', async () => {
+  it('should adopt the correlation id end to end, when the client supplies one', async () => {
     const response = await request(httpServer)
       .post('/api/v1/imports')
       .set(CORRELATION_ID_HEADER, CORRELATION_ID)

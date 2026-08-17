@@ -17,7 +17,7 @@ describe('streamToTemporaryFile', () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('should write the stream to the temporary path', async () => {
+  it('should write the stream to the temporary path, when the stream completes', async () => {
     const path = join(directory, 'a.download.tmp');
 
     await streamToTemporaryFile(Readable.from([Buffer.from('hello')]), path, 10_000);
@@ -26,7 +26,7 @@ describe('streamToTemporaryFile', () => {
     expect(readFileSync(path, 'utf8')).toBe('hello');
   });
 
-  it('should destroy the stream when the total timeout elapses', async () => {
+  it('should destroy the stream, when the total timeout elapses', async () => {
     const path = join(directory, 'b.download.tmp');
     const stalled = new Readable({ read: () => undefined });
 
@@ -34,7 +34,7 @@ describe('streamToTemporaryFile', () => {
     expect(stalled.destroyed).toBe(true);
   });
 
-  it('should clear the watchdog timer once the stream completes', async () => {
+  it('should clear the watchdog timer, when the stream completes', async () => {
     const path = join(directory, 'c.download.tmp');
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
 
@@ -47,13 +47,13 @@ describe('streamToTemporaryFile', () => {
 });
 
 describe('toDownloadError', () => {
-  it('should pass an ArchiveDownloadError through unchanged', () => {
+  it('should rethrow the error unchanged, when it is already an ArchiveDownloadError', () => {
     const original = new ArchiveDownloadError('boom', 'https://example.test/a.gz', 500);
 
     expect(toDownloadError(original, 'https://example.test/a.gz')).toBe(original);
   });
 
-  it('should wrap any other error, preserving it as the cause', () => {
+  it('should wrap the error and preserve it as the cause, when it is any other Error', () => {
     const cause = new Error('socket hang up');
     const wrapped = toDownloadError(cause, 'https://example.test/a.gz');
 
@@ -62,7 +62,7 @@ describe('toDownloadError', () => {
     expect(wrapped.message).toContain('socket hang up');
   });
 
-  it('should wrap a non-Error thrown value without setting a cause', () => {
+  it('should wrap the value without setting a cause, when a non-Error is thrown', () => {
     const wrapped = toDownloadError('boom', 'https://example.test/a.gz');
 
     expect(wrapped).toBeInstanceOf(ArchiveDownloadError);

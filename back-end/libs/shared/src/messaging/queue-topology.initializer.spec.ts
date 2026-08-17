@@ -1,7 +1,7 @@
 import { QueueTopologyInitializer } from './queue-topology.initializer.js';
 
 describe('QueueTopologyInitializer', () => {
-  it('should declare the retry and dead-letter queues once', async () => {
+  it('should declare the retry and dead-letter queues once, when the module initializes', async () => {
     const assertQueue = vi.fn().mockResolvedValue(undefined);
     const close = vi.fn().mockResolvedValue(undefined);
     const connect = vi.fn().mockResolvedValue({
@@ -26,7 +26,7 @@ describe('QueueTopologyInitializer', () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it('should not prevent startup when the broker is unreachable', async () => {
+  it('should not prevent startup, when the broker is unreachable', async () => {
     const connect = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     const warn = vi.fn();
 

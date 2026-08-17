@@ -231,12 +231,6 @@ describe('HttpLoggingMiddleware (HTTP Integration)', () => {
   });
 });
 
-// Regression coverage for the bug where `isUnloggedPath` was anchored on bare `/health` while
-// `main.ts` mounts every real route behind `setGlobalPrefix('api')` + URI versioning, so the
-// gateway's actual deployed health routes are `/api/v1/health...` — nothing matched, and health
-// probes (polled every 30s by Docker) drowned out real traffic in the logs. This suite boots the
-// app with that same production prefix/versioning configuration, not a synthetic path, so it
-// exercises the real deployed route shape.
 describe('HttpLoggingMiddleware with the production route prefix (HTTP Integration)', () => {
   let app: INestApplication;
   let httpServer: App;
@@ -301,8 +295,6 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
       .compile();
 
     app = moduleFixture.createNestApplication();
-    // Mirrors main.ts exactly: this is the configuration that produces the real deployed route
-    // shape (`/api/v1/health/live`, `/api/v1/imports`, ...).
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     await app.init();

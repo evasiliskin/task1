@@ -47,7 +47,7 @@ describe('shared archive volume ownership', () => {
     ).onModuleInit();
   }
 
-  it('should leave every file service-a does not own, and collect only its own stale temps', async () => {
+  it('should collect only its own stale temps, when the directory holds files it does not own', async () => {
     const gatewayInFlight = writeAged(buildUploadTemporaryFilename(IMPORT_ID), 0);
     const gatewayAgedUpload = writeAged(
       buildUploadTemporaryFilename('22222222-2222-4222-8222-222222222222'),
@@ -63,7 +63,6 @@ describe('shared archive volume ownership', () => {
 
     await runSweep();
 
-    // The P0: a service-a restart must not touch the gateway's uploads, aged or in flight.
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
     expect(existsSync(gatewayInFlight)).toBe(true);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
@@ -73,14 +72,13 @@ describe('shared archive volume ownership', () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
     expect(existsSync(legacyTemp)).toBe(true);
 
-    // Its own namespace: stale goes, in-progress stays.
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
     expect(existsSync(ownStaleTemp)).toBe(false);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
     expect(existsSync(ownFreshTemp)).toBe(true);
   });
 
-  it('should survive a missing storage directory without throwing', async () => {
+  it('should not throw, when the storage directory is missing', async () => {
     rmSync(storageDirectory, { recursive: true, force: true });
 
     await expect(runSweep()).resolves.toBeUndefined();

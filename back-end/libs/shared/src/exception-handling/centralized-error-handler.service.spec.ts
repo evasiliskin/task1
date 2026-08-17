@@ -48,7 +48,7 @@ describe('CentralizedErrorHandlerService', () => {
       expect(logger.error).toHaveBeenCalledWith({}, 'raw string failure', 'raw string failure');
     });
 
-    it('should not exit the process', () => {
+    it('should not exit the process, when the error is not fatal', () => {
       service.handleError(new Error('boom'));
 
       expect(exitSpy).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe('CentralizedErrorHandlerService', () => {
   });
 
   describe('when the error is a FatalError', () => {
-    it('should log at fatal level and set a failing exit code without exiting synchronously', () => {
+    it('should log at fatal level and set a failing exit code, when a FatalError is handled', () => {
       vi.useFakeTimers();
 
       try {
@@ -74,7 +74,7 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should set a failing exit code and allow the runtime to drain rather than exiting synchronously', () => {
+    it('should let the runtime drain instead of exiting synchronously, when a FatalError is handled', () => {
       vi.useFakeTimers();
 
       try {
@@ -92,7 +92,7 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should emit SIGTERM to trigger graceful shutdown hooks', () => {
+    it('should emit SIGTERM, when a FatalError triggers graceful shutdown', () => {
       vi.useFakeTimers();
       const emitSpy = vi.spyOn(process, 'emit');
 
@@ -108,7 +108,7 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should schedule an unref backstop that force-exits if shutdown hangs', () => {
+    it('should schedule an unref force-exit backstop, when a FatalError is handled', () => {
       vi.useFakeTimers();
 
       try {
@@ -126,7 +126,7 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should route the error through the err serializer rather than flattening it', () => {
+    it('should route the error through the err serializer, when a FatalError is handled', () => {
       vi.useFakeTimers();
 
       try {
@@ -148,19 +148,19 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should stamp the supplied request context onto the fatal line', () => {
+    it('should stamp the request context onto the fatal line, when one is supplied', () => {
       vi.useFakeTimers();
 
       try {
         service.handleError(new FatalError(new Error('boom')), {
-          correlationId: 'c-1',
-          requestId: 'r-1',
+          correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
           correlationIdSource: 'inbound',
         });
 
         expect(logger.fatal.mock.calls[0][0]).toMatchObject({
-          correlationId: 'c-1',
-          requestId: 'r-1',
+          correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
         });
 
         process.exitCode = 0;
@@ -169,7 +169,7 @@ describe('CentralizedErrorHandlerService', () => {
       }
     });
 
-    it('should flush the buffered destination before the forced-exit backstop', () => {
+    it('should flush the buffered destination before the forced-exit backstop, when a FatalError is handled', () => {
       vi.useFakeTimers();
 
       try {
@@ -188,7 +188,7 @@ describe('CentralizedErrorHandlerService', () => {
     });
   });
 
-  it('should receive the pino destination through DI, not silently undefined', async () => {
+  it('should receive the pino destination through DI, when resolved from the module', async () => {
     const moduleFixture = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [loggerConfig] }),
@@ -199,7 +199,6 @@ describe('CentralizedErrorHandlerService', () => {
 
     const resolved = moduleFixture.get(CentralizedErrorHandlerService);
 
-    // The private field is the thing under test: `@Optional()` hides a wiring mistake otherwise.
     expect(Reflect.get(resolved, 'destination')).toBeDefined();
 
     await moduleFixture.close();

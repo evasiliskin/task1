@@ -1,6 +1,6 @@
 import { ErrorCategory, InternalError, ValidationError } from '../errors/index.js';
 
-import { serializeError } from './error.serializer.js';
+import { MAX_CAUSE_DEPTH, serializeError } from './error.serializer.js';
 import { REDACT_CENSOR } from './redact-paths.js';
 
 class TestError extends InternalError {
@@ -8,7 +8,7 @@ class TestError extends InternalError {
     super(message, {
       code: 'TEST_FAILURE',
       category: ErrorCategory.INTERNAL,
-      params: { importId: 'i-1' },
+      params: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
       ...(cause === undefined ? {} : { cause }),
     });
   }
@@ -35,7 +35,7 @@ describe('serializeError', () => {
     expect(serialized).toMatchObject({
       code: 'TEST_FAILURE',
       category: ErrorCategory.INTERNAL,
-      params: { importId: 'i-1' },
+      params: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
     });
   });
 
@@ -58,20 +58,12 @@ describe('serializeError', () => {
       cause: { message: string; stack: string; cause: { message: string } };
     };
 
-    // The top-level `message`/`stack` come from pino's `stdSerializers.err()`, which folds the
-    // whole downstream chain into one human-readable string — leaf-message legitimately shows up
-    // here, once, for a human reading the single top-level string.
     expect(serialized.message).toBe('outer-message: middle-message: leaf-message');
     expect(serialized.stack).toContain('leaf-message');
 
-    // The nested `cause` level (middle) must carry ITS OWN message/stack only — not re-folded
-    // with leaf-message baked in a second time. Before the fix, `stdSerializers.err(middle)` was
-    // called here too, producing `cause.message === 'middle-message: leaf-message'` and
-    // `cause.stack` containing 'caused by: ' + leaf's stack a second time.
     expect(serialized.cause.message).toBe('middle-message');
     expect(serialized.cause.stack).not.toContain('leaf-message');
 
-    // The leaf's own info is still reachable via further nesting, just not duplicated.
     expect(serialized.cause.cause.message).toBe('leaf-message');
   });
 
@@ -102,7 +94,21 @@ describe('serializeError', () => {
     expect(serializeError('plain string')).toEqual({ message: 'plain string' });
   });
 
-  it('should redact sensitive keys inside AppError params', () => {
+  it('should stringify the cause, when the wrapped cause is not an Error', () => {
+    const serialized = serializeError(
+      new Error('outer', { cause: 'a bare string cause' }),
+    ) as Record<string, unknown>;
+
+    expect(serialized.cause).toEqual({ message: 'a bare string cause' });
+  });
+
+  it('should return the depth marker, when called with a depth already past the cap', () => {
+    expect(serializeError(new Error('root'), MAX_CAUSE_DEPTH + 1)).toEqual({
+      message: '[MaxCauseDepthExceeded]',
+    });
+  });
+
+  it('should redact sensitive keys, when they appear inside AppError params', () => {
     class TestValidationError extends ValidationError {
       public constructor() {
         super('bad credentials supplied', {
@@ -122,7 +128,7 @@ describe('serializeError', () => {
     expect(serialized.params.nested).toMatchObject({ apiKey: REDACT_CENSOR });
   });
 
-  it('should replace oversized AppError params with a truncation marker', () => {
+  it('should replace params with a truncation marker, when AppError params are oversized', () => {
     class TestInternalError extends InternalError {
       public constructor() {
         super('response failed contract validation', {

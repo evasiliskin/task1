@@ -30,7 +30,7 @@ function buildPublisher(channelOverrides: Partial<IRmqChannel> = {}) {
 }
 
 describe('RetryPublisher.settleFailure', () => {
-  it('should republish to the retry queue with an incremented count and a delay', async () => {
+  it('should republish to the retry queue with an incremented count and a delay, when retries remain', async () => {
     const { publisher, channel } = buildPublisher();
     const message = buildMessage();
 
@@ -52,7 +52,7 @@ describe('RetryPublisher.settleFailure', () => {
     expect(channel.ack).toHaveBeenCalledWith(message);
   });
 
-  it('should dead-letter once the retry count exceeds maxRetries', async () => {
+  it('should dead-letter the message, when the retry count exceeds maxRetries', async () => {
     const { publisher, channel } = buildPublisher();
     const message = buildMessage(2);
 
@@ -65,7 +65,7 @@ describe('RetryPublisher.settleFailure', () => {
     expect(channel.ack).toHaveBeenCalledWith(message);
   });
 
-  it('should nack without requeue when the republish is refused', async () => {
+  it('should nack without requeue, when the republish is refused', async () => {
     const { publisher, channel } = buildPublisher({ sendToQueue: vi.fn().mockReturnValue(false) });
     const message = buildMessage();
 
@@ -78,7 +78,7 @@ describe('RetryPublisher.settleFailure', () => {
     expect(channel.ack).not.toHaveBeenCalled();
   });
 
-  it('should nack without requeue when the republish throws', async () => {
+  it('should nack without requeue, when the republish throws', async () => {
     const { publisher, channel } = buildPublisher({
       sendToQueue: vi.fn().mockImplementation(() => {
         throw new Error('channel closed');
@@ -92,7 +92,7 @@ describe('RetryPublisher.settleFailure', () => {
     expect(channel.nack).toHaveBeenCalledWith(expect.anything(), false, false);
   });
 
-  it('should never call assertQueue on the message path', async () => {
+  it('should not call assertQueue, when a failure is settled', async () => {
     const { publisher, channel } = buildPublisher();
 
     await publisher.settleFailure(channel, buildMessage(), new Error('boom'));

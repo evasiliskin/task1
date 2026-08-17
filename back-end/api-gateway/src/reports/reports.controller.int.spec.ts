@@ -126,7 +126,6 @@ describe('ReportsController (HTTP Integration)', () => {
         setTimeout(resolve, 50);
       });
 
-      // The gateway reads and forgets: service-b's ReportCleanupService owns removal on retention.
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       expect(existsSync(reportPath)).toBe(true);
     });
@@ -137,6 +136,11 @@ describe('ReportsController (HTTP Integration)', () => {
         .query({ importId: 'not-a-uuid' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
 
@@ -151,6 +155,7 @@ describe('ReportsController (HTTP Integration)', () => {
         const response = await request(httpServer).get('/reports/pdf').query({ importId });
 
         expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({ status: 'FAILED', code: 500 });
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         expect(existsSync(outsideReportPath)).toBe(true);
       } finally {

@@ -9,15 +9,15 @@ import { Contract } from '../decorators/contract.decorator.js';
 import { ContractValidationInterceptor } from './contract-validation.interceptor.js';
 
 class UncontractedController {
-  public handle(): void {
-    // no @Contract on purpose — exercises the missing-contract path
+  public handle(): boolean {
+    return true;
   }
 }
 
 class ContractedController {
   @Contract({ request: z.object({}), response: z.object({ ok: z.boolean() }) })
-  public handle(): void {
-    // body intentionally empty — only the decorator matters for this test
+  public handle(): boolean {
+    return true;
   }
 }
 

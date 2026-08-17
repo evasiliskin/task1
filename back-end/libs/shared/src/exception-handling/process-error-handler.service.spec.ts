@@ -55,7 +55,7 @@ describe('ProcessErrorHandlerService', () => {
     expect(centralizedErrorHandler.handleError).toHaveBeenCalledWith(new FatalError(error), {});
   });
 
-  it('should carry the raising request context from unhandledRejection into the fatal handler', () => {
+  it('should carry the raising request context into the fatal handler, when unhandledRejection fires', () => {
     const handler = new ProcessErrorHandlerService(
       centralizedErrorHandler as unknown as CentralizedErrorHandlerService,
       requestContextService,
@@ -66,7 +66,11 @@ describe('ProcessErrorHandlerService', () => {
     const rejection = new Error('mongo write timed out');
 
     requestContextService.run(
-      { correlationId: 'c-9', requestId: 'r-9', correlationIdSource: 'inbound' },
+      {
+        correlationId: '5c3a9d18-2e74-4f61-8b05-9a7d2c6e4f83',
+        requestId: 'b17f4d82-3c50-4a69-9e13-7d8a2c05f469',
+        correlationIdSource: 'inbound',
+      },
       () => {
         expect(() => process.emit('unhandledRejection', rejection, Promise.resolve())).toThrow(
           rejection,
@@ -78,7 +82,7 @@ describe('ProcessErrorHandlerService', () => {
 
     expect(centralizedErrorHandler.handleError).toHaveBeenCalledWith(
       expect.any(FatalError),
-      expect.objectContaining({ correlationId: 'c-9' }),
+      expect.objectContaining({ correlationId: '5c3a9d18-2e74-4f61-8b05-9a7d2c6e4f83' }),
     );
 
     handler.onModuleDestroy();

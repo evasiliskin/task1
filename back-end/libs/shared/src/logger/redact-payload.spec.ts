@@ -97,14 +97,17 @@ describe('redactLogPayload', () => {
     expect(result).toEqual({ headers: { 'x-api-key': '[REDACTED]' } });
   });
 
-  it('should not censor a key that merely contains a sensitive substring', () => {
+  it('should not censor the key, when it merely contains a sensitive substring', () => {
     const result = redactLogPayload({ passwordPolicyEnabled: true });
 
     expect(result).toEqual({ passwordPolicyEnabled: true });
   });
 
   it('should return the original reference, when nothing needs redacting', () => {
-    const payload = { importId: 'i-1', nested: { durationMs: 12, items: [1, 2, 3] } };
+    const payload = {
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+      nested: { durationMs: 12, items: [1, 2, 3] },
+    };
 
     expect(redactLogPayload(payload)).toBe(payload);
   });

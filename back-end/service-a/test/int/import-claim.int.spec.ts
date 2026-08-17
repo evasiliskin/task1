@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { MongoDBContainer, type StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { MongoClient, type Collection } from 'mongodb';
 
@@ -32,8 +30,8 @@ describe('import claim/start against real MongoDB', () => {
     await collection.deleteMany({});
   });
 
-  it('should converge two claims of the same key on the same importId', async () => {
-    const idempotencyKey = randomUUID();
+  it('should return the same importId, when the same key is claimed twice in sequence', async () => {
+    const idempotencyKey = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
     const first = await tracker.claim(idempotencyKey);
     const second = await tracker.claim(idempotencyKey);
@@ -42,8 +40,8 @@ describe('import claim/start against real MongoDB', () => {
     await expect(collection.countDocuments({ idempotencyKey })).resolves.toBe(1);
   });
 
-  it('should converge concurrent claims of the same key on one importId', async () => {
-    const idempotencyKey = randomUUID();
+  it('should return one importId, when the same key is claimed concurrently', async () => {
+    const idempotencyKey = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
     const [first, second, third] = await Promise.all([
       tracker.claim(idempotencyKey),
@@ -56,7 +54,7 @@ describe('import claim/start against real MongoDB', () => {
     await expect(collection.countDocuments({ idempotencyKey })).resolves.toBe(1);
   });
 
-  it('should enforce a unique, partial index on idempotencyKey', async () => {
+  it('should expose a unique partial index on idempotencyKey, when the indexes are inspected', async () => {
     const indexes = await collection.indexes();
     const idempotencyKeyIndex = indexes.find(
       (index) => index.key !== undefined && 'idempotencyKey' in index.key,
@@ -68,26 +66,26 @@ describe('import claim/start against real MongoDB', () => {
     });
   });
 
-  it('should reject two direct inserts sharing an idempotencyKey with E11000', async () => {
-    const idempotencyKey = randomUUID();
+  it('should fail with E11000, when two direct inserts share an idempotencyKey', async () => {
+    const idempotencyKey = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 
     await collection.insertOne({
-      importId: randomUUID(),
+      importId: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
       idempotencyKey,
       claimedAt: new Date(),
     } as IImportRunDocument);
 
     await expect(
       collection.insertOne({
-        importId: randomUUID(),
+        importId: '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04',
         idempotencyKey,
         claimedAt: new Date(),
       } as IImportRunDocument),
     ).rejects.toMatchObject({ code: 11_000 });
   });
 
-  it('should start a freshly-claimed, unstarted importId', async () => {
-    const { importId } = await tracker.claim(randomUUID());
+  it('should start the run, when the importId was freshly claimed and never started', async () => {
+    const { importId } = await tracker.claim('3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a51');
     const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
 
     await tracker.recordStarted(importId, source, new Date());
@@ -98,7 +96,7 @@ describe('import claim/start against real MongoDB', () => {
   });
 
   it('should throw ImportAlreadyClaimedError, when recordStarted is redelivered for an already-started importId', async () => {
-    const { importId } = await tracker.claim(randomUUID());
+    const { importId } = await tracker.claim('e2d5a7c4-1b83-4f60-9a2e-7c5b4d1f8a03');
     const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
 
     await tracker.recordStarted(importId, source, new Date());

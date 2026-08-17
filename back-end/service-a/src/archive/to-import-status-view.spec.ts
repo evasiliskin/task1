@@ -26,11 +26,11 @@ const FAILED_DOCUMENT = {
 };
 
 describe('toImportStatusView', () => {
-  it('should serialise startedAt as an ISO string', () => {
+  it('should serialise startedAt as an ISO string, when a document is mapped', () => {
     expect(toImportStatusView(DOCUMENT).startedAt).toBe('2026-08-11T00:00:00.000Z');
   });
 
-  it('should omit completedAt, failedAt, counters and errorSamples when absent from the document', () => {
+  it('should omit completedAt, failedAt, counters and errorSamples, when they are absent from the document', () => {
     const view = toImportStatusView(DOCUMENT);
 
     expect(view).not.toHaveProperty('completedAt');
@@ -61,17 +61,17 @@ describe('toImportStatusView', () => {
     });
   });
 
-  it('should produce the same JSON the raw document produced, for a document with no optional fields', () => {
+  it('should produce the same JSON as the raw document, when it has no optional fields', () => {
     expect(JSON.stringify(toImportStatusView(DOCUMENT))).toBe(JSON.stringify(DOCUMENT));
   });
 
-  it('should produce the same JSON the raw document produced, for a completed document', () => {
+  it('should produce the same JSON as the raw document, when the import completed', () => {
     expect(JSON.stringify(toImportStatusView(COMPLETED_DOCUMENT))).toBe(
       JSON.stringify(COMPLETED_DOCUMENT),
     );
   });
 
-  it('should produce the same JSON the raw document produced, for a failed document', () => {
+  it('should produce the same JSON as the raw document, when the import failed', () => {
     expect(JSON.stringify(toImportStatusView(FAILED_DOCUMENT))).toBe(
       JSON.stringify(FAILED_DOCUMENT),
     );

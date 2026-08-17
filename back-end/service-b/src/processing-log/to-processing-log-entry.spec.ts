@@ -16,7 +16,7 @@ describe('toProcessingLogEntry', () => {
   const archive = '2026-08-11-0.json.gz';
 
   describe('toStartedLogEntry', () => {
-    it('should map a started event onto a processing-log document, using the ambient correlation id', () => {
+    it('should map the event onto a processing-log document with the ambient correlation id, when the event is IMPORT_STARTED', () => {
       const event: ImportStartedEvent = {
         importId,
         archive,

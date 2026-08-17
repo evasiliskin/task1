@@ -22,8 +22,7 @@ describe('import message delivery', () => {
     await harness.stop();
   });
 
-  it('should redeliver an import whose handler failed rather than dropping it', async () => {
-    // Boot service-a's import listener with an orchestration service that always fails.
+  it('should redeliver the import, when its handler failed', async () => {
     const app = await buildImportListener(harness.url, {
       importDownload: vi.fn().mockRejectedValue(new Error('mongo down')),
     });
@@ -48,7 +47,7 @@ describe('import message delivery', () => {
     await app.close();
   });
 
-  it('should dead-letter an import once retries are exhausted', async () => {
+  it('should dead-letter the import, when retries are exhausted', async () => {
     const app = await buildImportListener(harness.url, {
       importDownload: vi.fn().mockRejectedValue(new Error('still down')),
     });
@@ -74,7 +73,7 @@ describe('import message delivery', () => {
     await app.close();
   });
 
-  it('should keep answering RPCs while the import queue is saturated', async () => {
+  it('should keep answering RPCs, when the import queue is saturated', async () => {
     let releaseImports: () => void;
     const stalledImports = new Promise<void>((resolve) => {
       releaseImports = resolve;

@@ -11,11 +11,11 @@ import { IS_PUBLIC_KEY } from './public.decorator.js';
 
 const AUTH_GUARD_SOURCE_PATH = fileURLToPath(new URL('./auth.guard.ts', import.meta.url));
 
+const routeHandler = (): boolean => true;
+
 function buildContext(request: Partial<IRequestWithUser> = {}): ExecutionContext {
   return {
-    getHandler: (): (() => void) => (): void => {
-      // no-op: used only as a stable handler reference for the reflector.
-    },
+    getHandler: () => routeHandler,
     getClass: () => class {},
     switchToHttp: () => ({
       getRequest: () => request as IRequestWithUser,
@@ -73,7 +73,7 @@ describe('AuthGuard', () => {
     });
   });
 
-  it('should not import any concrete authentication provider package', () => {
+  it('should not import any concrete authentication provider package, when the guard is still the placeholder stub', () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed, test-local path derived from import.meta.url, not external input.
     const source = readFileSync(AUTH_GUARD_SOURCE_PATH, 'utf-8');
     const importLines = source.split('\n').filter((line) => line.trim().startsWith('import'));

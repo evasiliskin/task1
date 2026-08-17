@@ -89,7 +89,11 @@ describe('ImportOrchestrationService', () => {
 
     const runInContext = <T>(callback: () => T): T =>
       requestContextService.run(
-        { correlationId, requestId: 'req-1', correlationIdSource: 'inbound' },
+        {
+          correlationId,
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
         callback,
       );
 
@@ -161,7 +165,7 @@ describe('ImportOrchestrationService', () => {
     });
   });
 
-  it('should reuse one dependency object across imports', async () => {
+  it('should reuse one dependency object, when several imports run', async () => {
     const captured: unknown[] = [];
 
     vi.mocked(importArchive).mockImplementation((_source, _importId, dependencies) => {

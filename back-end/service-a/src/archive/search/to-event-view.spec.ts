@@ -1,7 +1,7 @@
 import { toEventView } from './to-event-view.js';
 
 const DOCUMENT = {
-  eventId: 'e1',
+  eventId: '48291832741',
   eventType: 'PushEvent',
   createdAt: new Date('2026-08-11T00:00:00.000Z'),
   actor: { id: 1, login: 'octocat' },
@@ -11,15 +11,15 @@ const DOCUMENT = {
 };
 
 describe('toEventView', () => {
-  it('should serialise createdAt as an ISO string', () => {
+  it('should serialise createdAt as an ISO string, when a document is mapped', () => {
     expect(toEventView(DOCUMENT).createdAt).toBe('2026-08-11T00:00:00.000Z');
   });
 
-  it('should produce the same JSON the raw document produced', () => {
+  it('should produce the same JSON as the raw document, when a document is mapped', () => {
     expect(JSON.stringify(toEventView(DOCUMENT))).toBe(JSON.stringify(DOCUMENT));
   });
 
-  it('should include org only when present', () => {
+  it('should include org, when the document has one', () => {
     expect(toEventView(DOCUMENT)).not.toHaveProperty('org');
     expect(toEventView({ ...DOCUMENT, org: { id: 3, login: 'acme' } })).toHaveProperty('org', {
       id: 3,

@@ -13,7 +13,7 @@ function buildService(drain: ReturnType<typeof vi.fn>, info = vi.fn(), warn = vi
 }
 
 describe('GracefulShutdownService', () => {
-  it('should wait for in-flight imports to drain', async () => {
+  it('should wait for the drain to finish, when imports are in flight', async () => {
     const drain = vi.fn().mockResolvedValue(true);
     const { service, info } = buildService(drain);
 
@@ -23,7 +23,7 @@ describe('GracefulShutdownService', () => {
     expect(info).toHaveBeenCalled();
   });
 
-  it('should warn but not throw when the drain times out', async () => {
+  it('should warn without throwing, when the drain times out', async () => {
     const drain = vi.fn().mockResolvedValue(false);
     const { service, warn } = buildService(drain);
 
@@ -31,7 +31,7 @@ describe('GracefulShutdownService', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it('should not log when nothing was in flight', async () => {
+  it('should not log, when nothing was in flight', async () => {
     const drain = vi.fn().mockResolvedValue(true);
     const info = vi.fn();
     const service = new GracefulShutdownService(

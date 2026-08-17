@@ -25,7 +25,7 @@ function buildEntry(
     service: 'service-a',
     status,
     timestamp: new Date('2026-08-11T00:00:00Z'),
-    correlationId: 'c1',
+    correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
     archive: `${importId}.json.gz`,
     metadata,
   };
@@ -59,10 +59,6 @@ describe('stats rollup against real MongoDB', () => {
     await rollups.deleteMany({});
     await ensureProcessingLogIndexes(logs);
     await ensureProcessingLogRetentionIndex(logs, RETENTION_MS);
-    // `StatsRollupTracker.read()` treats an unseeded rollup document as "no rollup yet" (falls back
-    // to a live aggregation) — this suite tests the rollup itself, not that fallback, so it needs a
-    // seeded document to read from. Real seeding is `StatsRollupSeedService`'s job, exercised
-    // elsewhere; here it's a fixed marker predating every entry these tests apply.
     await rollups.updateOne(
       { _id: STATS_ROLLUP_ID },
       { $set: { seededAt: new Date(0) } },
@@ -72,7 +68,7 @@ describe('stats rollup against real MongoDB', () => {
     tracker = new ProcessingLogTracker(logs, new StatsRollupTracker(rollups as never));
   });
 
-  it('should produce exactly what the old aggregation produced', async () => {
+  it('should produce the same totals as the aggregation, when the same events are applied', async () => {
     await tracker.upsertLog(buildEntry('i1', 'started'));
     await tracker.upsertLog(
       buildEntry('i1', 'completed', {
@@ -101,7 +97,7 @@ describe('stats rollup against real MongoDB', () => {
     expect(fromRollup).toEqual(fromAggregation);
   });
 
-  it('should not double-count a redelivered event', async () => {
+  it('should not double-count, when an event is redelivered', async () => {
     const completed = buildEntry('i1', 'completed', {
       eventsProcessed: 100,
       validEvents: 100,
@@ -117,10 +113,12 @@ describe('stats rollup against real MongoDB', () => {
     const fromRollup = await new StatsRollupTracker(rollups as never).read();
 
     expect(fromRollup).toMatchObject({ archivesProcessed: 1, eventsProcessed: 100 });
-    await expect(logs.countDocuments({ importId: 'i1' })).resolves.toBe(1);
+    await expect(
+      logs.countDocuments({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
+    ).resolves.toBe(1);
   });
 
-  it('should stay consistent with the aggregation after redelivery', async () => {
+  it('should stay consistent with the aggregation, when an event has been redelivered', async () => {
     const entry = buildEntry('i9', 'failed');
 
     await tracker.upsertLog(entry);
@@ -131,7 +129,7 @@ describe('stats rollup against real MongoDB', () => {
     expect(await new StatsRollupTracker(rollups as never).read()).toEqual(shapeStats(groups));
   });
 
-  it('should keep the rollup as a single document', async () => {
+  it('should keep the rollup as a single document, when many events are applied', async () => {
     await tracker.upsertLog(buildEntry('i1', 'completed', { eventsProcessed: 1 }));
     await tracker.upsertLog(buildEntry('i2', 'completed', { eventsProcessed: 1 }));
 
@@ -139,7 +137,7 @@ describe('stats rollup against real MongoDB', () => {
     await expect(rollups.countDocuments({ _id: STATS_ROLLUP_ID })).resolves.toBe(1);
   });
 
-  it('should create the TTL index with the configured expiry', async () => {
+  it('should create the TTL index with the configured expiry, when the service starts', async () => {
     const indexes = (await logs.listIndexes().toArray()) as {
       key: Record<string, number>;
       expireAfterSeconds?: number;

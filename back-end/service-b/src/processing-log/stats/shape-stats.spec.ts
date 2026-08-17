@@ -108,18 +108,18 @@ describe('shapeStatsFromDocuments', () => {
     metadata: Record<string, number> = {},
   ): IProcessingLogDocument {
     return {
-      importId: 'i1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       eventType: 'e',
       service: 'service-a',
       status,
       timestamp: new Date('2026-08-11T00:00:00Z'),
-      correlationId: 'c1',
+      correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
       archive: 'a.json.gz',
       metadata,
     };
   }
 
-  it('should produce zeroes for no documents', () => {
+  it('should produce zeroes, when there are no documents', () => {
     expect(shapeStatsFromDocuments([])).toEqual({
       archivesProcessed: 0,
       eventsProcessed: 0,
@@ -129,7 +129,7 @@ describe('shapeStatsFromDocuments', () => {
     });
   });
 
-  it('should match shapeStats for the same single import', () => {
+  it('should match shapeStats, when both see the same single import', () => {
     const documents = [
       buildDocument('started'),
       buildDocument('completed', {
@@ -149,7 +149,7 @@ describe('shapeStatsFromDocuments', () => {
     });
   });
 
-  it('should count a failed document as one error', () => {
+  it('should count one error, when the document failed', () => {
     expect(shapeStatsFromDocuments([buildDocument('failed')])).toMatchObject({ errors: 1 });
   });
 });

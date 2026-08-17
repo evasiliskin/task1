@@ -21,14 +21,20 @@ describe('ContextPropagatingClient', () => {
 
   function runInContext<T>(callback: () => T): T {
     return requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'req-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       callback,
     );
   }
 
   it('should attach the correlation header, when emitting', () => {
     runInContext(() => {
-      propagatingClient.emit(client as unknown as ClientProxy, 'pattern', { importId: 'i-1' });
+      propagatingClient.emit(client as unknown as ClientProxy, 'pattern', {
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+      });
     });
 
     const [pattern, record] = client.emit.mock.calls[0] as [string, RmqRecordBuilder<unknown>];
@@ -38,7 +44,7 @@ describe('ContextPropagatingClient', () => {
     };
 
     expect(pattern).toBe('pattern');
-    expect(data).toEqual({ importId: 'i-1' });
+    expect(data).toEqual({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' });
     // eslint-disable-next-line security/detect-object-injection
     expect(options.headers[CORRELATION_ID_HEADER]).toBe(CORRELATION_ID);
   });
@@ -52,7 +58,7 @@ describe('ContextPropagatingClient', () => {
     const { options } = record as { options: { headers: Record<string, string> } };
 
     // eslint-disable-next-line security/detect-object-injection
-    expect(options.headers[REQUEST_ID_HEADER]).not.toBe('req-1');
+    expect(options.headers[REQUEST_ID_HEADER]).not.toBe('7c9e6679-7425-40de-944b-e07fc1f90ae7');
   });
 
   it('should attach the correlation header, when sending', () => {

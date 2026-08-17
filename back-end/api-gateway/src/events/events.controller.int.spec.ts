@@ -70,12 +70,12 @@ describe('EventsController (HTTP Integration)', () => {
         of({
           data: [
             {
-              eventId: 'e1',
+              eventId: '48291832741',
               eventType: 'PushEvent',
               createdAt: '2026-08-11T00:00:00.000Z',
               actor: { id: 1, login: 'octocat' },
               repo: { id: 2, name: 'octocat/hello-world' },
-              importId: 'import-1',
+              importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
               payload: { ref: 'refs/heads/main', commitCount: 1 },
             },
           ],
@@ -93,12 +93,12 @@ describe('EventsController (HTTP Integration)', () => {
         result: {
           items: [
             {
-              eventId: 'e1',
+              eventId: '48291832741',
               eventType: 'PushEvent',
               createdAt: '2026-08-11T00:00:00.000Z',
               actor: { id: 1, login: 'octocat' },
               repo: { id: 2, name: 'octocat/hello-world' },
-              importId: 'import-1',
+              importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
               payload: { ref: 'refs/heads/main', commitCount: 1 },
             },
           ],
@@ -138,6 +138,11 @@ describe('EventsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/events').query({ limit: '201' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
 
@@ -145,6 +150,11 @@ describe('EventsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/events').query({ unknown: 'value' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
   });

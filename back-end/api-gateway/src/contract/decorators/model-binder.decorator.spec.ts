@@ -90,12 +90,12 @@ describe('bindRequest', () => {
 });
 
 describe('ModelBinder', () => {
-  it('should record non-undefined param data, when applied to a real handler parameter (regression guard for the createParamDecorator duck-typing collision)', () => {
+  it('should record non-undefined param data, when applied to a real handler parameter', () => {
     const schema = z.object({});
 
     class TestController {
-      public handle(@ModelBinder(schema) _bound: unknown): void {
-        // intentionally empty
+      public handle(@ModelBinder(schema) _bound: unknown): boolean {
+        return true;
       }
     }
 

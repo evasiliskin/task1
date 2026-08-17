@@ -15,7 +15,7 @@ function buildContext(ack = vi.fn()): { context: RmqContext; ack: ReturnType<typ
 }
 
 describe('HealthController', () => {
-  it('should check its real dependencies with the configured timeout', async () => {
+  it('should check its dependencies with the configured timeout, when a health ping arrives', async () => {
     const result = { status: 'ok', details: { mongodb: { status: 'up' } } };
     const check = vi.fn().mockResolvedValue(result);
     const controller = new HealthController({ check } as never, { pingTimeoutMs: 2500 });
@@ -25,7 +25,7 @@ describe('HealthController', () => {
     expect(check).toHaveBeenCalledWith(2500);
   });
 
-  it('should ack the message even when a dependency is down', async () => {
+  it('should ack the message, even when a dependency is down', async () => {
     const check = vi.fn().mockResolvedValue({ status: 'error', details: {} });
     const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
     const { context, ack } = buildContext();
@@ -35,7 +35,7 @@ describe('HealthController', () => {
     expect(ack).toHaveBeenCalled();
   });
 
-  it('should ack the message even when the check throws', async () => {
+  it('should ack the message, even when the check throws', async () => {
     const check = vi.fn().mockRejectedValue(new Error('boom'));
     const controller = new HealthController({ check } as never, { pingTimeoutMs: 1000 });
     const { context, ack } = buildContext();

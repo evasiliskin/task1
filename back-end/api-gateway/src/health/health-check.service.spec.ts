@@ -63,10 +63,6 @@ function buildService(
     pingResults = {},
   } = overrides;
   const {
-    // Default terminusCheck genuinely runs the indicator-check functions it's given, so that a
-    // real `redisIndicator.isHealthy` mock (e.g. Step 1's test) is actually invoked and asserted
-    // on. Every existing test below supplies its own `terminusCheck` override and never exercises
-    // this default, so its behavior is safe to change.
     terminusCheck = vi.fn().mockImplementation(async (indicatorFns: (() => Promise<object>)[]) => {
       const results = await Promise.all(indicatorFns.map((fn) => fn()));
       const details = results.reduce<Record<string, unknown>>(
@@ -88,8 +84,6 @@ function buildService(
     }),
   } as unknown as LoggerService;
 
-  // rabbitMqPingIndicator.isHealthy is called with 'serviceA' and 'serviceB' separately; pingResults
-  // lets a test override the resolved status per service (defaults to 'up' for both).
   const { serviceA: serviceAPingStatus = 'up', serviceB: serviceBPingStatus = 'up' } = pingResults;
   const rabbitMqPingIndicator = {
     isHealthy: vi.fn().mockImplementation((name: 'serviceA' | 'serviceB') => ({
@@ -235,7 +229,7 @@ describe('HealthCheckService', () => {
       );
     });
 
-    it('should not duplicate the correlation fields the pino mixin already stamps', async () => {
+    it('should log only the dependency fields, when the pino mixin already stamps correlation fields', async () => {
       const terminusCheck = vi.fn().mockRejectedValue(buildRejection(['redis']));
       const error = vi.fn();
       const service = buildService({ terminusCheck, error });
@@ -252,7 +246,7 @@ describe('HealthCheckService', () => {
       expect(fields).not.toHaveProperty('requestId');
     });
 
-    it('should log a down dependency once, not on every poll', async () => {
+    it('should log a down dependency once, when the same failure is polled repeatedly', async () => {
       const terminusCheck = vi.fn().mockResolvedValue(downResult('redis'));
       const error = vi.fn();
       const service = buildService({ terminusCheck, error });
@@ -276,7 +270,7 @@ describe('HealthCheckService', () => {
       });
     });
 
-    it('should ping redis with the configured timeout', async () => {
+    it('should ping redis with the configured timeout, when a health check runs', async () => {
       const redisIndicator = { isHealthy: vi.fn().mockResolvedValue({ redis: { status: 'up' } }) };
       const service = buildService({
         redisIndicator,
@@ -288,7 +282,7 @@ describe('HealthCheckService', () => {
       expect(redisIndicator.isHealthy).toHaveBeenCalledWith('redis', 1500);
     });
 
-    it('should report rabbitmq up when at least one service ping succeeds', async () => {
+    it('should report rabbitmq as ok, when at least one service ping succeeds', async () => {
       const service = buildService({
         pingResults: { serviceA: 'up', serviceB: 'down' },
       });
@@ -299,7 +293,7 @@ describe('HealthCheckService', () => {
       expect(result.services.serviceB).toBe('unavailable');
     });
 
-    it('should report rabbitmq unavailable when no service ping succeeds', async () => {
+    it('should report rabbitmq as unavailable, when no service ping succeeds', async () => {
       const service = buildService({ pingResults: { serviceA: 'down', serviceB: 'down' } });
 
       expect((await service.getHealth()).services.rabbitmq).toBe('unavailable');
@@ -323,7 +317,7 @@ describe('HealthCheckService', () => {
       );
     });
 
-    it('should run one check for probes that overlap', async () => {
+    it('should run a single check, when probes overlap', async () => {
       let release = (): void => undefined;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
@@ -344,7 +338,7 @@ describe('HealthCheckService', () => {
       expect(isHealthy).toHaveBeenCalledTimes(1);
     });
 
-    it('should run a fresh check once the previous one settled', async () => {
+    it('should run a fresh check, when the previous one has settled', async () => {
       const service = buildService({});
 
       await service.getHealth();
@@ -353,7 +347,7 @@ describe('HealthCheckService', () => {
       expect(service.hasCheckInFlight()).toBe(false);
     });
 
-    it('should not hold a failed check for later probes', async () => {
+    it('should not reuse a failed check, when a later probe arrives', async () => {
       const isHealthy = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
       const service = buildService({ gatewayIndicator: { isHealthy } });
 
@@ -363,7 +357,7 @@ describe('HealthCheckService', () => {
   });
 
   describe('getReadiness', () => {
-    it('should not be ready when redis is down', async () => {
+    it('should not be ready, when redis is down', async () => {
       const service = buildService({
         redisIndicator: { isHealthy: vi.fn().mockResolvedValue({ redis: { status: 'down' } }) },
       });
@@ -374,7 +368,7 @@ describe('HealthCheckService', () => {
       expect(result.services.redis).toBe('unavailable');
     });
 
-    it('should be ready when every dependency is up', async () => {
+    it('should be ready, when every dependency is up', async () => {
       const { ready } = await buildService({}).getReadiness();
 
       expect(ready).toBe(true);
@@ -399,7 +393,7 @@ describe('HealthCheckService', () => {
   });
 
   describe('getLiveness', () => {
-    it('should always return status ok without checking any dependency', () => {
+    it('should return status ok without checking any dependency, when liveness is requested', () => {
       const terminusCheck = vi.fn();
 
       const result = buildService({ terminusCheck }).getLiveness();

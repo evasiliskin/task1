@@ -41,7 +41,7 @@ describe('buildRequestContextExpressMiddleware', () => {
     );
   });
 
-  it('should call next() inside the request context, making the correlation id readable via the service', () => {
+  it('should expose the correlation id via the service, when next() runs', () => {
     const request = { headers: {} } as unknown as Request;
     let nextWasCalled = false;
 
@@ -57,7 +57,6 @@ describe('buildRequestContextExpressMiddleware', () => {
     const request = { headers: {} } as unknown as Request;
     const seen: (string | undefined)[] = [];
 
-    // Mount the same middleware twice, exactly as production does (app.use + module middleware).
     middleware(request, response as unknown as Response, () => {
       seen.push(requestContextService.getCorrelationId());
 

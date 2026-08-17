@@ -13,13 +13,13 @@ function buildOptions(overrides: Partial<ISettleImportOptions> = {}): ISettleImp
       settleFailure: vi.fn().mockResolvedValue('retried'),
     } as unknown as RetryPublisher,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as AppLogger,
-    importId: 'import-1',
+    importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     ...overrides,
   };
 }
 
 describe('settleImportResult', () => {
-  it('should ack after a successful import', async () => {
+  it('should ack the message, when the import succeeds', async () => {
     const options = buildOptions();
 
     await settleImportResult(options);
@@ -30,9 +30,11 @@ describe('settleImportResult', () => {
     expect(options.retryPublisher.settleFailure).not.toHaveBeenCalled();
   });
 
-  it('should ack without retrying when the import was already claimed', async () => {
+  it('should ack without retrying, when the import was already claimed', async () => {
     const options = buildOptions({
-      run: vi.fn().mockRejectedValue(new ImportAlreadyClaimedError('import-1')),
+      run: vi
+        .fn()
+        .mockRejectedValue(new ImportAlreadyClaimedError('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')),
     });
 
     await settleImportResult(options);
@@ -43,7 +45,7 @@ describe('settleImportResult', () => {
     expect(options.retryPublisher.settleFailure).not.toHaveBeenCalled();
   });
 
-  it('should delegate any other failure to RetryPublisher and never ack itself', async () => {
+  it('should delegate to RetryPublisher without acking, when the import fails for any other reason', async () => {
     const failure = new Error('mongo down');
     const options = buildOptions({ run: vi.fn().mockRejectedValue(failure) });
 

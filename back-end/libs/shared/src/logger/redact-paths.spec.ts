@@ -14,12 +14,12 @@ describe('isSensitiveKey', () => {
     'clientSecret',
     'privateKey',
     'sessionId',
-  ])('should treat "%s" as sensitive', (key) => {
+  ])('should report the key as sensitive, when the key is "%s"', (key) => {
     expect(isSensitiveKey(key)).toBe(true);
   });
 
   it.each(['dateHour', 'importId', 'passwordPolicyEnabled', 'tokenizer'])(
-    'should not treat "%s" as sensitive',
+    'should report the key as not sensitive, when the key is "%s"',
     (key) => {
       expect(isSensitiveKey(key)).toBe(false);
     },
@@ -27,12 +27,12 @@ describe('isSensitiveKey', () => {
 });
 
 describe('REDACT_PATHS', () => {
-  it('should target the request shape this application actually logs', () => {
+  it('should cover the logged request shape, when the paths are inspected', () => {
     expect(REDACT_PATHS).toContain('request.headers.authorization');
     expect(REDACT_PATHS).not.toContain('req.headers.authorization');
   });
 
-  it('should include one-level wildcards for free-form payloads', () => {
+  it('should include one-level wildcards, when the paths are inspected', () => {
     expect(REDACT_PATHS).toContain('*.password');
     expect(REDACT_PATHS).toContain('*.accessToken');
   });

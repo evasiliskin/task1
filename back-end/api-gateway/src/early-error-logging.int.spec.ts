@@ -53,8 +53,6 @@ describe('Early-failure correlation (HTTP Integration)', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    // bodyParser: false mirrors main.ts — the parser is mounted by applyRequestContext, after the
-    // context middleware, which is the whole point of this test.
     app = moduleFixture.createNestApplication({ bodyParser: false });
     applyRequestContext(app);
     await app.init();

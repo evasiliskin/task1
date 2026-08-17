@@ -63,13 +63,12 @@ describe('archive ingestion against real MongoDB', () => {
     insertConcurrency: 2,
   });
 
-  it('should reject a gzip bomb without exhausting memory or writing anything', async () => {
-    // 40 MB of zeros compresses to a few KB; the budget here is 1 MB.
+  it('should reject the archive and write nothing, when it is a gzip bomb', async () => {
     const path = writeGzipFixture('0'.repeat(40 * MEGABYTE));
     const heapBefore = process.memoryUsage().heapUsed;
 
     await expect(
-      processArchive(path, 'import-bomb', {
+      processArchive(path, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         ...baseOptions(),
         maxDecompressedBytes: MEGABYTE,
       }),
@@ -79,19 +78,20 @@ describe('archive ingestion against real MongoDB', () => {
     await expect(collection.countDocuments({})).resolves.toBe(0);
   });
 
-  it('should reject a newline-free archive before buffering it whole', async () => {
+  it('should reject the archive before buffering it whole, when it contains no newline', async () => {
     const path = writeGzipFixture('x'.repeat(5 * MEGABYTE));
 
     await expect(
-      processArchive(path, 'import-noline', { ...baseOptions(), maxLineBytes: 1024 }),
+      processArchive(path, 'f47ac10b-58cc-4372-a567-0e02b2c3d479', {
+        ...baseOptions(),
+        maxLineBytes: 1024,
+      }),
     ).rejects.toBeInstanceOf(LineTooLongError);
   });
 
-  it('should store non-ASCII actor and repo names byte-exactly across chunk boundaries', async () => {
+  it('should store actor and repo names byte-exactly, when non-ASCII names span chunk boundaries', async () => {
     const login = 'jöhänn-🎉-测试';
     const repoName = 'орг/репозиторий-✅';
-    // The padding event forces the following event across a 64 KB read boundary, so multi-byte
-    // sequences land mid-chunk — the exact condition that produced replacement characters.
     const padding = 'p'.repeat(70_000);
     const lines = [
       buildEvent('e1', login, repoName),
@@ -101,7 +101,7 @@ describe('archive ingestion against real MongoDB', () => {
 
     const result = await processArchive(
       writeGzipFixture(`${lines.join('\n')}\n`),
-      'import-utf8',
+      '7c9e6679-7425-40de-944b-e07fc1f90ae7',
       baseOptions(),
     );
 
@@ -119,20 +119,20 @@ describe('archive ingestion against real MongoDB', () => {
     }
   });
 
-  it('should produce identical counters at concurrency 1 and 3', async () => {
+  it('should produce identical counters, when the same archive is ingested at concurrency 1 and 3', async () => {
     const lines = Array.from({ length: 250 }, (_, index) =>
       buildEvent(`seq-${index}`, 'octocat', 'octocat/hello-world'),
     );
     const path = writeGzipFixture(`${lines.join('\n')}\n`);
 
-    const sequential = await processArchive(path, 'import-seq', {
+    const sequential = await processArchive(path, '9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04', {
       ...baseOptions(),
       insertConcurrency: 1,
     });
 
     await collection.deleteMany({});
 
-    const concurrent = await processArchive(path, 'import-conc', {
+    const concurrent = await processArchive(path, 'c56a4180-65aa-42ec-a945-5fd21dec0538', {
       ...baseOptions(),
       insertConcurrency: 3,
     });
@@ -141,7 +141,7 @@ describe('archive ingestion against real MongoDB', () => {
     expect(sequential.validEvents).toBe(250);
   });
 
-  it('should store a PushEvent payload identically to the pre-change shape', async () => {
+  it('should store the payload in the documented shape, when the event is a PushEvent', async () => {
     const pushEvent = JSON.stringify({
       id: 'push-1',
       type: 'PushEvent',
@@ -151,11 +151,14 @@ describe('archive ingestion against real MongoDB', () => {
       payload: { ref: 'refs/heads/main', commits: [{ sha: 'a' }, { sha: 'b' }], extra: 'dropped' },
     });
 
-    await processArchive(writeGzipFixture(`${pushEvent}\n`), 'import-push', baseOptions());
+    await processArchive(
+      writeGzipFixture(`${pushEvent}\n`),
+      '3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a51',
+      baseOptions(),
+    );
 
-    const stored = await collection.findOne({ eventId: 'push-1' } as never);
+    const stored = await collection.findOne({ eventId: '48291832741' } as never);
 
-    // Exactly the two fields buildPayload keeps — `extra` must not survive.
     expect((stored as unknown as { payload: unknown }).payload).toEqual({
       ref: 'refs/heads/main',
       commitCount: 2,

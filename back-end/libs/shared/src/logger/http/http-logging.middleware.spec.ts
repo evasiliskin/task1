@@ -299,7 +299,6 @@ describe('HttpLoggingMiddleware', () => {
 
       handle(fixture.request(), response);
 
-      // Outside requestContextService.run(): pino's mixin contributes nothing here.
       expect(requestContextService.getCorrelationId()).toBeUndefined();
 
       response.emit('finish');

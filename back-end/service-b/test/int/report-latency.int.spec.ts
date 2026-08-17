@@ -17,7 +17,6 @@ import { STATS_ROLLUP_ID } from '../../src/processing-log/stats/stats-rollup.typ
 import { buildReport } from '../../src/reports/build-report.js';
 
 const RETENTION_MS = 2_592_000_000;
-/** The gateway's default rpcTimeoutMs; generation must stay well inside it. */
 const RPC_BUDGET_MS = 10_000;
 const IMPORT_COUNT = 5000;
 
@@ -39,7 +38,7 @@ describe('report generation latency', () => {
     await container.stop();
   });
 
-  it('should generate an aggregate report well inside the RPC budget', async () => {
+  it('should generate the report inside the RPC budget, when the report is aggregate', async () => {
     const database = client.db('service_b_latency');
     const logs = database.collection<IProcessingLogDocument>('processing-logs');
     const rollups = database.collection('stats-rollups');
@@ -63,10 +62,6 @@ describe('report generation latency', () => {
       });
     }
 
-    // `StatsRollupTracker.read()` treats an unseeded rollup document as "no rollup yet" and falls
-    // back to the old full-collection `$group` scan (`buildStatsPipeline()`); without this, the
-    // measured latency below would demonstrate the old scan is fast, not that `getStats` reads
-    // the single-document rollup instead of scanning all 5,000 logs.
     await rollups.updateOne(
       { _id: STATS_ROLLUP_ID },
       { $set: { seededAt: new Date(0) } },
@@ -92,7 +87,6 @@ describe('report generation latency', () => {
     expect(stats.archivesProcessed).toBe(IMPORT_COUNT);
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- test-generated paths are safe
     expect(statSync(reportPath).size).toBeGreaterThan(0);
-    // Generous ceiling: the point is that cost no longer scales with collection size.
     expect(durationMs).toBeLessThan(RPC_BUDGET_MS / 2);
   }, 300_000);
 });

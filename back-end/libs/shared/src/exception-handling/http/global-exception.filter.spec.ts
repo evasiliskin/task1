@@ -16,9 +16,6 @@ import {
 
 const CORRELATION_ID = 'c-1';
 
-// Local stand-in for api-gateway's ImportNotFoundError: the shared package cannot depend on a
-// consumer package, so a small NotFoundError subclass exercises the same 4xx path here (same
-// convention as status-from-app-error.utility.spec.ts's TestNotFoundError).
 class TestNotFoundError extends NotFoundError {
   public constructor(id: string) {
     super(`resource not found: "${id}"`, {
@@ -92,9 +89,13 @@ describe('GlobalExceptionFilter', () => {
     } as unknown as ArgumentsHost;
   });
 
-  it('should not touch response headers, relying on RequestContextMiddleware to have set them', () => {
+  it('should leave response headers untouched, when it formats an error response', () => {
     requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       () => {
         filter.catch(new Error('boom'), host);
       },
@@ -105,7 +106,11 @@ describe('GlobalExceptionFilter', () => {
 
   it('should return the error envelope with correlationId in meta.tracing, when the formatter returns an error', () => {
     requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       () => {
         filter.catch(new Error('boom'), host);
       },
@@ -184,18 +189,14 @@ describe('GlobalExceptionFilter', () => {
   });
 
   it('should log the fieldErrors, when the formatted error carries fieldErrors instead of details', () => {
-    // Arrange: mirrors RequestContractViolationFormatStrategy's output shape, which populates
-    // `fieldErrors` rather than `details`.
     const fieldErrors = [{ field: 'dateHour', message: 'must match pattern' }];
     errorFormatService.format.mockReturnValue({
       statusCode: HttpStatus.BAD_REQUEST,
       error: { code: 'REQUEST_CONTRACT_VIOLATION', message: 'invalid request', fieldErrors },
     });
 
-    // Act
     filter.catch(new Error('boom'), host);
 
-    // Assert
     expect(logged.at(-1)).toMatchObject({
       level: 'warn',
       message: REQUEST_REJECTED_LOG,
@@ -207,9 +208,13 @@ describe('GlobalExceptionFilter', () => {
     });
   });
 
-  it('should not interpolate the correlation id into the message', () => {
+  it('should not interpolate the correlation id into the message, when it formats an error response', () => {
     requestContextService.run(
-      { correlationId: CORRELATION_ID, requestId: 'r-1', correlationIdSource: 'inbound' },
+      {
+        correlationId: CORRELATION_ID,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
       () => {
         filter.catch(new Error('boom'), host);
       },

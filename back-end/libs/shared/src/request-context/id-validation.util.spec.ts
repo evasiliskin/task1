@@ -82,7 +82,7 @@ describe('resolveIdWithSource', () => {
     expect(resolved.source).toBe('generated');
   });
 
-  it('should adopt a well-formed UUID from the wire', () => {
+  it('should adopt the inbound value, when it is a well-formed UUID', () => {
     const resolved = resolveIdWithSource('f47ac10b-58cc-4372-a567-0e02b2c3d479');
 
     expect(resolved).toEqual({
@@ -97,7 +97,7 @@ describe('resolveIdWithSource', () => {
     ['f47ac10b-58cc-4372-a567-0e02b2c3d479-extra'],
     ['../../etc/passwd'],
     ['a'.repeat(200)],
-  ])('should replace a non-UUID inbound id (%s) with a generated one', (raw) => {
+  ])('should replace the inbound id with a generated one, when it is not a UUID (%s)', (raw) => {
     const resolved = resolveIdWithSource(raw);
 
     expect(resolved.source).toBe('generated');

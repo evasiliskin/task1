@@ -6,13 +6,17 @@ const CORRELATION_ID = '2f1fdc5d-4324-4f56-95ae-d25df842bd7b';
 
 describe('buildSuccessEnvelope', () => {
   it('should wrap a plain object in result.data, when the payload is not a list result', () => {
-    const envelope = buildSuccessEnvelope({ importId: 'abc' }, CORRELATION_ID, 200);
+    const envelope = buildSuccessEnvelope(
+      { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+      CORRELATION_ID,
+      200,
+    );
 
     expect(envelope).toEqual({
       status: 'SUCCESS',
       code: 200,
       message: 'OK',
-      result: { data: { importId: 'abc' } },
+      result: { data: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' } },
       meta: { tracing: { correlationId: CORRELATION_ID } },
     });
   });

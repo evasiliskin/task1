@@ -1,4 +1,6 @@
-import { readdir, stat, unlink } from 'node:fs/promises';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 
@@ -6,180 +8,198 @@ import { type ReportConfiguration } from '../config/report.config.js';
 
 import { ReportCleanupService } from './report-cleanup.service.js';
 
-vi.mock('node:fs/promises', () => ({
-  readdir: vi.fn(),
-  stat: vi.fn(),
-  unlink: vi.fn(),
-}));
-
 describe('ReportCleanupService', () => {
-  const reportConfiguration: ReportConfiguration = {
-    dir: '/data/reports',
-    retentionMs: 3_600_000,
-    sweepIntervalMs: 600_000,
-  };
-  const loggerService = { getLogger: () => ({ info: vi.fn(), warn: vi.fn() }) };
   const requestContextService = new RequestContextService();
 
+  let reportDirectory: string;
+
   beforeEach(() => {
-    vi.mocked(readdir).mockReset();
-    vi.mocked(stat).mockReset();
-    vi.mocked(unlink).mockReset();
+    reportDirectory = mkdtempSync(join(tmpdir(), 'report-cleanup-spec-'));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    rmSync(reportDirectory, { recursive: true, force: true });
   });
 
-  describe('startup sweep (12a)', () => {
-    it('should delete report files older than the retention window and keep newer ones', async () => {
-      vi.mocked(readdir).mockResolvedValue(['old.pdf', 'fresh.pdf'] as never);
-      vi.mocked(stat).mockImplementation(
-        (path) => ({ mtimeMs: String(path).includes('old') ? 0 : Date.now() }) as never,
-      );
+  function writeReport(name: string, hoursAgo: number): string {
+    const path = join(reportDirectory, name);
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+    writeFileSync(path, '%PDF-1.4 fake report body');
+
+    const when = new Date(Date.now() - hoursAgo * 3_600_000);
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+    utimesSync(path, when, when);
+
+    return path;
+  }
+
+  function buildService(
+    logger: object = { info: vi.fn(), warn: vi.fn() },
+    directory: string = reportDirectory,
+  ): ReportCleanupService {
+    const reportConfiguration: ReportConfiguration = {
+      dir: directory,
+      retentionMs: 3_600_000,
+      sweepIntervalMs: 600_000,
+    };
+
+    return new ReportCleanupService(reportConfiguration, requestContextService, {
+      getLogger: () => logger,
+    } as never);
+  }
+
+  describe('startup sweep', () => {
+    it('should delete only the older files, when some reports fall outside the retention window', async () => {
+      const old = writeReport('old.pdf', 5);
+      const fresh = writeReport('fresh.pdf', 0);
+      const service = buildService();
+
       await service.onModuleInit();
       service.onModuleDestroy();
 
-      expect(unlink).toHaveBeenCalledTimes(1);
-      expect(unlink).toHaveBeenCalledWith('\\data\\reports\\old.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      expect(existsSync(old)).toBe(false);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      expect(existsSync(fresh)).toBe(true);
     });
 
-    it('should ignore files that are not PDFs', async () => {
-      vi.mocked(readdir).mockResolvedValue(['notes.txt'] as never);
+    it('should leave the file in place, when it is not a PDF', async () => {
+      const path = writeReport('notes.txt', 5);
+      const service = buildService();
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
       await service.onModuleInit();
       service.onModuleDestroy();
 
-      expect(unlink).not.toHaveBeenCalled();
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      expect(existsSync(path)).toBe(true);
     });
 
-    it('should not prevent startup when the report directory does not exist yet', async () => {
-      vi.mocked(readdir).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    it('should leave the entry in place, when it cannot be removed', async () => {
+      const path = join(reportDirectory, 'stuck.pdf');
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      mkdirSync(path);
+
+      const when = new Date(Date.now() - 5 * 3_600_000);
+
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      utimesSync(path, when, when);
+
+      const logger = { info: vi.fn(), warn: vi.fn() };
+      const service = buildService(logger);
+
+      await service.onModuleInit();
+      service.onModuleDestroy();
+
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+      expect(existsSync(path)).toBe(true);
+      expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    it('should log nothing, when the directory holds no expired report', async () => {
+      const logger = { info: vi.fn(), warn: vi.fn() };
+      const service = buildService(logger);
+
+      await service.onModuleInit();
+      service.onModuleDestroy();
+
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should not prevent startup, when the report directory does not exist yet', async () => {
+      const logger = { info: vi.fn(), warn: vi.fn() };
+      const service = buildService(logger, join(reportDirectory, 'does-not-exist'));
 
       await expect(service.onModuleInit()).resolves.toBeUndefined();
       service.onModuleDestroy();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        {},
+        'Could not sweep the report directory',
+        expect.anything(),
+      );
     });
   });
 
-  describe('recurring sweep (12b)', () => {
-    it('should schedule a recurring sweep at the configured interval and unref the timer', async () => {
-      vi.mocked(readdir).mockResolvedValue([]);
-      const unrefSpy = vi.fn();
+  describe('recurring sweep', () => {
+    it('should schedule a recurring unreferenced sweep at the configured interval, when the module initializes', async () => {
+      const unref = vi.fn();
       const setIntervalSpy = vi
         .spyOn(global, 'setInterval')
-        .mockReturnValue({ unref: unrefSpy } as unknown as NodeJS.Timeout);
+        .mockReturnValue({ unref } as unknown as NodeJS.Timeout);
+      const service = buildService();
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
       await service.onModuleInit();
+      service.onModuleDestroy();
 
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 600_000);
-      expect(unrefSpy).toHaveBeenCalledTimes(1);
-
-      service.onModuleDestroy();
+      expect(unref).toHaveBeenCalledTimes(1);
     });
 
-    it('should invoke a sweep each time the timer fires', async () => {
-      vi.mocked(readdir).mockResolvedValue(['old.pdf'] as never);
-      vi.mocked(stat).mockResolvedValue({ mtimeMs: 0 } as never);
-      vi.mocked(unlink).mockResolvedValue(undefined);
+    it('should run a sweep, when the timer fires', async () => {
       let scheduled: (() => void) | undefined;
+
       vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void) => {
         scheduled = callback;
 
         return { unref: vi.fn() } as unknown as NodeJS.Timeout;
       });
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
+      const service = buildService();
+
       await service.onModuleInit();
 
-      expect(unlink).toHaveBeenCalledTimes(1);
+      const path = writeReport('old.pdf', 5);
 
       scheduled?.();
-      await Promise.resolve();
-      await Promise.resolve();
 
-      expect(unlink).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox.
+        expect(existsSync(path)).toBe(false);
+      });
 
       service.onModuleDestroy();
     });
 
-    it('should clear the timer on module destroy', async () => {
-      vi.mocked(readdir).mockResolvedValue([]);
+    it('should clear the timer, when the module is destroyed', async () => {
       const timerHandle = { unref: vi.fn() } as unknown as NodeJS.Timeout;
+
       vi.spyOn(global, 'setInterval').mockReturnValue(timerHandle);
+
       const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+      const service = buildService();
 
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
       await service.onModuleInit();
-
       service.onModuleDestroy();
 
       expect(clearIntervalSpy).toHaveBeenCalledWith(timerHandle);
     });
 
-    it('should not throw when module destroy is called without a prior module init', () => {
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        loggerService as never,
-      );
+    it('should not throw, when the module is destroyed without a prior init', () => {
+      const service = buildService();
 
       expect(() => service.onModuleDestroy()).not.toThrow();
     });
   });
 
-  describe('root context (Task 12)', () => {
-    it('should log every line of one sweep under a single correlation id', async () => {
-      vi.mocked(readdir).mockResolvedValue(['old.pdf'] as never);
-      vi.mocked(stat).mockResolvedValue({ mtimeMs: 0 } as never);
-      vi.mocked(unlink).mockResolvedValue(undefined);
+  describe('root context', () => {
+    it('should log every line under a single correlation id, when one sweep runs', async () => {
+      writeReport('old.pdf', 5);
 
       const loggedContexts: { correlationId?: string; operation?: string }[] = [];
-      const capturingLoggerService = {
-        getLogger: () => ({
-          info: () => {
-            loggedContexts.push(requestContextService.getAttributes());
-          },
-          warn: () => {
-            loggedContexts.push(requestContextService.getAttributes());
-          },
-        }),
+      const capturingLogger = {
+        info: (): void => {
+          loggedContexts.push(requestContextService.getAttributes());
+        },
+        warn: (): void => {
+          loggedContexts.push(requestContextService.getAttributes());
+        },
       };
-
-      const service = new ReportCleanupService(
-        reportConfiguration,
-        requestContextService,
-        capturingLoggerService as never,
-      );
+      const service = buildService(capturingLogger);
 
       await service.onModuleInit();
       service.onModuleDestroy();

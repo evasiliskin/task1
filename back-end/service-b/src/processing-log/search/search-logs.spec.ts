@@ -104,7 +104,7 @@ describe('searchLogs', () => {
     expect(cursor.limit).toHaveBeenCalledWith(51);
   });
 
-  it('should pass a projection to find() to exclude unnecessary fields', async () => {
+  it('should pass a field-limiting projection to find(), when logs are searched', async () => {
     const { collection, find } = buildCollection([]);
 
     await searchLogs(collection, { limit: 50 });

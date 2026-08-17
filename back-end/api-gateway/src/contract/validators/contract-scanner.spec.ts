@@ -10,15 +10,15 @@ import { ContractScanner } from './contract-scanner.js';
 class ContractedController {
   @Get()
   @Contract({ request: z.object({}), response: z.object({ ok: z.boolean() }) })
-  public handle(): void {
-    // body intentionally empty
+  public handle(): boolean {
+    return true;
   }
 }
 
 class UncontractedController {
   @Get()
-  public handle(): void {
-    // no @Contract on purpose
+  public handle(): boolean {
+    return true;
   }
 }
 
@@ -51,7 +51,7 @@ describe('ContractScanner', () => {
     expect(() => scanner.onModuleInit()).toThrow(MissingContractError);
   });
 
-  it('should reject an inherited handler that has no contract', () => {
+  it('should throw MissingContractError, when an inherited handler has no @Contract', () => {
     class BaseController {
       public list(): string {
         return 'ok';
@@ -68,7 +68,7 @@ describe('ContractScanner', () => {
     expect(() => scanner.onModuleInit()).toThrow(MissingContractError);
   });
 
-  it('should accept an inherited handler that has a contract', () => {
+  it('should not throw, when an inherited handler has a @Contract', () => {
     class BaseController {
       public list(): string {
         return 'ok';
@@ -87,7 +87,7 @@ describe('ContractScanner', () => {
     expect(() => scanner.onModuleInit()).not.toThrow();
   });
 
-  it('should prefer an overriding method over the inherited one', () => {
+  it('should throw MissingContractError, when an uncontracted override shadows a contracted base handler', () => {
     class BaseController {
       public list(): string {
         return 'base';
@@ -100,7 +100,6 @@ describe('ContractScanner', () => {
       }
     }
 
-    // The base is contracted; the override is not. The override is what runs, so this must throw.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- used only as a Reflect metadata target, never invoked, so unbound `this` is not a risk
     Reflect.defineMetadata('method', 0, BaseController.prototype.list);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- used only as a Reflect metadata target, never invoked, so unbound `this` is not a risk
@@ -113,7 +112,7 @@ describe('ContractScanner', () => {
     expect(() => scanner.onModuleInit()).toThrow(MissingContractError);
   });
 
-  it('should not inspect Object.prototype members', () => {
+  it('should not throw, when a discovered controller declares no handlers', () => {
     class PlainController {}
 
     const scanner = buildScanner([{ instance: new PlainController() }]);

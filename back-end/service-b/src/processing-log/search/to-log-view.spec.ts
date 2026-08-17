@@ -15,15 +15,15 @@ const DOCUMENT = {
 };
 
 describe('toLogView', () => {
-  it('should serialise timestamp as an ISO string', () => {
+  it('should serialise timestamp as an ISO string, when a document is mapped', () => {
     expect(toLogView(DOCUMENT).timestamp).toBe('2026-08-11T00:00:00.000Z');
   });
 
-  it('should not leak the Mongo _id onto the wire', () => {
+  it('should omit the Mongo _id, when a document is mapped', () => {
     expect(toLogView(DOCUMENT)).not.toHaveProperty('_id');
   });
 
-  it('should include errorInfo only when present', () => {
+  it('should include errorInfo, when the document has one', () => {
     expect(toLogView(DOCUMENT)).not.toHaveProperty('errorInfo');
     expect(toLogView({ ...DOCUMENT, errorInfo: { reason: 'boom' } })).toHaveProperty('errorInfo', {
       reason: 'boom',

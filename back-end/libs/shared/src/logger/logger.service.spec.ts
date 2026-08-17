@@ -10,7 +10,7 @@ describe('LoggerService', () => {
     pinoLogger = pino({ enabled: false });
   });
 
-  it('should return an AppLogger bound to the injected default channel', () => {
+  it('should return an AppLogger bound to the injected default channel, when no channel is given', () => {
     const service = new LoggerService(pinoLogger, 'rmq');
 
     expect(service.getLogger('HealthController')).toBeInstanceOf(AppLogger);

@@ -3,7 +3,7 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { DependencyHealthService } from './dependency-health.service.js';
 
 describe('DependencyHealthService', () => {
-  it('should check mongodb and redis with the supplied timeout', async () => {
+  it('should check mongodb and redis with the supplied timeout, when invoked', async () => {
     const check = vi.fn().mockResolvedValue({ status: 'ok', details: {} });
     const mongo = { isHealthy: vi.fn().mockResolvedValue({}) };
     const redis = { isHealthy: vi.fn().mockResolvedValue({}) };
@@ -22,7 +22,7 @@ describe('DependencyHealthService', () => {
     expect(redis.isHealthy).toHaveBeenCalledWith('redis', 1234);
   });
 
-  it('should recover the result body when Terminus throws for a down dependency', async () => {
+  it('should recover the result body, when Terminus throws for a down dependency', async () => {
     const body = { status: 'error', details: { mongodb: { status: 'down' } } };
     const check = vi.fn().mockRejectedValue(new ServiceUnavailableException(body));
 
@@ -35,7 +35,7 @@ describe('DependencyHealthService', () => {
     await expect(service.check(1000)).resolves.toEqual(body);
   });
 
-  it('should rethrow an error that is not a Terminus failure', async () => {
+  it('should rethrow the error, when it is not a Terminus health-check failure', async () => {
     const check = vi.fn().mockRejectedValue(new TypeError('bad indicator'));
 
     const service = new DependencyHealthService(

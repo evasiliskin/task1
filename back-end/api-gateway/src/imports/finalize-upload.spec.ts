@@ -7,15 +7,13 @@ import { join } from 'node:path';
 import { ArchiveUploadError, UnsupportedArchiveFormatError } from './errors.js';
 import { finalizeUpload } from './finalize-upload.js';
 
-// Only `unlink` is wrapped so the "rename" happy-path tests below still exercise the real
-// filesystem; this lets the "unlink itself fails" test below inject a failure deterministically.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof fsPromises>();
 
   return { ...actual, unlink: vi.fn(actual.unlink) };
 });
 
-const IMPORT_ID = '11111111-1111-4111-8111-111111111111';
+const IMPORT_ID = 'c56a4180-65aa-42ec-a945-5fd21dec0538';
 const GZIP_HEADER = Buffer.from([0x1f, 0x8b, 0x08, 0x00]);
 
 describe('finalizeUpload', () => {
@@ -40,7 +38,7 @@ describe('finalizeUpload', () => {
     return { filename, path, originalname: 'archive.json.gz' } as Express.Multer.File;
   }
 
-  it('should rename a gzip upload to its final archive path', async () => {
+  it('should rename the upload to its final archive path, when the file is gzip', async () => {
     const file = writeTempUpload(GZIP_HEADER);
 
     const result = await finalizeUpload({
@@ -59,7 +57,7 @@ describe('finalizeUpload', () => {
     expect(existsSync(file.path)).toBe(false);
   });
 
-  it('should reject and delete a file whose content is not gzip', async () => {
+  it('should reject and delete the file, when its content is not gzip', async () => {
     const file = writeTempUpload(Buffer.from('plain text'));
 
     await expect(
@@ -69,13 +67,10 @@ describe('finalizeUpload', () => {
     expect(existsSync(file.path)).toBe(false);
   });
 
-  it('should reject with the raw fs error when the temp file is already gone', async () => {
+  it('should reject with the raw fs error, when the temp file is already gone', async () => {
     const file = writeTempUpload(Buffer.from('plain text'));
     const onUnlinkFailed = vi.fn();
 
-    // Remove the file first: isGzipFile's own `open()` throws ENOENT before finalizeUpload ever
-    // reaches the unlink call, so onUnlinkFailed is not invoked in this path (see the unlink
-    // -itself-fails test below for that branch).
     rmSync(file.path);
 
     await expect(finalizeUpload({ file, storageDirectory, onUnlinkFailed })).rejects.toBeInstanceOf(
@@ -84,7 +79,7 @@ describe('finalizeUpload', () => {
     expect(onUnlinkFailed).not.toHaveBeenCalled();
   });
 
-  it('should report an unlink failure through the callback when unlink itself fails', async () => {
+  it('should report the failure through the callback, when unlink itself fails', async () => {
     const file = writeTempUpload(Buffer.from('plain text'));
     const onUnlinkFailed = vi.fn();
     const unlinkError = Object.assign(new Error('EPERM: simulated unlink failure'), {
@@ -99,7 +94,7 @@ describe('finalizeUpload', () => {
     expect(onUnlinkFailed).toHaveBeenCalledWith(file.path, unlinkError);
   });
 
-  it('should wrap a rename failure as ArchiveUploadError', async () => {
+  it('should throw ArchiveUploadError, when the rename fails', async () => {
     const file = writeTempUpload(GZIP_HEADER);
 
     await expect(

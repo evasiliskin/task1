@@ -3,7 +3,7 @@ import { LogThrottle } from './log-throttle.js';
 const INTERVAL_MS = 30_000;
 
 describe('LogThrottle', () => {
-  it('should allow the first call and suppress the rest of the window', () => {
+  it('should allow the first call and suppress the rest, when calls fall inside one window', () => {
     let now = 1000;
     const throttle = new LogThrottle(() => now);
 
@@ -16,7 +16,7 @@ describe('LogThrottle', () => {
     expect(throttle.shouldLog('redis-error', INTERVAL_MS)).toBe(true);
   });
 
-  it('should report how many calls were suppressed, then reset the tally', () => {
+  it('should report the suppressed count and reset the tally, when the window is drained', () => {
     let now = 1000;
     const throttle = new LogThrottle(() => now);
 
@@ -31,14 +31,14 @@ describe('LogThrottle', () => {
     expect(throttle.takeSuppressedCount('redis-error')).toBe(0);
   });
 
-  it('should track keys independently', () => {
+  it('should throttle each key independently, when different keys are used', () => {
     const throttle = new LogThrottle(() => 1000);
 
     expect(throttle.shouldLog('redis-error', INTERVAL_MS)).toBe(true);
     expect(throttle.shouldLog('mongo-error', INTERVAL_MS)).toBe(true);
   });
 
-  it('should report zero suppressed for a key it has never seen', () => {
+  it('should report zero suppressed, when the key has never been seen', () => {
     expect(new LogThrottle().takeSuppressedCount('never-used')).toBe(0);
   });
 });

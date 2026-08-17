@@ -22,8 +22,6 @@ import { type GetReportRequestSchema } from './schemas/get-report-request.schema
 
 const unlinkMock = vi.fn();
 
-// vi.spyOn cannot redefine a live ESM namespace export, so the module is mocked wholesale here and
-// every other export is passed through untouched via vi.importActual.
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof fsPromises>('node:fs/promises');
 
@@ -115,7 +113,7 @@ describe('ReportsController', () => {
       data: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
     };
 
-    it('should not delete the report file it did not produce', async () => {
+    it('should leave the report file in place, when it did not produce the file', async () => {
       const reportPath = join(reportDirectory, 'report.pdf');
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
       writeFileSync(reportPath, '%PDF-1.4 fake report body');
@@ -131,8 +129,8 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         {
-          correlationId: 'correlation-id',
-          requestId: 'request-id',
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
           correlationIdSource: 'inbound',
         },
         () => controller.getPdfReport(bound),
@@ -144,9 +142,7 @@ describe('ReportsController', () => {
       expect(existsSync(reportPath)).toBe(true);
     });
 
-    it('should not accept a response parameter to register a close listener on', () => {
-      // Guards against reintroducing a `@Res()` parameter (and the file-deletion side effect that
-      // used to hang off it): the handler must be reachable with only the bound request.
+    it('should take only the bound request parameter, when the handler signature is inspected', () => {
       // eslint-disable-next-line @typescript-eslint/unbound-method -- reading .length off the method reference to assert its arity, never calling it unbound.
       expect(ReportsController.prototype.getPdfReport).toHaveLength(1);
     });
@@ -165,8 +161,8 @@ describe('ReportsController', () => {
 
       await requestContextService.run(
         {
-          correlationId: 'correlation-id',
-          requestId: 'request-id',
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
           correlationIdSource: 'inbound',
         },
         () => controller.getPdfReport(bound),
@@ -200,8 +196,8 @@ describe('ReportsController', () => {
         await expect(
           requestContextService.run(
             {
-              correlationId: 'correlation-id',
-              requestId: 'request-id',
+              correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+              requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
               correlationIdSource: 'inbound',
             },
             () => controller.getPdfReport(bound),
@@ -231,8 +227,8 @@ describe('ReportsController', () => {
         await requestContextService
           .run(
             {
-              correlationId: 'correlation-id',
-              requestId: 'request-id',
+              correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+              requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
               correlationIdSource: 'inbound',
             },
             () => controller.getPdfReport(bound),

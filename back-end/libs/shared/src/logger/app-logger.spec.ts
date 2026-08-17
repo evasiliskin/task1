@@ -17,7 +17,7 @@ function captureLogger(): { root: Logger; lines: Record<string, unknown>[] } {
 }
 
 describe('AppLogger', () => {
-  it('should bind source and channel once via a child logger', () => {
+  it('should bind source and channel once via a child logger, when the logger is created', () => {
     const { root, lines } = captureLogger();
     const logger = AppLogger.create(root, 'HealthController', 'http');
 
@@ -35,7 +35,11 @@ describe('AppLogger', () => {
     const { root, lines } = captureLogger();
     const logger = AppLogger.create(root, 'Svc', 'rmq');
 
-    logger.error({ importId: 'i-1' }, 'import failed', new Error('disk full'));
+    logger.error(
+      { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+      'import failed',
+      new Error('disk full'),
+    );
 
     expect(lines[0].err).toMatchObject({ type: 'Error', message: 'disk full' });
     expect(String((lines[0].err as { stack: string }).stack)).toContain('disk full');
@@ -47,16 +51,13 @@ describe('AppLogger', () => {
 
     logger.error({}, 'failed', new Error('outer', { cause: new Error('inner') }));
 
-    // pino-std-serializers@7 does not emit a nested `cause` object — it folds the cause chain
-    // into `message`/`stack` instead (see its err.js: causes are appended, not nested), so this
-    // asserts on that actual, verified shape rather than a `{ cause: { message } }` structure.
     const err = lines[0].err as { message: string; stack: string };
 
     expect(err.message).toContain('inner');
     expect(err.stack).toContain('caused by: Error: inner');
   });
 
-  it('should redact a sensitive key nested anywhere in the fields', () => {
+  it('should redact a sensitive key, when it is nested anywhere in the fields', () => {
     const { root, lines } = captureLogger();
     const logger = AppLogger.create(root, 'Svc', 'http');
 
@@ -65,14 +66,19 @@ describe('AppLogger', () => {
     expect(lines[0].payload).toEqual({ nested: { apiKey: '[REDACTED]' } });
   });
 
-  it('should carry the bindings of a derived logger onto every line', () => {
+  it('should carry the derived bindings onto every line, when the logger is derived with with()', () => {
     const { root, lines } = captureLogger();
-    const logger = AppLogger.create(root, 'Svc', 'rmq').with({ importId: 'i-1' });
+    const logger = AppLogger.create(root, 'Svc', 'rmq').with({
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    });
 
     logger.info({}, 'stage one');
     logger.info({}, 'stage two');
 
-    expect(lines.map((line) => line.importId)).toEqual(['i-1', 'i-1']);
+    expect(lines.map((line) => line.importId)).toEqual([
+      'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+      'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    ]);
   });
 
   it('should write at trace, debug and warn level, when those methods are called', () => {
@@ -90,9 +96,16 @@ describe('AppLogger', () => {
     const { root, lines } = captureLogger();
     const logger = AppLogger.create(root, 'Svc', 'rmq');
 
-    logger.fatal({ importId: 'i-1' }, 'unrecoverable', new Error('disk full'));
+    logger.fatal(
+      { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
+      'unrecoverable',
+      new Error('disk full'),
+    );
 
-    expect(lines[0]).toMatchObject({ msg: 'unrecoverable', importId: 'i-1' });
+    expect(lines[0]).toMatchObject({
+      msg: 'unrecoverable',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    });
     expect(lines[0].err).toMatchObject({ message: 'disk full' });
   });
 
@@ -118,7 +131,7 @@ describe('AppLogger', () => {
     );
   });
 
-  it('should emit each pino binding key exactly once, so no parser silently drops one', () => {
+  it('should emit each pino binding key exactly once, when a line is logged', () => {
     const rawLines: string[] = [];
     const stream = new Writable({
       write(chunk: Buffer, _encoding, callback) {
@@ -138,7 +151,7 @@ describe('AppLogger', () => {
     expect(line.match(/"channel":/g)).toHaveLength(1);
   });
 
-  it('should reject pino binding keys at the type level', () => {
+  it('should reject pino binding keys at the type level, when they are passed as log fields', () => {
     const { root } = captureLogger();
     const logger = AppLogger.create(root, 'Svc', 'rmq');
 

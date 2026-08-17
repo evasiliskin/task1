@@ -21,8 +21,8 @@ describe('truncateForLog', () => {
   });
 
   it('should return the value unchanged, when it cannot be JSON-serialized', () => {
-    function unserializable(): void {
-      /* no-op: a function value is what JSON.stringify cannot serialize */
+    function unserializable(): boolean {
+      return true;
     }
 
     expect(truncateForLog(unserializable, 1024)).toBe(unserializable);

@@ -139,6 +139,11 @@ describe('LogsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/logs').query({ limit: '201' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
 
@@ -146,6 +151,11 @@ describe('LogsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/logs').query({ unknown: 'value' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
   });

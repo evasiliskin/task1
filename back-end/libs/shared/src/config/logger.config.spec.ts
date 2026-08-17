@@ -4,8 +4,6 @@ describe('loggerConfig', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // Every case below is about some other variable; the ones that are about SERVICE_NAME itself
-    // override this explicitly.
     process.env.SERVICE_NAME = 'api-gateway';
   });
 
@@ -43,7 +41,7 @@ describe('loggerConfig', () => {
   });
 
   describe('environment overrides', () => {
-    it('should use an explicit LOG_LEVEL, even in production', () => {
+    it('should use the explicit LOG_LEVEL, when it is set in production', () => {
       process.env.NODE_ENV = 'production';
       process.env.LOG_LEVEL = 'warn';
 

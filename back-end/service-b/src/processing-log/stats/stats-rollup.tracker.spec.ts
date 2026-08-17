@@ -13,14 +13,14 @@ function buildEntry(
     service: 'service-a',
     status,
     timestamp: new Date('2026-08-11T00:00:00Z'),
-    correlationId: 'c1',
+    correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
     archive: '2026-08-11-0.json.gz',
     metadata,
   };
 }
 
 describe('StatsRollupTracker', () => {
-  it('should increment the singleton rollup for a completed entry', async () => {
+  it('should increment the singleton rollup, when the entry completed', async () => {
     const updateOne = vi.fn().mockResolvedValue({});
     const tracker = new StatsRollupTracker({ updateOne } as never);
 
@@ -41,7 +41,7 @@ describe('StatsRollupTracker', () => {
     );
   });
 
-  it('should not touch the database for an entry that contributes nothing', async () => {
+  it('should not touch the database, when the entry contributes nothing', async () => {
     const updateOne = vi.fn();
     const tracker = new StatsRollupTracker({ updateOne } as never);
 
@@ -50,7 +50,7 @@ describe('StatsRollupTracker', () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 
-  it('should read the stored totals without the bookkeeping fields', async () => {
+  it('should return the stored totals without the bookkeeping fields, when the rollup is read', async () => {
     const findOne = vi.fn().mockResolvedValue({
       _id: STATS_ROLLUP_ID,
       seededAt: new Date(),
@@ -71,13 +71,13 @@ describe('StatsRollupTracker', () => {
     });
   });
 
-  it('should report undefined when the rollup has never been written', async () => {
+  it('should return undefined, when the rollup has never been written', async () => {
     const tracker = new StatsRollupTracker({ findOne: vi.fn().mockResolvedValue(null) } as never);
 
     await expect(tracker.read()).resolves.toBeUndefined();
   });
 
-  it('should report undefined when the document exists but has never been seeded', async () => {
+  it('should return undefined, when the document exists but has never been seeded', async () => {
     const findOne = vi.fn().mockResolvedValue({
       _id: STATS_ROLLUP_ID,
       archivesProcessed: 1,

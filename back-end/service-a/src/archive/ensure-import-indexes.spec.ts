@@ -46,7 +46,7 @@ describe('ensureImportIndexes', () => {
     );
   });
 
-  it('should create every index without serialising the round trips', async () => {
+  it('should create every index concurrently, when the indexes are ensured', async () => {
     let inFlight = 0;
     let peak = 0;
     const createIndex = vi.fn().mockImplementation(async () => {

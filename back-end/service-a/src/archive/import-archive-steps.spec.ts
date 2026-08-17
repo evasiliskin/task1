@@ -20,14 +20,14 @@ const RESULT = {
 };
 
 describe('buildImportSource', () => {
-  it('should label a download by its archive hour', () => {
+  it('should label the import by its archive hour, when the source is a download', () => {
     expect(buildImportSource({ type: 'download', dateHour: '2026-08-11-0' })).toEqual({
       archiveLabel: '2026-08-11-0.json.gz',
       sourceRecord: { type: 'download', archive: '2026-08-11-0.json.gz' },
     });
   });
 
-  it('should label an upload by its basename', () => {
+  it('should label the import by its basename, when the source is an upload', () => {
     expect(
       buildImportSource({ type: 'upload', filePath: `/data/archives/${IMPORT_ID}.json.gz` }),
     ).toEqual({
@@ -38,7 +38,7 @@ describe('buildImportSource', () => {
 });
 
 describe('buildCompletionMetrics', () => {
-  it('should always report duration, processed and invalid counts', () => {
+  it('should report duration, processed and invalid counts, when metrics are built', () => {
     const metrics = buildCompletionMetrics({ ...RESULT, errorCount: 0 }, 1234);
 
     expect(metrics).toEqual([
@@ -48,14 +48,14 @@ describe('buildCompletionMetrics', () => {
     ]);
   });
 
-  it('should append the error metric only when there were errors', () => {
+  it('should append the error metric, when there were errors', () => {
     expect(buildCompletionMetrics(RESULT, 1234)).toHaveLength(4);
     expect(buildCompletionMetrics({ ...RESULT, errorCount: 0 }, 1234)).toHaveLength(3);
   });
 });
 
 describe('event builders', () => {
-  it('should build the started event', () => {
+  it('should build the started event, when an import begins', () => {
     expect(toStartedEvent(IMPORT_ID, 'a.json.gz', STARTED_AT)).toEqual({
       importId: IMPORT_ID,
       archive: 'a.json.gz',
@@ -63,7 +63,7 @@ describe('event builders', () => {
     });
   });
 
-  it('should build the completed event with every counter', () => {
+  it('should build the completed event with every counter, when an import finishes', () => {
     expect(toCompletedEvent(IMPORT_ID, 'a.json.gz', STARTED_AT, FINISHED_AT, RESULT)).toEqual({
       importId: IMPORT_ID,
       archive: 'a.json.gz',
@@ -73,7 +73,7 @@ describe('event builders', () => {
     });
   });
 
-  it('should build the failed event with the reason', () => {
+  it('should build the failed event with the reason, when an import fails', () => {
     expect(toFailedEvent(IMPORT_ID, 'a.json.gz', STARTED_AT, FINISHED_AT, 'mongo down')).toEqual({
       importId: IMPORT_ID,
       archive: 'a.json.gz',
@@ -85,14 +85,14 @@ describe('event builders', () => {
 });
 
 describe('shouldDeleteArchive', () => {
-  it('should always delete a downloaded archive', () => {
+  it('should delete the archive, when it was downloaded', () => {
     const source = { type: 'download', dateHour: '2026-08-11-0' } as const;
 
     expect(shouldDeleteArchive(source, false)).toBe(true);
     expect(shouldDeleteArchive(source, true)).toBe(true);
   });
 
-  it('should keep a failed upload for diagnosis but delete a successful one', () => {
+  it('should keep the archive, when an uploaded import failed', () => {
     const source = { type: 'upload', filePath: '/data/a.json.gz' } as const;
 
     expect(shouldDeleteArchive(source, true)).toBe(false);

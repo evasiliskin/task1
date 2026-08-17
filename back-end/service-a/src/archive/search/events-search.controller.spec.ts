@@ -32,7 +32,7 @@ describe('EventsSearchController', () => {
     expect(search).not.toHaveBeenCalled();
   });
 
-  it('should ack the message, even when the handler throws', async () => {
+  it('should ack the message, even when the handler throws an error', async () => {
     const ack = vi.fn();
     const context = {
       getChannelRef: () => ({ ack }),

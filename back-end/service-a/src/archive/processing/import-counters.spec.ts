@@ -3,7 +3,7 @@ import { ImportCounters } from './import-counters.js';
 const emptyBatch = { insertedCount: 0, duplicateCount: 0, errorCount: 0, errorSample: [] };
 
 describe('ImportCounters', () => {
-  it('should report zeroes before anything is recorded', () => {
+  it('should report zeroes, when nothing has been recorded', () => {
     expect(new ImportCounters().toResult()).toEqual({
       eventsProcessed: 0,
       validEvents: 0,
@@ -13,7 +13,7 @@ describe('ImportCounters', () => {
     });
   });
 
-  it('should tally invalid lines', () => {
+  it('should tally invalid lines, when invalid lines are recorded', () => {
     const counters = new ImportCounters();
 
     counters.recordInvalidLine();
@@ -22,7 +22,7 @@ describe('ImportCounters', () => {
     expect(counters.toResult()).toMatchObject({ invalidEvents: 2, eventsProcessed: 2 });
   });
 
-  it('should tally a batch outcome', () => {
+  it('should tally the outcome, when a batch is recorded', () => {
     const counters = new ImportCounters();
 
     counters.recordBatch({ ...emptyBatch, insertedCount: 10, duplicateCount: 3, errorCount: 1 });
@@ -36,7 +36,7 @@ describe('ImportCounters', () => {
     });
   });
 
-  it('should sum eventsProcessed across every category', () => {
+  it('should sum eventsProcessed across every category, when several batches are recorded', () => {
     const counters = new ImportCounters();
 
     counters.recordInvalidLine();
@@ -52,7 +52,7 @@ describe('ImportCounters', () => {
     });
   });
 
-  it('should be order-independent', () => {
+  it('should report the same totals, when the same outcomes are recorded in a different order', () => {
     const forwards = new ImportCounters();
 
     forwards.recordInvalidLine();

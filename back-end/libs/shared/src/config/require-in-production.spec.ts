@@ -11,7 +11,7 @@ describe('requireInProduction', () => {
     expect(requireInProduction(process.env.X ?? 'set', 'X', 'fallback')).toBe('set');
   });
 
-  it('should fall back outside production, so local development needs no .env', () => {
+  it('should fall back to the supplied default, when not running in production', () => {
     process.env.NODE_ENV = 'development';
 
     expect(requireInProduction(undefined, 'MONGODB_URI', 'mongodb://localhost:27017/x')).toBe(
@@ -19,7 +19,7 @@ describe('requireInProduction', () => {
     );
   });
 
-  it('should throw in production, so a missing endpoint fails startup instead of silently using localhost', () => {
+  it('should throw, when the value is missing in production', () => {
     process.env.NODE_ENV = 'production';
 
     expect(() =>

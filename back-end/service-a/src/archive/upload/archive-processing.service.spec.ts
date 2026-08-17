@@ -21,13 +21,11 @@ vi.mock('../processing/process-archive.js', async () => {
   return { ...actual, processArchive: vi.fn(actual.processArchive) };
 });
 
-const IMPORT_ID = 'import-1';
+const IMPORT_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const INVALID_LINE_COUNT = 50;
 const LONG_LINE = 'x'.repeat(5000);
 
 function buildCappedService(warn: ReturnType<typeof vi.fn>): ArchiveProcessingService {
-  // The existing module-level `processArchive` mock is redirected to drive the invalid-line
-  // callback INVALID_LINE_COUNT times, which is what the cap has to survive.
   vi.mocked(processArchive).mockImplementation((_filePath, _importId, _options, onInvalidLine) => {
     for (let index = 0; index < INVALID_LINE_COUNT; index += 1) {
       onInvalidLine?.(LONG_LINE, new Error('unparseable'));
@@ -94,7 +92,7 @@ describe('ArchiveProcessingService', () => {
 
   it('should return the pipeline result using the injected batchSize and log invalid lines through the logger, when processing an archive with valid and invalid lines', async () => {
     const validLine = JSON.stringify({
-      id: '1',
+      id: '48291832741',
       type: 'WatchEvent',
       created_at: '2026-08-11T00:00:00Z',
       actor: { id: 1, login: 'octocat' },
@@ -107,7 +105,7 @@ describe('ArchiveProcessingService', () => {
     const warnMock = vi.fn();
     const service = buildService(collection, warnMock);
 
-    const result = await service.process(filePath, 'import-1');
+    const result = await service.process(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
 
     expect(result).toEqual({
       eventsProcessed: 2,
@@ -117,11 +115,20 @@ describe('ArchiveProcessingService', () => {
       errorCount: 0,
     });
     expect(insertMany).toHaveBeenCalledWith(
-      [expect.objectContaining({ eventId: '1', importId: 'import-1' })],
+      [
+        expect.objectContaining({
+          eventId: '48291832741',
+          importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        }),
+      ],
       { ordered: false },
     );
     expect(warnMock).toHaveBeenCalledWith(
-      { importId: 'import-1', rawLinePreview: 'not valid json', suppressingFurtherLines: false },
+      {
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        rawLinePreview: 'not valid json',
+        suppressingFurtherLines: false,
+      },
       'Skipped invalid archive line',
       expect.anything(),
     );
@@ -129,7 +136,7 @@ describe('ArchiveProcessingService', () => {
 
   it('should log the write-error sample, when a batch reports non-duplicate errors', async () => {
     const validLine = JSON.stringify({
-      id: '1',
+      id: '48291832741',
       type: 'WatchEvent',
       created_at: '2026-08-11T00:00:00Z',
       actor: { id: 1, login: 'octocat' },
@@ -148,11 +155,11 @@ describe('ArchiveProcessingService', () => {
     const warnMock = vi.fn();
     const service = buildService(collection, warnMock);
 
-    await service.process(filePath, 'import-1');
+    await service.process(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
 
     expect(warnMock).toHaveBeenCalledWith(
       {
-        importId: 'import-1',
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         errorCount: 1,
         errorSample: [{ code: 121, message: 'Document failed validation' }],
         suppressingFurtherLines: false,
@@ -167,7 +174,9 @@ describe('ArchiveProcessingService', () => {
     const warnMock = vi.fn();
     const service = buildService(collection, warnMock);
 
-    await expect(service.process(missingPath, 'import-1')).rejects.toThrow();
+    await expect(
+      service.process(missingPath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    ).rejects.toThrow();
   });
 
   it('should stop logging after the cap, when an archive is entirely invalid', async () => {
@@ -191,7 +200,7 @@ describe('ArchiveProcessingService', () => {
     expect(fields.rawLinePreview).toHaveLength(200);
   });
 
-  it('should pass the configured bounds and concurrency through to processArchive', async () => {
+  it('should pass the configured bounds and concurrency to processArchive, when an upload is processed', async () => {
     vi.mocked(processArchive).mockResolvedValue({
       eventsProcessed: 0,
       validEvents: 0,

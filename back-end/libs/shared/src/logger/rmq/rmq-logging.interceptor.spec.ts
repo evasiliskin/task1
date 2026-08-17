@@ -18,8 +18,6 @@ type LoggedLine = Record<string, unknown> & { msg: string; level: MockedLevel };
 type LogLevel = 'trace' | 'debug' | 'info';
 type MockedLevel = 'info' | 'warn' | 'error' | 'debug';
 
-// Lower rank == more verbose, matching pino's own ordering. isLevelEnabled(check) is true when
-// the configured level is at least as verbose as the level being checked.
 const LEVEL_RANK: Record<LogLevel, number> = { trace: 10, debug: 20, info: 30 };
 
 function buildExecutionContext(pattern: string, payload: unknown = {}): ExecutionContext {
@@ -70,7 +68,11 @@ describe('RmqLoggingInterceptor', () => {
     handler: CallHandler,
   ): Promise<T> {
     return requestContextService.run(
-      { correlationId: 'c-1', requestId: 'r-1', correlationIdSource: source },
+      {
+        correlationId: '8f14e45f-ceea-4e0a-9d1b-3a2e6f7c8b90',
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: source,
+      },
       () =>
         firstValueFrom(
           interceptor.intercept(buildExecutionContext('archive.import.download'), handler),
@@ -113,7 +115,7 @@ describe('RmqLoggingInterceptor', () => {
     await lastValueFrom(
       interceptor.intercept(
         buildExecutionContext('archive.import.download', {
-          importId: 'i-1',
+          importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
           dateHour: '2024-01-01-0',
         }),
         { handle: () => of('ok') },
@@ -124,12 +126,12 @@ describe('RmqLoggingInterceptor', () => {
       expect.objectContaining({
         msg: MESSAGE_DETAIL_LOG,
         level: 'debug',
-        payload: { importId: 'i-1', dateHour: '2024-01-01-0' },
+        payload: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', dateHour: '2024-01-01-0' },
       }),
     );
   });
 
-  it('should not log health pings at all', async () => {
+  it('should not log anything, when the pattern is a health ping', async () => {
     const { interceptor, lines } = buildInterceptor({ level: 'trace' });
 
     await lastValueFrom(

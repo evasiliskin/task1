@@ -66,7 +66,7 @@ describe('processArchive', () => {
 
     const result = await processArchive(
       filePath,
-      'import-1',
+      'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       {
         collection,
         batchSize: 2,
@@ -94,7 +94,7 @@ describe('processArchive', () => {
     const collection = { insertMany } as unknown as Collection<IGithubEventDocument>;
 
     await expect(
-      processArchive(missingPath, 'import-1', {
+      processArchive(missingPath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection,
         batchSize: 500,
         maxLineBytes: 1_048_576,
@@ -114,7 +114,7 @@ describe('processArchive', () => {
     const collection = { insertMany } as unknown as Collection<IGithubEventDocument>;
 
     await expect(
-      processArchive(filePath, 'import-1', {
+      processArchive(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection,
         batchSize: 500,
         maxLineBytes: 1_048_576,
@@ -131,7 +131,7 @@ describe('processArchive', () => {
     const collection = { insertMany } as unknown as Collection<IGithubEventDocument>;
 
     await expect(
-      processArchive(filePath, 'import-1', {
+      processArchive(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection,
         batchSize: 500,
         maxLineBytes: 1_048_576,
@@ -141,12 +141,12 @@ describe('processArchive', () => {
     ).rejects.toThrow(ArchiveProcessingError);
   });
 
-  it('should raise ArchiveTooLargeError when the archive expands past the budget', async () => {
+  it('should throw ArchiveTooLargeError, when the archive expands past the budget', async () => {
     const filePath = writeGzippedArchive('bomb.json.gz', ['x'.repeat(100_000)]);
     const insertMany = vi.fn();
 
     await expect(
-      processArchive(filePath, 'import-1', {
+      processArchive(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection: { insertMany } as unknown as Collection<IGithubEventDocument>,
         batchSize: 10,
         maxLineBytes: 1_048_576,
@@ -158,11 +158,11 @@ describe('processArchive', () => {
     expect(insertMany).not.toHaveBeenCalled();
   });
 
-  it('should let a LineTooLongError propagate unwrapped', async () => {
+  it('should propagate the error unwrapped, when a LineTooLongError is raised', async () => {
     const filePath = writeGzippedArchive('longline.json.gz', ['y'.repeat(5000)]);
 
     await expect(
-      processArchive(filePath, 'import-1', {
+      processArchive(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection: { insertMany: vi.fn() } as unknown as Collection<IGithubEventDocument>,
         batchSize: 10,
         maxLineBytes: 64,
@@ -172,12 +172,12 @@ describe('processArchive', () => {
     ).rejects.toBeInstanceOf(LineTooLongError);
   });
 
-  it('should wrap an infrastructure failure as ArchiveProcessingError', async () => {
+  it('should throw ArchiveProcessingError, when an infrastructure failure occurs', async () => {
     const filePath = writeGzippedArchive('valid.json.gz', [buildRawLine('e1')]);
     const insertMany = vi.fn().mockRejectedValue(new Error('connection reset'));
 
     await expect(
-      processArchive(filePath, 'import-1', {
+      processArchive(filePath, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', {
         collection: { insertMany } as unknown as Collection<IGithubEventDocument>,
         batchSize: 10,
         maxLineBytes: 1_048_576,

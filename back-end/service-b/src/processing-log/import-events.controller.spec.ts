@@ -50,7 +50,11 @@ describe('ImportEventsController', () => {
       getLogger: vi.fn().mockReturnValue(logger),
     } as unknown as LoggerService;
     const requestContextService = {
-      requireContext: () => ({ correlationId, requestId: 'r', correlationIdSource: 'inbound' }),
+      requireContext: () => ({
+        correlationId,
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      }),
     } as unknown as RequestContextService;
 
     return {
@@ -211,8 +215,6 @@ describe('ImportEventsController', () => {
         expect.objectContaining({
           importId,
           status: 'dead-lettered',
-          // The controller does `String(reason)` on a non-Error rejection value; a plain object's
-          // default stringification is always '[object Object]'.
           errorInfo: { reason: '[object Object]' },
         }),
       );

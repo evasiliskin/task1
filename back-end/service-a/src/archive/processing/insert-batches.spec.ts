@@ -10,7 +10,7 @@ async function* batchesOf(count: number): AsyncGenerator<number[]> {
 }
 
 describe('insertBatches', () => {
-  it('should insert every batch and report every result', async () => {
+  it('should insert every batch and report every result, when the stream completes', async () => {
     const seen: number[] = [];
 
     await insertBatches({
@@ -27,7 +27,7 @@ describe('insertBatches', () => {
     expect(seen.sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it('should never exceed the configured concurrency', async () => {
+  it('should never exceed the configured concurrency, when many batches are streamed', async () => {
     let inFlight = 0;
     let peak = 0;
 
@@ -49,7 +49,7 @@ describe('insertBatches', () => {
     expect(peak).toBeGreaterThan(1);
   });
 
-  it('should run inserts concurrently rather than serially', async () => {
+  it('should run inserts concurrently, when concurrency is greater than one', async () => {
     const startedAt = Date.now();
 
     await insertBatches({
@@ -63,11 +63,10 @@ describe('insertBatches', () => {
       onResult: () => undefined,
     });
 
-    // Serially this would be ~160ms; concurrently ~40ms. 120ms is a generous ceiling.
     expect(Date.now() - startedAt).toBeLessThan(120);
   });
 
-  it('should propagate the first insert failure', async () => {
+  it('should propagate the failure, when an insert rejects', async () => {
     const failure = new Error('write failed');
 
     await expect(
@@ -88,7 +87,7 @@ describe('insertBatches', () => {
     ).rejects.toBe(failure);
   });
 
-  it('should stop pulling new batches after a failure', async () => {
+  it('should stop pulling new batches, when an insert fails', async () => {
     let pulled = 0;
 
     // eslint-disable-next-line @typescript-eslint/require-await -- must be an async generator to satisfy AsyncIterable<number[]>, even though it never awaits.
@@ -115,7 +114,7 @@ describe('insertBatches', () => {
     expect(pulled).toBeLessThan(10);
   });
 
-  it('should complete cleanly on an empty batch stream', async () => {
+  it('should complete cleanly, when the batch stream is empty', async () => {
     await expect(
       insertBatches({
         batches: batchesOf(0),

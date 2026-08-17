@@ -56,7 +56,7 @@ describe('rawGithubEventSchema', () => {
     expect(() => rawGithubEventSchema.parse(withoutPayload)).toThrow();
   });
 
-  it('should pass the payload through by reference rather than copying it', () => {
+  it('should pass the payload through by reference, when an event is parsed', () => {
     const payload = { commits: [{ sha: 'a' }] };
     const result = rawGithubEventSchema.safeParse({
       id: '1',
@@ -68,11 +68,10 @@ describe('rawGithubEventSchema', () => {
     });
 
     expect(result.success).toBe(true);
-    // Identity, not equality: the copy is the allocation this change removes.
     expect(result.success && result.data.payload).toBe(payload);
   });
 
-  it('should accept a payload that is not an object', () => {
+  it('should accept the event, when its payload is not an object', () => {
     const result = rawGithubEventSchema.safeParse({
       id: '1',
       type: 'WatchEvent',
