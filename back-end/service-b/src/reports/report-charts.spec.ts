@@ -5,6 +5,7 @@ import {
   drawStatusBreakdownChart,
   drawSummarySection,
   formatAxisTimestamp,
+  maxTicksForWidth,
   selectTickIndices,
 } from './report-charts.js';
 
@@ -242,6 +243,29 @@ describe('drawEventsOverTimeChart', () => {
     expect(rendered).toContain('08-12 06:30');
   });
 
+  it('should render a dated tick for the first and last point, when many points are given', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
+    const timeSeries = Array.from({ length: 50 }, (_, index) => ({
+      timestamp: `2026-08-11T00:${String(index).padStart(2, '0')}:00.000Z`,
+      value: index,
+    }));
+
+    drawEventsOverTimeChart(doc as never, timeSeries, true);
+
+    const rendered = (
+      doc.text as ReturnType<
+        typeof vi.fn<(text: string, options?: Record<string, unknown>) => unknown>
+      >
+    ).mock.calls.map((call) => call[0]);
+    const dated = rendered.filter((text) => /^\d{2}-\d{2} \d{2}:\d{2}$/.test(String(text)));
+
+    expect(dated.at(0)).toBe('08-11 00:00');
+    expect(dated.at(-1)).toBe('08-11 00:49');
+    // 400pt of axis against a 60pt label budget — denser than the fixed four it replaced, and still
+    // 80pt apart, so no two labels can touch.
+    expect(dated).toHaveLength(6);
+  });
+
   it('should name both axes with the aggregate metric, when isAggregate is true', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
 
@@ -358,6 +382,20 @@ describe('selectTickIndices', () => {
 
   it('should sample evenly and always include the first and last index, when the point count exceeds the tick budget', () => {
     expect(selectTickIndices(50, 4)).toEqual([0, 16, 33, 49]);
+  });
+});
+
+describe('maxTicksForWidth', () => {
+  it('should fit as many ticks as the axis width allows, when the label width divides evenly', () => {
+    expect(maxTicksForWidth(400, 50)).toBe(8);
+  });
+
+  it('should never return fewer than two ticks, when the axis is narrower than two labels', () => {
+    expect(maxTicksForWidth(50, 60)).toBe(2);
+  });
+
+  it('should return an integer count, when the division is fractional', () => {
+    expect(maxTicksForWidth(400, 60)).toBe(6);
   });
 });
 

@@ -225,6 +225,66 @@ describe('importArchive', () => {
       ]);
       expect(dependencies.recordImportCompleted).not.toHaveBeenCalled();
     });
+
+    it('should record the failure metrics, when processArchive rejects', async () => {
+      const dependencies = buildDependencies({
+        processArchive: vi.fn().mockRejectedValue(new Error('archive processing failed')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'upload', filePath: '/data/archives/x.json.gz' },
+          importId,
+          dependencies,
+        ),
+      ).rejects.toThrow('archive processing failed');
+
+      const [failureMetricEntries] = dependencies.recordMetrics.mock.calls[0] as [
+        [string, number][],
+      ];
+
+      expect(failureMetricEntries).toEqual([
+        ['service_a.archive.imports.failed', 1],
+        ['service_a.archive.failure.duration', expect.any(Number) as number],
+      ]);
+    });
+
+    it('should still record the failure metrics, when recordImportFailed rejects', async () => {
+      const dependencies = buildDependencies({
+        processArchive: vi.fn().mockRejectedValue(new Error('archive processing failed')),
+        recordImportFailed: vi.fn().mockRejectedValue(new Error('mongo down')),
+      });
+
+      await expect(
+        importArchive(
+          { type: 'upload', filePath: '/data/archives/x.json.gz' },
+          importId,
+          dependencies,
+        ),
+      ).rejects.toThrow('mongo down');
+
+      const [failureMetricEntries] = dependencies.recordMetrics.mock.calls[0] as [
+        [string, number][],
+      ];
+
+      expect(failureMetricEntries.map(([key]) => key)).toEqual([
+        'service_a.archive.imports.failed',
+        'service_a.archive.failure.duration',
+      ]);
+    });
+
+    it('should not record failure metrics, when the import completes successfully', async () => {
+      const dependencies = buildDependencies();
+
+      await importArchive({ type: 'download', dateHour: '2026-08-11-0' }, importId, dependencies);
+
+      const recordedKeys = dependencies.recordMetrics.mock.calls.flatMap(
+        ([entries]: [[string, number][]]) => entries.map(([key]) => key),
+      );
+
+      expect(recordedKeys).not.toContain('service_a.archive.imports.failed');
+      expect(recordedKeys).not.toContain('service_a.archive.failure.duration');
+    });
   });
 
   describe('claim ordering', () => {

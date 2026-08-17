@@ -14,6 +14,8 @@ export const METRIC_PROCESSING_DURATION = 'service_a.archive.processing.duration
 export const METRIC_EVENTS_PROCESSED = 'service_a.archive.events.processed';
 export const METRIC_EVENTS_INVALID = 'service_a.archive.events.invalid';
 export const METRIC_PROCESSING_ERRORS = 'service_a.archive.processing.errors';
+export const METRIC_IMPORTS_FAILED = 'service_a.archive.imports.failed';
+export const METRIC_FAILURE_DURATION = 'service_a.archive.failure.duration';
 
 export type ImportSourceInput =
   | { readonly type: 'download'; readonly dateHour: string }
@@ -57,6 +59,21 @@ export function buildCompletionMetrics(
   }
 
   return metrics;
+}
+
+/**
+ * The failure-path counterpart of `buildCompletionMetrics`. Without it a completed import writes
+ * five RedisTimeSeries points and a failed one writes none, so no dashboard over
+ * `service_a.archive.*` can express a failure rate.
+ *
+ * The counter is always `1` rather than a running total: RedisTimeSeries aggregates the datapoints,
+ * so summing the series over a window yields the failure count for that window.
+ */
+export function buildFailureMetrics(failureDurationMs: number): [string, number][] {
+  return [
+    [METRIC_IMPORTS_FAILED, 1],
+    [METRIC_FAILURE_DURATION, failureDurationMs],
+  ];
 }
 
 export function toStartedEvent(

@@ -11,9 +11,15 @@ const TIME_CHART_HEIGHT = 120;
 const TIME_CHART_BOTTOM_MARGIN = 45;
 const SINGLE_POINT_MARKER_RADIUS = 3;
 const AXIS_LABEL_OFFSET_X = 25;
-/** Four 8pt labels fit across 400pt without collision; the 50 points TS.RANGE can return do not. */
-const MAX_AXIS_TICKS = 4;
+/**
+ * A tick label is never narrower than this, so it doubles as the collision budget: the 50 points
+ * `TS.RANGE` can return would be an unreadable smear at 8pt across 400pt. The tick count is derived
+ * from it by `maxTicksForWidth` rather than fixed, so widening the chart yields more dates instead
+ * of the same four stretched further apart.
+ */
 const TICK_LABEL_WIDTH = 60;
+/** Two ticks — the first and the last point — are the least that still conveys a time range. */
+const MIN_AXIS_TICKS = 2;
 const TICK_LABEL_OFFSET_Y = 6;
 const AXIS_NAME_OFFSET_Y = 22;
 const AXIS_LABEL_FONT_SIZE = 8;
@@ -66,6 +72,18 @@ export function selectTickIndices(pointCount: number, maxTicks: number): number[
 }
 
 /**
+ * How many tick labels of `labelWidth` fit across `chartWidth` without touching.
+ *
+ * `n` ticks sit `chartWidth / (n - 1)` apart. Flooring gives `n <= chartWidth / labelWidth`, hence
+ * `n - 1 < chartWidth / labelWidth`, hence that spacing is strictly wider than a label — so no two
+ * labels can touch, with a whole label's width still in hand. Below two labels' worth of width the
+ * floor would drop to one or zero and the chart would lose its time range entirely, so it clamps.
+ */
+export function maxTicksForWidth(chartWidth: number, labelWidth: number): number {
+  return Math.max(MIN_AXIS_TICKS, Math.floor(chartWidth / labelWidth));
+}
+
+/**
  * `2026-08-11T13:45:00.000Z` -> `08-11 13:45`.
  *
  * Sliced rather than parsed through `Date`: every timestamp reaching here was produced by
@@ -110,7 +128,9 @@ function drawXAxisTicks(
 ): void {
   const tickY = originY + TIME_CHART_HEIGHT + TICK_LABEL_OFFSET_Y;
 
-  selectTickIndices(timeSeries.length, MAX_AXIS_TICKS).forEach((index) => {
+  const maxTicks = maxTicksForWidth(TIME_CHART_WIDTH, TICK_LABEL_WIDTH);
+
+  selectTickIndices(timeSeries.length, maxTicks).forEach((index) => {
     const point = timeSeries.at(index);
 
     if (point === undefined) {

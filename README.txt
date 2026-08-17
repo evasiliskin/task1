@@ -485,12 +485,21 @@ payload. Consumer concurrency is bounded via `prefetchCount` — never unbounded
 ### RedisTimeSeries metrics
 
 `service-a` records `service_a.archive.download.duration`,
-`service_a.archive.processing.duration`, `service_a.archive.events.processed/.invalid`, and
-`service_a.archive.processing.errors` via
+`service_a.archive.processing.duration`, `service_a.archive.events.processed/.invalid`,
+`service_a.archive.processing.errors`, `service_a.archive.imports.failed` and
+`service_a.archive.failure.duration` via
 `TS.ADD`, inline at the natural point in the orchestration — no metric value is ever accumulated
 in application memory first. Every metric key has a retention policy (7 days), so Redis-side
 memory is self-bounding. A Redis failure is logged and swallowed, never allowed to fail the
 primary import.
+
+Failures are observable in the same namespace as successes: the last two keys are written from
+`importArchive`'s `catch` block (`buildFailureMetrics` in `import-archive-steps.ts`), so a failure
+rate can be derived entirely from `service_a.archive.*` without joining against Mongo.
+`imports.failed` always carries the value `1` — RedisTimeSeries aggregates the datapoints, so
+summing the series over a window gives the failure count for that window. The write is ordered
+*before* `recordImportFailed`, deliberately: that call touches Mongo, and a Mongo outage is exactly
+the moment the counter matters most.
 
 Independently of those domain metrics, every RMQ message pattern in `service-a` and `service-b` is
 metered by the globally registered `RmqMetricsInterceptor` (`@task1/shared/metrics/rmq`), which
@@ -575,6 +584,24 @@ explained in the design doc's own "Out of scope / trade-offs" section rather tha
 (`docs/superpowers/specs/2026-08-12-github-archive-platform-design.md#out-of-scope--trade-offs` —
 `docs/` is `.gitignore`d and not committed, so this link only resolves locally, not from a fresh
 clone).
+
+**Archive stored as `.json.gz`, not `.json`.** The assignment says "save to file (JSON)". The
+stored payload *is* JSON — newline-delimited, one event object per line — under gzip content
+encoding, and the suffix names both facts. Decompressing on ingest was considered and rejected:
+one hourly archive is 0.5-2 GB expanded, every consumer decompresses on read (`createGunzip()` in
+`process-archive.ts`), and the upload endpoint accepts the same format, verifying it by gzip magic
+bytes rather than by filename. The cost would be a multiplied archive-storage volume for no
+functional gain. See "Stored archive format" above for the full detail.
+
+**Swagger UI is opt-in, not on by default.** `/api-docs` is served under `docker compose up` at
+http://localhost:3000/api-docs, because the compose stack sets `SWAGGER_ENABLED=true` explicitly.
+The flag itself defaults to `!isProduction()`, so a production deployment that leaves it unset gets
+`404`. The gate exists because `SwaggerModule.setup` mounts Express-level middleware that the
+global `AuthGuard` never sees, and `helmet.config.ts` relaxes CSP for that path so the UI can
+execute — an ungated production default would publish the whole internal API surface with no
+credential check. It should be removed once a real provider is wired into `AuthGuard`'s
+`isAuthenticated()` seam. `swagger.setup.int.spec.ts` holds the served-route evidence for all four
+combinations of the flag; `swagger.setup.spec.ts` covers the decision function alone.
 
 ### Upgrading to the split import topology
 

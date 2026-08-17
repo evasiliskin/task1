@@ -1,5 +1,6 @@
 import {
   buildCompletionMetrics,
+  buildFailureMetrics,
   buildImportSource,
   shouldDeleteArchive,
   toCompletedEvent,
@@ -51,6 +52,30 @@ describe('buildCompletionMetrics', () => {
   it('should append the error metric, when there were errors', () => {
     expect(buildCompletionMetrics(RESULT, 1234)).toHaveLength(4);
     expect(buildCompletionMetrics({ ...RESULT, errorCount: 0 }, 1234)).toHaveLength(3);
+  });
+});
+
+describe('buildFailureMetrics', () => {
+  it('should return a failed counter of one and the elapsed duration, when the import failed', () => {
+    const metrics = buildFailureMetrics(4567);
+
+    expect(metrics).toEqual([
+      ['service_a.archive.imports.failed', 1],
+      ['service_a.archive.failure.duration', 4567],
+    ]);
+  });
+
+  it('should key both entries under the service_a.archive namespace, when called', () => {
+    const keys = buildFailureMetrics(4567).map(([key]) => key);
+
+    expect(keys.every((key) => key.startsWith('service_a.archive.'))).toBe(true);
+  });
+
+  it('should return a zero duration, when the failure happened immediately', () => {
+    expect(buildFailureMetrics(0)).toEqual([
+      ['service_a.archive.imports.failed', 1],
+      ['service_a.archive.failure.duration', 0],
+    ]);
   });
 });
 

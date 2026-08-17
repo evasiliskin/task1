@@ -3,6 +3,7 @@ import { type AppLogger } from '@task1/shared/logger/app-logger';
 
 import {
   buildCompletionMetrics,
+  buildFailureMetrics,
   buildImportSource,
   METRIC_DOWNLOAD_DURATION,
   shouldDeleteArchive,
@@ -132,6 +133,10 @@ export async function importArchive(
 
     const failedAt = new Date();
     const reason = error instanceof Error ? error.message : String(error);
+
+    // Before `recordImportFailed` on purpose: that call writes to Mongo and can itself reject, and
+    // a Mongo outage is exactly when the failure counter matters most.
+    await dependencies.recordMetrics(buildFailureMetrics(failedAt.getTime() - startedAt.getTime()));
 
     dependencies.emitEvent(
       EVENT_PATTERNS.IMPORT_FAILED,

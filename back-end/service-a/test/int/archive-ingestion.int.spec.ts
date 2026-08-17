@@ -157,7 +157,7 @@ describe('archive ingestion against real MongoDB', () => {
       baseOptions(),
     );
 
-    const stored = await collection.findOne({ eventId: '48291832741' } as never);
+    const stored = await collection.findOne({ eventId: 'push-1' } as never);
 
     expect((stored as unknown as { payload: unknown }).payload).toEqual({
       ref: 'refs/heads/main',

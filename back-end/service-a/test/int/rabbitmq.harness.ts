@@ -67,20 +67,25 @@ function rmqOptions(url: string, queue: string, prefetchCount: number): Microser
 }
 
 /**
- * These integration tests exercise RabbitMQ behaviour only (message delivery, retry,
- * dead-lettering, prefetch isolation) — nothing here touches Mongo or Redis data. Real
+ * Most of these integration tests exercise RabbitMQ behaviour only (message delivery, retry,
+ * dead-lettering, prefetch isolation) — nothing there touches Mongo or Redis data. Real
  * MongoClient/Redis clients are swapped for minimal fakes so `application.init()` never dials
  * localhost:27017/6379, which docker-compose.yml doesn't expose to the host. The fakes only
  * implement what's actually invoked while the DI graph boots:
  *  - Mongo: `.connect()`/`.close()` (MongoConnectionService lifecycle),
  *    `.db().collection().createIndex()` (EnsureEventIndexesInitializer /
- *    EnsureImportIndexesInitializer, which run in onModuleInit), and the
+ *    EnsureImportIndexesInitializer, which run in onModuleInit), the
  *    `.find().sort().limit().toArray()` chain (EventsSearchService, exercised by the
  *    prefetch-isolation test's `events.search` RPC while the import queue is saturated — the
- *    fake just needs to answer, not return real data).
+ *    fake just needs to answer, not return real data), and `.findOneAndUpdate()`
+ *    (ImportRunTracker.claim, behind the `imports.claim` RPC).
  *  - Redis: `.connect()`/`.quit()` (RedisConnectionService lifecycle) and `.call()`
  *    (MetricsService.recordMetric, fired by the globally registered RmqMetricsInterceptor as
  *    a side effect of that same `events.search` RPC).
+ *
+ * `rmq-metrics.int.spec.ts` is the exception: it asserts on the datapoints that interceptor
+ * writes, so a `call()` stub returning `undefined` would prove nothing. It opts out via
+ * `IHarnessOptions.realRedis`, pointing `REDIS_URL` at a RedisTimeSeries container instead.
  */
 function fakeMongoClient(): unknown {
   const cursor = {
@@ -91,6 +96,7 @@ function fakeMongoClient(): unknown {
   const collection = {
     createIndex: vi.fn().mockResolvedValue('index'),
     find: vi.fn().mockReturnValue(cursor),
+    findOneAndUpdate: vi.fn().mockResolvedValue(null),
   };
 
   return {
@@ -108,20 +114,36 @@ function fakeRedisClient(): unknown {
   };
 }
 
-async function buildContext(url: string, stub: IOrchestrationStub): Promise<INestApplication> {
+export interface IHarnessOptions {
+  /**
+   * Keeps the real ioredis client built by `RedisModule` from `REDIS_URL`, so a test can read back
+   * what the metrics interceptor actually wrote. The caller owns pointing `REDIS_URL` at a
+   * RedisTimeSeries-capable server before booting.
+   */
+  realRedis?: boolean;
+}
+
+async function buildContext(
+  url: string,
+  stub: IOrchestrationStub,
+  options: IHarnessOptions,
+): Promise<INestApplication> {
   process.env.RABBITMQ_URL = url;
 
-  const moduleReference = await Test.createTestingModule({ imports: [AppModule] })
+  const builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ImportOrchestrationService)
     .useValue({
       importDownload: stub.importDownload ?? vi.fn().mockResolvedValue(undefined),
       importUpload: stub.importUpload ?? vi.fn().mockResolvedValue(undefined),
     })
     .overrideProvider(MONGO_CLIENT)
-    .useValue(fakeMongoClient())
-    .overrideProvider(REDIS_CLIENT)
-    .useValue(fakeRedisClient())
-    .compile();
+    .useValue(fakeMongoClient());
+
+  const moduleReference = await (
+    options.realRedis === true
+      ? builder
+      : builder.overrideProvider(REDIS_CLIENT).useValue(fakeRedisClient())
+  ).compile();
 
   return moduleReference.createNestApplication();
 }
@@ -130,8 +152,9 @@ async function buildContext(url: string, stub: IOrchestrationStub): Promise<INes
 export async function buildImportListener(
   url: string,
   stub: IOrchestrationStub,
+  options: IHarnessOptions = {},
 ): Promise<INestApplication> {
-  const application = await buildContext(url, stub);
+  const application = await buildContext(url, stub, options);
 
   application.connectMicroservice(rmqOptions(url, 'service_a_imports_queue', 2), {
     inheritAppConfig: true,
@@ -146,8 +169,9 @@ export async function buildImportListener(
 export async function buildBothListeners(
   url: string,
   stub: IOrchestrationStub,
+  options: IHarnessOptions = {},
 ): Promise<INestApplication> {
-  const application = await buildContext(url, stub);
+  const application = await buildContext(url, stub, options);
 
   application.connectMicroservice(rmqOptions(url, 'service_a_queue', 20), {
     inheritAppConfig: true,

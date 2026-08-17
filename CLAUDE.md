@@ -21,12 +21,23 @@ Ground truth before applying the policies below — keep this section in sync wi
   accessed directly via the `mongodb` driver (no ORM, no Repository pattern). The gateway persists
   nothing of its own. There is no general-purpose persistence layer, and none should be introduced
   speculatively — see "Persistence" and "Forbidden Without Explicit Approval" below.
+- **Stored archives**: both downloaded and uploaded archives live at
+  `STORAGE_DIR/<importId>.json.gz` — gzip-encoded newline-delimited JSON, one event object per
+  line. Kept compressed **deliberately** (`ARCHIVE_SUFFIX` in
+  `back-end/libs/shared/src/storage/archive-paths.ts`); every consumer decompresses on read via
+  `createGunzip()` in `process-archive.ts`, and the gateway validates uploads by gzip magic bytes
+  rather than by filename. Do not "fix" the suffix to `.json` — see README.txt's "Stored archive
+  format" and "Trade-offs" sections for the reasoning.
 - **Redis**: used for RedisTimeSeries metrics (`TS.ADD`), and by the gateway/all services for
   health-check pings. Not used as a cache. RedisTimeSeries carries two kinds of data: `service-a`'s
-  import-pipeline domain metrics (`service_a.archive.*`, unchanged), and — from the globally
+  import-pipeline domain metrics (`service_a.archive.*`, covering both the completion path —
+  `buildCompletionMetrics` — and the failure path — `buildFailureMetrics`, writing
+  `service_a.archive.imports.failed`/`.failure.duration` from `importArchive`'s `catch`, before
+  `recordImportFailed` so a Mongo outage cannot suppress the counter), and — from the globally
   registered `RmqMetricsInterceptor` (`@task1/shared/metrics/rmq`) in both `service-a` and
   `service-b` — per-pattern transport counters (`<service>.rmq.<pattern>.requests`/`.errors`) for
-  every RMQ message pattern, `health.check` excluded.
+  every RMQ message pattern, `health.check` excluded. The transport counters are proven end-to-end
+  against a real RedisTimeSeries container by `service-a/test/int/rmq-metrics.int.spec.ts`.
 - **Authentication**: `AuthGuard` (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered
   globally, but is an **intentional placeholder** — its `isAuthenticated()` unconditionally
   returns `true`, so every endpoint currently responds normally with no credentials supplied. This
