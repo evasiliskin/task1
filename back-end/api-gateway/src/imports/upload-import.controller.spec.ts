@@ -158,7 +158,7 @@ describe('UploadImportController', () => {
         ),
       ).rejects.toBeInstanceOf(ArchiveUploadError);
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       expect(existsSync(temporaryFilePath)).toBe(false);
     });
   });

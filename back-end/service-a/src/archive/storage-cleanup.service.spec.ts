@@ -28,7 +28,7 @@ describe('StorageCleanupService', () => {
   function setMtimeMinutesAgo(path: string, minutes: number): void {
     const when = new Date(Date.now() - minutes * 60_000);
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
     utimesSync(path, when, when);
   }
 

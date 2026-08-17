@@ -480,10 +480,16 @@ primary import.
 ### Trying it end-to-end
 
 There is no frontend — every capability is reachable via `curl` or the gateway's Swagger UI
-(`http://localhost:3000/api-docs`). All routes below other than `/health*` are declared as
-requiring authentication, but the current `AuthGuard` stub lets every request through (see
-"Authentication" above), so this flow runs end-to-end on an unmodified checkout with no
-credentials:
+(`http://localhost:3000/api-docs`). The Swagger UI is served only outside production
+(`swagger.setup.ts`) — `SwaggerModule.setup` mounts it as Express-level middleware, so the global
+`AuthGuard` never runs for it, and it would otherwise publish the whole internal API surface
+unauthenticated. The `docker:up` compose stack runs the gateway with `NODE_ENV=production`, so
+`/api-docs` returns 404 there; to explore the API through the UI, run the gateway with
+`pnpm dev:api-gateway` instead (see "Getting started" above). The `curl` flow below is unaffected
+either way and works against the compose stack unchanged. All routes below other than `/health*`
+are declared as requiring authentication, but the current `AuthGuard` stub lets every request
+through (see "Authentication" above), so this flow runs end-to-end on an unmodified checkout with
+no credentials:
 
 ```bash
 pnpm docker:up
@@ -491,7 +497,7 @@ pnpm docker:up
 # trigger a download import for a real GH Archive hour
 curl -s -X POST http://localhost:3000/api/v1/imports -H 'Content-Type: application/json' \
   -d '{"dateHour": "2026-08-11-0"}'
-# => {"status":"SUCCESS","code":201,"message":"OK","result":{"data":{"importId":"..."}},"meta":{"tracing":{"correlationId":"..."}}}
+# => {"status":"SUCCESS","code":202,"message":"OK","result":{"data":{"importId":"..."}},"meta":{"tracing":{"correlationId":"..."}}}
 
 # poll status until it reaches "completed"
 curl -s http://localhost:3000/api/v1/imports/<importId>
@@ -763,20 +769,25 @@ These are current, verifiable gaps in the implementation — not roadmap items, 
 For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlead-technical-audit.md`
 (not committed — `docs/` is `.gitignore`d, so this resolves only if you have that file locally).
 
-- **Integration coverage is partial.** `pnpm test:int` exercises the real RabbitMQ broker via
-  Testcontainers for import delivery, retry and dead-lettering (`back-end/service-a/test/int/`).
-  `pnpm test:int` also exercises real MongoDB via Testcontainers for archive ingestion —
-  decompression bounds, UTF-8 boundary correctness, payload shape and insert concurrency
-  (`back-end/service-a/test/int/archive-ingestion.int.spec.ts`).
-  Filesystem ownership across the shared archive volume is covered by
-  `back-end/service-a/test/int/storage-ownership.int.spec.ts`.
-  service-b's `pnpm test:int` covers the processing-log stats rollup against real MongoDB —
-  equivalence with the previous aggregation, redelivery idempotency and the retention TTL
-  (`back-end/service-b/test/int/stats-rollup.int.spec.ts`).
-  The Docker volume layout is still not covered at all. There is still no CI config in this repo.
-- **The `service_b_queue.dlq` dead-letter queue has no consumer.** Messages that exhaust
-  `RABBITMQ_MAX_RETRIES` land there and are never processed further. They are, however, now
-  visible: each dead-lettered message is recorded as a `processing-logs` document with `status:
-  'dead-lettered'` (`back-end/service-b/src/processing-log/import-events.controller.ts`'s
-  `recordDeadLetter`), so the backlog can be queried and monitored even though nothing yet
-  reprocesses it.
+- **Integration coverage exercises real infrastructure, but only when someone runs it.**
+  `pnpm test:int` now runs real RabbitMQ, MongoDB and the local filesystem via Testcontainers
+  across six integration specs: `back-end/service-a/test/int/import-delivery.int.spec.ts` (import
+  redelivery, retry, dead-lettering), `import-claim.int.spec.ts` (claim/idempotency semantics),
+  `archive-ingestion.int.spec.ts` (decompression bounds, UTF-8 boundary correctness, payload shape,
+  insert concurrency) and `storage-ownership.int.spec.ts` (filesystem ownership across the shared
+  archive volume); `back-end/service-b/test/int/stats-rollup.int.spec.ts` (rollup equivalence with
+  the previous aggregation, redelivery idempotency, retention TTL) and `report-latency.int.spec.ts`
+  (bounded-time report generation). What's still missing: the Docker volume layout itself is not
+  covered, and there is still no CI config in this repo, so these suites run only when someone runs
+  them locally.
+- **Two dead-letter queues have no consumer.** `service_a_imports_queue.dlq` (added in Phase 1) and
+  `service_b_queue.dlq` both collect messages that exhaust `RABBITMQ_MAX_RETRIES`, and neither is
+  processed further automatically. service-b's dead-lettered events are visible: each one is
+  recorded as a `processing-logs` document with `status: 'dead-lettered'`
+  (`back-end/service-b/src/processing-log/import-events.controller.ts`'s `recordDeadLetter`), so
+  that backlog can be queried and monitored even though nothing yet reprocesses it. service-a's
+  dead-lettered imports have no equivalent visibility record — only the broker-side queue depth.
+- **`/api-docs` is unavailable in production.** `SwaggerModule.setup` is gated behind
+  `!isProduction()` (`back-end/api-gateway/src/swagger.setup.ts`); the compose stack runs with
+  `NODE_ENV=production`, so the interactive docs return `404` there by design — see "Trying it
+  end-to-end" above for the development-mode workaround.

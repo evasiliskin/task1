@@ -140,7 +140,7 @@ describe('ReportsController', () => {
       await flushMicrotasks();
 
       expect(unlinkMock).not.toHaveBeenCalled();
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       expect(existsSync(reportPath)).toBe(true);
     });
 
@@ -215,7 +215,7 @@ describe('ReportsController', () => {
     it('should not delete the outside file, when the RMQ reply reportPath resolves outside the configured report directory', async () => {
       const outsideDirectory = mkdtempSync(join(tmpdir(), 'reports-controller-outside-'));
       const reportPath = join(outsideDirectory, 'report.pdf');
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       writeFileSync(reportPath, '%PDF-1.4 fake report body');
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
@@ -240,7 +240,7 @@ describe('ReportsController', () => {
           .catch(() => undefined);
         await flushMicrotasks();
 
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
         expect(existsSync(reportPath)).toBe(true);
       } finally {
         rmSync(outsideDirectory, { recursive: true, force: true });

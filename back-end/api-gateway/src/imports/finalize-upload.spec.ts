@@ -55,7 +55,7 @@ describe('finalizeUpload', () => {
     });
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.finalPath is derived from this test's own mkdtemp() sandbox and a server-generated UUID, never external input.
     expect(existsSync(result.finalPath)).toBe(true);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
     expect(existsSync(file.path)).toBe(false);
   });
 

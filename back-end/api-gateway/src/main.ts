@@ -1,6 +1,5 @@
 import { type INestApplication, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { FatalError } from '@task1/shared/errors/internal/fatal-error';
 import { CentralizedErrorHandlerService } from '@task1/shared/exception-handling/centralized-error-handler.service';
 import { LoggerService } from '@task1/shared/logger/logger.service';
@@ -12,6 +11,7 @@ import { type Logger } from 'pino';
 import { AppModule } from './app.module.js';
 import appConfig from './config/app.config.js';
 import { applyRequestContext } from './request-context.setup.js';
+import { applySwagger } from './swagger.setup.js';
 
 async function bootstrap(): Promise<void> {
   let app: INestApplication | undefined;
@@ -36,12 +36,12 @@ async function bootstrap(): Promise<void> {
 
     app.enableShutdownHooks();
 
-    const swaggerConfig = new DocumentBuilder().setTitle('Gateway API').setVersion('1.0').build();
-    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api-docs', app, swaggerDocument);
+    const documentationMounted = applySwagger(app);
 
     const { port } = appConfig();
     await app.listen(port);
+
+    bootstrapLogger.info({ documentationMounted }, 'API documentation availability resolved');
 
     // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
     // GlobalExceptionFilter, shutdown notices — belongs to request handling, not to startup, so

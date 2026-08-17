@@ -46,7 +46,7 @@ export async function finalizeUpload(options: IFinalizeUploadOptions): Promise<I
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- both paths are derived from the configured storage directory and a server-generated UUID, never raw external input.
     await rename(file.path, finalPath);
   } catch (error) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- both paths are derived from the configured storage directory and a server-generated UUID, never raw external input.
     await unlink(file.path).catch(() => undefined);
 
     const cause = error instanceof Error ? error : undefined;

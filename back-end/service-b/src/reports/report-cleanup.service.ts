@@ -63,11 +63,11 @@ export class ReportCleanupService implements OnModuleInit, OnModuleDestroy {
       const path = join(this.reportConfiguration.dir, entry);
 
       try {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is built from validated env config and a filename read out of that same directory.
         const stats = await stat(path);
 
         if (stats.mtimeMs < cutoff) {
-          // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+          // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is built from validated env config and a filename read out of that same directory.
           await unlink(path);
           removed += 1;
         }

@@ -73,7 +73,7 @@ export class StorageCleanupService implements OnModuleInit {
         return false;
       }
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is built from validated env config and a filename read out of that same directory.
       await unlink(path);
 
       return true;

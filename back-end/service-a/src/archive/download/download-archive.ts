@@ -75,13 +75,13 @@ async function attemptDownload(
 
     await streamToTemporaryFile(responseStream, temporaryPath, options.totalTimeoutMs);
   } catch (error) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- temporaryPath is derived from validated storage config and a server-generated importId, never raw external input.
     await unlink(temporaryPath).catch(() => undefined);
 
     throw toDownloadError(error, url);
   }
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- finalPath is derived from validated storage config and a server-generated importId, never raw external input.
   await rename(temporaryPath, finalPath);
 
   return { filePath: finalPath };

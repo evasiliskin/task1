@@ -23,7 +23,7 @@ describe('UploadCleanupService', () => {
 
     const when = new Date(Date.now() - hoursAgo * 3_600_000);
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
     utimesSync(path, when, when);
 
     return path;

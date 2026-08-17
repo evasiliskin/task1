@@ -24,7 +24,7 @@ export async function buildReport(
 
   try {
     await new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reportPath is built from the configured report directory and a server-generated id, never raw external input.
       const writeStream = createWriteStream(reportPath);
 
       const fail = (error: Error): void => {
@@ -50,7 +50,7 @@ export async function buildReport(
       document.end();
     });
   } catch (error) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reportPath is the file this function just created, under the configured report directory.
     await unlink(reportPath).catch(() => undefined);
 
     throw error;

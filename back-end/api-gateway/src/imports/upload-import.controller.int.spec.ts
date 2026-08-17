@@ -174,7 +174,7 @@ describe('UploadImportController (HTTP Integration)', () => {
         .attach('file', Buffer.from('not gzip at all'), 'archive.json.gz')
         .expect(400);
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       expect(readdirSync(storageDirectory)).toHaveLength(filesBefore);
     });
 
