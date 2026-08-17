@@ -51,6 +51,34 @@ describe('InFlightImportRegistry', () => {
     await expect(draining).resolves.toBe(true);
   });
 
+  it('should wait for operations started during the drain, when the consumer keeps delivering', async () => {
+    const registry = new InFlightImportRegistry();
+    let releaseFirst = (): void => undefined;
+    let releaseSecond = (): void => undefined;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+
+    registry.track(() => first).catch(() => undefined);
+
+    const draining = registry.drain(5000);
+
+    registry.track(() => second).catch(() => undefined);
+    releaseFirst();
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(registry.size).toBe(1);
+
+    releaseSecond();
+
+    await expect(draining).resolves.toBe(true);
+    expect(registry.size).toBe(0);
+  });
+
   it('should give up, when the drain timeout elapses', async () => {
     const registry = new InFlightImportRegistry();
 

@@ -7,10 +7,13 @@ import { type ImportOrchestrationService } from '../import-orchestration.service
 
 import { DownloadImportController } from './download-import.controller.js';
 
-function buildRmqContext(ack: ReturnType<typeof vi.fn> = vi.fn()): RmqContext {
+function buildRmqContext(ack: ReturnType<typeof vi.fn> = vi.fn(), retryCount?: number): RmqContext {
   return {
     getChannelRef: () => ({ ack, nack: vi.fn() }),
-    getMessage: () => ({ fields: { deliveryTag: 1 } }),
+    getMessage: () => ({
+      fields: { deliveryTag: 1 },
+      properties: { headers: retryCount === undefined ? {} : { 'x-retry-count': retryCount } },
+    }),
   } as unknown as RmqContext;
 }
 
@@ -54,7 +57,22 @@ describe('DownloadImportController', () => {
 
     await controller.handleDownload(validPayload, buildRmqContext());
 
-    expect(importDownload).toHaveBeenCalledWith(validPayload.dateHour, validPayload.importId);
+    expect(importDownload).toHaveBeenCalledWith(validPayload.dateHour, validPayload.importId, 0);
+  });
+
+  it('should pass the delivery retry count on, when the message carries x-retry-count', async () => {
+    const importDownload = vi.fn().mockResolvedValue({
+      eventsProcessed: 1,
+      validEvents: 1,
+      invalidEvents: 0,
+      duplicateEvents: 0,
+      errorCount: 0,
+    });
+    const { controller } = buildController(importDownload);
+
+    await controller.handleDownload(validPayload, buildRmqContext(vi.fn(), 2));
+
+    expect(importDownload).toHaveBeenCalledWith(validPayload.dateHour, validPayload.importId, 2);
   });
 
   it('should ack and not retry, when another consumer already claimed the import', async () => {

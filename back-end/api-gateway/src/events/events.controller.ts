@@ -7,13 +7,13 @@ import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { listResult } from '@task1/shared/pagination/list-result';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ApiListResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { sendRpcMessage } from '../rmq/send-rpc-message.js';
 
 import { SearchEventsRequestSchema } from './schemas/search-events-request.schema.js';
 import {
@@ -59,11 +59,13 @@ export class EventsController {
     @ModelBinder(SearchEventsRequestSchema)
     bound: BoundRequest<typeof SearchEventsRequestSchema>,
   ): Promise<SearchEventsResponse> {
-    const result = await firstValueFrom(
-      this.propagatingClient
-        .send<ICursorPage<IEventView>>(this.serviceAClient, RPC_PATTERNS.EVENTS_SEARCH, bound.data)
-        .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
-    );
+    const result = await sendRpcMessage<ICursorPage<IEventView>>({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceAClient,
+      pattern: RPC_PATTERNS.EVENTS_SEARCH,
+      payload: bound.data,
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
+    });
 
     return listResult(result.data, { nextCursor: result.nextCursor });
   }

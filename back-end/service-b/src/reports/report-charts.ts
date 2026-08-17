@@ -15,8 +15,7 @@ const MIN_AXIS_TICKS = 2;
 const TICK_LABEL_OFFSET_Y = 6;
 const AXIS_NAME_OFFSET_Y = 22;
 const AXIS_LABEL_FONT_SIZE = 8;
-const AGGREGATE_Y_AXIS_NAME = 'Events';
-const SINGLE_IMPORT_Y_AXIS_NAME = 'Duration (ms)';
+const Y_AXIS_NAME = 'Events';
 const X_AXIS_NAME = 'Time (UTC)';
 
 const BAR_CHART_HEIGHT = 120;
@@ -28,7 +27,7 @@ const INVALID_BAR_COLOR = '#F9A825';
 const ERROR_BAR_COLOR = '#C62828';
 
 const AGGREGATE_CHART_TITLE = 'Events Processed Over Time';
-const SINGLE_IMPORT_CHART_TITLE = 'Processing Duration (this import)';
+const SINGLE_IMPORT_CHART_TITLE = 'Events Processed (this import)';
 
 interface IBreakdownBar {
   label: string;
@@ -120,17 +119,10 @@ function drawXAxisTicks(
   pdf.x = originX;
 }
 
-function drawAxisNames(
-  pdf: PdfDocument,
-  originX: number,
-  originY: number,
-  isAggregate: boolean,
-): void {
+function drawAxisNames(pdf: PdfDocument, originX: number, originY: number): void {
   pdf.x = originX - AXIS_LABEL_OFFSET_X;
   pdf.y = originY - AXIS_LABEL_FONT_SIZE - 2;
-  pdf
-    .fontSize(AXIS_LABEL_FONT_SIZE)
-    .text(isAggregate ? AGGREGATE_Y_AXIS_NAME : SINGLE_IMPORT_Y_AXIS_NAME);
+  pdf.fontSize(AXIS_LABEL_FONT_SIZE).text(Y_AXIS_NAME);
 
   pdf
     .fontSize(AXIS_LABEL_FONT_SIZE)
@@ -220,7 +212,7 @@ export function drawEventsOverTimeChart(
 
   drawYAxisLabels(pdf, originX, originY, maxValue);
   drawXAxisTicks(pdf, timeSeries, originX, originY);
-  drawAxisNames(pdf, originX, originY, isAggregate);
+  drawAxisNames(pdf, originX, originY);
 
   pdf.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
 }

@@ -4,8 +4,6 @@ import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { type Collection } from 'mongodb';
 
-import mongodbConfig, { type MongodbConfiguration } from '../../config/mongodb.config.js';
-import { ensureProcessingLogRetentionIndex } from '../ensure-processing-log-indexes.js';
 import { PROCESSING_LOG_COLLECTION } from '../processing-log-collection.provider.js';
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
@@ -27,18 +25,12 @@ export class StatsRollupSeedService implements OnApplicationBootstrap {
     private readonly rollups: Collection<IStatsRollupDocument>,
     private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
-    @Inject(mongodbConfig.KEY) private readonly mongodbConfiguration: MongodbConfiguration,
   ) {
     this.logger = loggerService.getLogger(StatsRollupSeedService.name);
   }
 
   public async onApplicationBootstrap(): Promise<void> {
     await this.requestContextService.runAsRoot('stats-rollup-seed', () => this.seed());
-
-    await ensureProcessingLogRetentionIndex(
-      this.processingLogs,
-      this.mongodbConfiguration.processingLogRetentionMs,
-    );
   }
 
   private readonly logger: AppLogger;

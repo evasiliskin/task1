@@ -224,7 +224,7 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(serviceAImportsClient.emit).not.toHaveBeenCalled();
     });
 
-    it('should return 503, when the claim RPC times out', async () => {
+    it('should return 504, in the same shape as every other downstream timeout, when the claim RPC times out', async () => {
       const key = '3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a51';
       serviceAClient.send.mockReturnValue(new Observable<never>());
 
@@ -233,8 +233,8 @@ describe('TriggerImportController (HTTP Integration)', () => {
         .set('Idempotency-Key', key)
         .send({ dateHour: '2026-08-11-0' });
 
-      expect(response.status).toBe(503);
-      expect(response.body).toMatchObject({ status: 'FAILED', code: 503 });
+      expect(response.status).toBe(504);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 504 });
     });
   });
 });

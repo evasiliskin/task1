@@ -236,7 +236,11 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
   let httpServer: App;
   let serviceAClient: { emit: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
-  let redisClient: { ping: ReturnType<typeof vi.fn> };
+  let redisClient: {
+    ping: ReturnType<typeof vi.fn>;
+    connect: ReturnType<typeof vi.fn>;
+    quit: ReturnType<typeof vi.fn>;
+  };
   let logged: LoggedCall[];
 
   function capture(level: LoggedCall['level']) {
@@ -252,7 +256,11 @@ describe('HttpLoggingMiddleware with the production route prefix (HTTP Integrati
       send: vi.fn(() => of({ importId: IMPORT_ID })),
     };
     serviceBClient = { send: vi.fn(() => of({ status: 'ok' })) };
-    redisClient = { ping: vi.fn().mockResolvedValue('PONG') };
+    redisClient = {
+      ping: vi.fn().mockResolvedValue('PONG'),
+      connect: vi.fn().mockResolvedValue(undefined),
+      quit: vi.fn().mockResolvedValue('OK'),
+    };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [

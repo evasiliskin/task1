@@ -37,6 +37,7 @@ async function bootstrap(): Promise<void> {
         },
         noAck: false,
         prefetchCount,
+        persistent: true,
       },
       bufferLogs: true,
     });

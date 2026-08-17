@@ -1,4 +1,4 @@
-import { type Collection } from 'mongodb';
+import { type Collection, MongoServerError } from 'mongodb';
 
 import {
   ensureProcessingLogIndexes,
@@ -114,5 +114,37 @@ describe('ensureProcessingLogRetentionIndex', () => {
     await ensureProcessingLogRetentionIndex({ createIndex } as never, 2_592_000_000);
 
     expect(createIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it('should modify the existing index with collMod, when the retention differs from the live index', async () => {
+    const conflict = Object.assign(new MongoServerError({ message: 'conflict' }), { code: 85 });
+    const command = vi.fn().mockResolvedValue({ ok: 1 });
+    const collection = {
+      createIndex: vi.fn().mockRejectedValue(conflict),
+      collectionName: 'processing-logs',
+      db: { command },
+    } as never;
+
+    await expect(
+      ensureProcessingLogRetentionIndex(collection, 86_400_000),
+    ).resolves.toBeUndefined();
+
+    expect(command).toHaveBeenCalledWith({
+      collMod: 'processing-logs',
+      index: { keyPattern: { timestamp: 1 }, expireAfterSeconds: 86_400 },
+    });
+  });
+
+  it('should propagate the error, when index creation fails for an unrelated reason', async () => {
+    const failure = new Error('connection refused');
+    const command = vi.fn();
+    const collection = {
+      createIndex: vi.fn().mockRejectedValue(failure),
+      collectionName: 'processing-logs',
+      db: { command },
+    } as never;
+
+    await expect(ensureProcessingLogRetentionIndex(collection, 86_400_000)).rejects.toBe(failure);
+    expect(command).not.toHaveBeenCalled();
   });
 });

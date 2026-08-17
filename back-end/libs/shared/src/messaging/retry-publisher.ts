@@ -4,6 +4,7 @@ import { type AppLogger } from '../logger/app-logger.js';
 import { type ILoggerFactory } from '../logger/logger-factory.interface.js';
 import { LOGGER_FACTORY } from '../logger/logger.tokens.js';
 
+import { publishConfirmed } from './confirm-publish.js';
 import { QUEUE_TOPOLOGY, RETRY_POLICY } from './messaging.tokens.js';
 import { type IQueueTopology } from './queue-topology.js';
 import { computeRetryDelayMs } from './retry-delay.util.js';
@@ -34,7 +35,6 @@ export class RetryPublisher {
     this.logger = loggerFactory.getLogger(RetryPublisher.name);
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await -- the method is async by contract (RetryPublisher may gain an async publish step later); every call site already awaits it.
   public async settleFailure(
     channel: IRmqChannel,
     message: IRmqMessage,
@@ -44,13 +44,9 @@ export class RetryPublisher {
     const isExhausted = attempt > this.policy.maxRetries;
 
     try {
-      const accepted = isExhausted
+      await (isExhausted
         ? this.publishDeadLetter(message, attempt, channel)
-        : this.publishRetry(message, attempt, channel);
-
-      if (!accepted) {
-        return this.rejectToDeadLetterExchange(channel, message, attempt, error);
-      }
+        : this.publishRetry(message, attempt, channel));
     } catch (republishError) {
       this.logger.error({ attempt }, REPUBLISH_FAILED_LOG, republishError);
 
@@ -70,21 +66,35 @@ export class RetryPublisher {
 
   private readonly logger: AppLogger;
 
-  private publishRetry(message: IRmqMessage, attempt: number, channel: IRmqChannel): boolean {
+  private async publishRetry(
+    message: IRmqMessage,
+    attempt: number,
+    channel: IRmqChannel,
+  ): Promise<void> {
     const delayMs = computeRetryDelayMs(
       attempt,
       this.policy.retryDelayMs,
       this.policy.maxRetryDelayMs,
     );
 
-    return channel.sendToQueue(this.topology.retry, message.content, {
+    await publishConfirmed({
+      channel,
+      queue: this.topology.retry,
+      content: message.content,
       headers: buildRetryHeaders(message, attempt),
       expiration: String(delayMs),
     });
   }
 
-  private publishDeadLetter(message: IRmqMessage, attempt: number, channel: IRmqChannel): boolean {
-    return channel.sendToQueue(this.topology.deadLetter, message.content, {
+  private async publishDeadLetter(
+    message: IRmqMessage,
+    attempt: number,
+    channel: IRmqChannel,
+  ): Promise<void> {
+    await publishConfirmed({
+      channel,
+      queue: this.topology.deadLetter,
+      content: message.content,
       headers: buildRetryHeaders(message, attempt),
     });
   }

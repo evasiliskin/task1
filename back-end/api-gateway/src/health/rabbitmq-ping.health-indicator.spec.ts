@@ -57,6 +57,22 @@ describe('RabbitMqPingHealthIndicator', () => {
     expect(result).toEqual(expectedResult);
   });
 
+  it('should report the indicator as down with the reported details, when the target service replies that its own dependencies are unhealthy', async () => {
+    const expectedResult = { 'service-b': { status: 'down' } };
+    downMock.mockReturnValue(expectedResult);
+
+    const details = { mongodb: { status: 'down' }, redis: { status: 'up' } };
+    const client = {
+      send: vi.fn().mockReturnValue(of({ status: 'error', details })),
+    } as unknown as ClientProxy;
+
+    const result = await runWithinContext(() => indicator.isHealthy('service-b', client));
+
+    expect(result).toEqual(expectedResult);
+    expect(downMock).toHaveBeenCalledWith({ message: expect.any(String) as string, details });
+    expect(upMock).not.toHaveBeenCalled();
+  });
+
   it('should report the indicator as down, when the target service errors', async () => {
     const expectedResult = {
       'service-b': { status: 'down', message: 'connection refused' },

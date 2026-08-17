@@ -32,6 +32,7 @@ function buildRmqOptions(url: string, queue: string, prefetchCount: number): Mic
       },
       noAck: false,
       prefetchCount,
+      persistent: true,
     },
   };
 }

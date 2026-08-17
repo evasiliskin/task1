@@ -7,8 +7,15 @@ import { type ISettleImportOptions, settleImportResult } from './import-settleme
 function buildOptions(overrides: Partial<ISettleImportOptions> = {}): ISettleImportOptions {
   return {
     run: vi.fn().mockResolvedValue(undefined),
-    channel: { ack: vi.fn(), nack: vi.fn(), sendToQueue: vi.fn(), assertQueue: vi.fn() },
-    message: { content: Buffer.from('{}'), properties: {} },
+    channel: {
+      ack: vi.fn(),
+      nack: vi.fn(),
+      sendToQueue: vi.fn(),
+      assertQueue: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    },
+    message: { content: Buffer.from('{}'), properties: { headers: {} } },
     retryPublisher: {
       settleFailure: vi.fn().mockResolvedValue('retried'),
     } as unknown as RetryPublisher,
@@ -28,6 +35,24 @@ describe('settleImportResult', () => {
     expect(options.channel.ack).toHaveBeenCalledWith(options.message);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- referencing the mocked method for assertion only, never calling it unbound.
     expect(options.retryPublisher.settleFailure).not.toHaveBeenCalled();
+  });
+
+  it('should run the import with a retry count of zero, when the delivery carries no retry header', async () => {
+    const options = buildOptions();
+
+    await settleImportResult(options);
+
+    expect(options.run).toHaveBeenCalledWith(0);
+  });
+
+  it('should run the import with the delivery retry count, when the message carries x-retry-count', async () => {
+    const options = buildOptions({
+      message: { content: Buffer.from('{}'), properties: { headers: { 'x-retry-count': 2 } } },
+    });
+
+    await settleImportResult(options);
+
+    expect(options.run).toHaveBeenCalledWith(2);
   });
 
   it('should ack without retrying, when the import was already claimed', async () => {

@@ -37,15 +37,19 @@ export class StatsMetricsReader {
   }
 
   public async readAverageProcessingDuration(): Promise<IProcessingDurationResult> {
+    const retentionMs = this.redisConfiguration.metricsRetentionMs;
+
     try {
       const reply = (await this.client.call(
         'TS.RANGE',
         METRIC_PROCESSING_DURATION,
-        '-',
+        Date.now() - retentionMs,
         '+',
+        'ALIGN',
+        'start',
         'AGGREGATION',
         'avg',
-        this.redisConfiguration.metricsRetentionMs,
+        retentionMs,
       )) as TsRangeReply;
 
       const lastSample = reply.at(-1);
@@ -62,16 +66,19 @@ export class StatsMetricsReader {
   }
 
   public async readEventsTimeSeries(): Promise<IEventsTimeSeriesResult> {
-    const bucketMs = Math.ceil(this.redisConfiguration.metricsRetentionMs / MAX_TIME_SERIES_POINTS);
+    const retentionMs = this.redisConfiguration.metricsRetentionMs;
+    const bucketMs = Math.ceil(retentionMs / MAX_TIME_SERIES_POINTS);
 
     try {
       const reply = (await this.client.call(
         'TS.RANGE',
         METRIC_EVENTS_PROCESSED,
-        '-',
+        Date.now() - retentionMs,
         '+',
+        'ALIGN',
+        'start',
         'AGGREGATION',
-        'avg',
+        'sum',
         bucketMs,
       )) as TsRangeReply;
 

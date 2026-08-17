@@ -4,13 +4,13 @@ import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { sendRpcMessage } from '../rmq/send-rpc-message.js';
 
 import { GetStatsRequestSchema } from './schemas/get-stats-request.schema.js';
 import { type StatsResponse, StatsResponseSchema } from './schemas/stats-response.schema.js';
@@ -33,10 +33,12 @@ export class StatsController {
   public async getStats(
     @ModelBinder(GetStatsRequestSchema) bound: BoundRequest<typeof GetStatsRequestSchema>,
   ): Promise<StatsResponse> {
-    return await firstValueFrom(
-      this.propagatingClient
-        .send<StatsResponse>(this.serviceBClient, RPC_PATTERNS.STATS_GET, bound.data)
-        .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
-    );
+    return await sendRpcMessage<StatsResponse>({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceBClient,
+      pattern: RPC_PATTERNS.STATS_GET,
+      payload: bound.data,
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
+    });
   }
 }

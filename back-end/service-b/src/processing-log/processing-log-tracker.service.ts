@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { type Collection } from 'mongodb';
 
@@ -20,9 +22,11 @@ export class ProcessingLogTracker {
       { upsert: true },
     );
 
+    const rollupId = randomUUID();
+
     const claim = await this.collection.updateOne(
-      { importId: entry.importId, status: entry.status, rolledUpAt: { $exists: false } },
-      { $set: { rolledUpAt: new Date() } },
+      { importId: entry.importId, status: entry.status, rollupId: { $exists: false } },
+      { $set: { rollupId } },
     );
 
     if (claim.modifiedCount !== 1) {
@@ -33,11 +37,16 @@ export class ProcessingLogTracker {
       await this.statsRollup.applyEntry(entry);
     } catch (error) {
       await this.collection.updateOne(
-        { importId: entry.importId, status: entry.status },
-        { $unset: { rolledUpAt: '' } },
+        { importId: entry.importId, status: entry.status, rollupId },
+        { $unset: { rollupId: '' } },
       );
 
       throw error;
     }
+
+    await this.collection.updateOne(
+      { importId: entry.importId, status: entry.status, rollupId },
+      { $set: { rolledUpAt: new Date() } },
+    );
   }
 }

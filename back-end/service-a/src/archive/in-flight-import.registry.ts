@@ -19,10 +19,30 @@ export class InFlightImportRegistry {
   }
 
   public async drain(timeoutMs: number): Promise<boolean> {
-    if (this.operations.size === 0) {
-      return true;
+    const deadline = Date.now() + timeoutMs;
+
+    while (this.operations.size > 0) {
+      const remainingMs = deadline - Date.now();
+
+      if (remainingMs <= 0) {
+        return false;
+      }
+
+      if (!(await this.awaitCurrentOperations(remainingMs))) {
+        return false;
+      }
     }
 
+    return true;
+  }
+
+  public get size(): number {
+    return this.operations.size;
+  }
+
+  private readonly operations = new Set<Promise<void>>();
+
+  private async awaitCurrentOperations(timeoutMs: number): Promise<boolean> {
     let timer: NodeJS.Timeout | undefined;
     const timedOut = new Promise<false>((resolve) => {
       timer = setTimeout(() => resolve(false), timeoutMs);
@@ -36,10 +56,4 @@ export class InFlightImportRegistry {
       }
     }
   }
-
-  public get size(): number {
-    return this.operations.size;
-  }
-
-  private readonly operations = new Set<Promise<void>>();
 }
