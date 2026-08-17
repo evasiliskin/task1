@@ -9,14 +9,11 @@ import { RedisConnectionService } from '@task1/shared/redis/redis-connection.ser
 
 import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
-import { MetricsService } from './metrics.service.js';
-
 @Global()
 @Module({
   imports: [LoggerModule],
   providers: [
     RedisConnectionService,
-    MetricsService,
     {
       provide: REDIS_CLIENT,
       inject: [redisConfig.KEY, LOGGER_FACTORY],
@@ -24,6 +21,6 @@ import { MetricsService } from './metrics.service.js';
         createRedisClient(config.url, loggerFactory),
     },
   ],
-  exports: [REDIS_CLIENT, MetricsService],
+  exports: [REDIS_CLIENT],
 })
 export class RedisModule {}

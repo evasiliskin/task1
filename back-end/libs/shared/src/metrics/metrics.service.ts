@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import redisConfig, { type RedisConfiguration } from '@task1/shared/config/redis.config';
-import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/logger.service';
 import { type Redis } from 'ioredis';
 
-import { REDIS_CLIENT } from '../infra-clients.tokens.js';
+import redisConfig, { type RedisConfiguration } from '../config/redis.config.js';
+import { REDIS_CLIENT } from '../infra/client-tokens.js';
+import { type AppLogger } from '../logger/app-logger.js';
+import { LoggerService } from '../logger/logger.service.js';
 
 const AUTOMATIC_TIMESTAMP = '*';
 const FAILED_METRIC_LOG_MESSAGE = 'Failed to record metric';

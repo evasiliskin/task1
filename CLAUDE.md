@@ -21,8 +21,12 @@ Ground truth before applying the policies below — keep this section in sync wi
   accessed directly via the `mongodb` driver (no ORM, no Repository pattern). The gateway persists
   nothing of its own. There is no general-purpose persistence layer, and none should be introduced
   speculatively — see "Persistence" and "Forbidden Without Explicit Approval" below.
-- **Redis**: used by `service-a` for RedisTimeSeries pipeline metrics (`TS.ADD`), and by the
-  gateway/all services for health-check pings. Not used as a cache.
+- **Redis**: used for RedisTimeSeries metrics (`TS.ADD`), and by the gateway/all services for
+  health-check pings. Not used as a cache. RedisTimeSeries carries two kinds of data: `service-a`'s
+  import-pipeline domain metrics (`service_a.archive.*`, unchanged), and — from the globally
+  registered `RmqMetricsInterceptor` (`@task1/shared/metrics/rmq`) in both `service-a` and
+  `service-b` — per-pattern transport counters (`<service>.rmq.<pattern>.requests`/`.errors`) for
+  every RMQ message pattern, `health.check` excluded.
 - **Authentication**: `AuthGuard` (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered
   globally, but is an **intentional placeholder** — its `isAuthenticated()` unconditionally
   returns `true`, so every endpoint currently responds normally with no credentials supplied. This

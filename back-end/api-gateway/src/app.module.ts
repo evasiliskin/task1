@@ -16,6 +16,7 @@ import rabbitmqConfig from './config/rabbitmq.config.js';
 import redisConfig from './config/redis.config.js';
 import reportConfig from './config/report.config.js';
 import storageConfig from './config/storage.config.js';
+import swaggerConfig from './config/swagger.config.js';
 import throttleConfig from './config/throttle.config.js';
 import uploadConfig from './config/upload.config.js';
 import { ContractModule } from './contract/contract.module.js';
@@ -41,6 +42,7 @@ import { StatsModule } from './stats/stats.module.js';
         storageConfig,
         uploadConfig,
         reportConfig,
+        swaggerConfig,
         throttleConfig,
       ],
     }),

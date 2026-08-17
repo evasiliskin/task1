@@ -290,8 +290,10 @@ export it into the shell's actual environment before running `pnpm dev:*` (or us
   imported GitHub events and import-run tracking, service-b persists processing-log entries (see
   "MongoDB indexes" below); the gateway does not use MongoDB at all — it has no database of its
   own and no MongoDB health check
-- Redis: service-a records pipeline metrics via RedisTimeSeries (see "RedisTimeSeries metrics"
-  below); the gateway only pings it for health checks, no caching is implemented against it
+- Redis: service-a records import-pipeline domain metrics via RedisTimeSeries, and both
+  service-a and service-b record per-pattern RMQ transport counters via the globally
+  registered `RmqMetricsInterceptor` (see "RedisTimeSeries metrics" below); the gateway only
+  pings it for health checks, no caching is implemented against it
 - to point the gateway at a non-default `REDIS_URL` when running outside Docker, export it into
   the shell environment before `pnpm dev:api-gateway` (see the `.env` note above)
 
@@ -372,6 +374,19 @@ listens for HTTP traffic.
 Uploaded archives and generated PDF reports move as file bytes over Docker-Compose-managed shared
 volumes (`archive-storage`, `report-storage`), never through RabbitMQ or an application `Buffer` —
 only a small `{importId, filePath}`-shaped message crosses the broker for either.
+
+### Stored archive format
+
+GH Archive publishes each hourly file as gzip-encoded newline-delimited JSON at
+https://data.gharchive.org/<YYYY-MM-DD-H>.json.gz — one complete JSON event object per line, the
+whole stream gzip-compressed. service-a stores that payload byte-for-byte as
+STORAGE_DIR/<importId>.json.gz; the suffix names both facts, JSON content under gzip encoding.
+
+It is kept compressed deliberately. One hourly archive is roughly 0.5-2 GB decompressed and
+ARCHIVE_MAX_DECOMPRESSED_BYTES permits up to 4 GiB, so storing the expanded form would multiply the
+archive-storage volume for no functional gain: every consumer decompresses on read
+(createGunzip() in process-archive.ts), and the upload endpoint accepts the same format, verifying
+it by gzip magic bytes rather than by filename.
 
 ### Memory safety
 
@@ -477,16 +492,24 @@ in application memory first. Every metric key has a retention policy (7 days), s
 memory is self-bounding. A Redis failure is logged and swallowed, never allowed to fail the
 primary import.
 
+Independently of those domain metrics, every RMQ message pattern in `service-a` and `service-b` is
+metered by the globally registered `RmqMetricsInterceptor` (`@task1/shared/metrics/rmq`), which
+records `<service>.rmq.<pattern>.requests` and `<service>.rmq.<pattern>.errors` via the same
+`TS.ADD` mechanism — `health.check` is excluded from this instrumentation. This is transport-level
+coverage of every message pattern, distinct from the `service_a.archive.*` domain metrics above:
+those are unchanged by it and remain what `StatsMetricsReader` and the PDF report read.
+
 ### Trying it end-to-end
 
 There is no frontend — every capability is reachable via `curl` or the gateway's Swagger UI
-(`http://localhost:3000/api-docs`). The Swagger UI is served only outside production
-(`swagger.setup.ts`) — `SwaggerModule.setup` mounts it as Express-level middleware, so the global
-`AuthGuard` never runs for it, and it would otherwise publish the whole internal API surface
-unauthenticated. The `docker:up` compose stack runs the gateway with `NODE_ENV=production`, so
-`/api-docs` returns 404 there; to explore the API through the UI, run the gateway with
-`pnpm dev:api-gateway` instead (see "Getting started" above). The `curl` flow below is unaffected
-either way and works against the compose stack unchanged. All routes below other than `/health*`
+(`http://localhost:3000/api-docs`). The Swagger UI is gated behind the `SWAGGER_ENABLED` flag
+(`swagger.setup.ts`, `swagger.config.ts`), which defaults to `!isProduction()` — `SwaggerModule.setup`
+mounts it as Express-level middleware, so the global `AuthGuard` never runs for it, and it would
+otherwise publish the whole internal API surface unauthenticated. The `docker:up` compose stack
+runs the gateway with `NODE_ENV=production` but sets `SWAGGER_ENABLED=true` explicitly, so
+`/api-docs` **is** reachable there; a production deployment that leaves the variable unset still
+gets `404`. The `curl` flow below works either way and is unaffected by the flag. All routes below
+other than `/health*`
 are declared as requiring authentication, but the current `AuthGuard` stub lets every request
 through (see "Authentication" above), so this flow runs end-to-end on an unmodified checkout with
 no credentials:
@@ -787,7 +810,11 @@ For a full third-party assessment see `docs/superpowers/audit-2026-08-13-teamlea
   (`back-end/service-b/src/processing-log/import-events.controller.ts`'s `recordDeadLetter`), so
   that backlog can be queried and monitored even though nothing yet reprocesses it. service-a's
   dead-lettered imports have no equivalent visibility record — only the broker-side queue depth.
-- **`/api-docs` is unavailable in production.** `SwaggerModule.setup` is gated behind
-  `!isProduction()` (`back-end/api-gateway/src/swagger.setup.ts`); the compose stack runs with
-  `NODE_ENV=production`, so the interactive docs return `404` there by design — see "Trying it
-  end-to-end" above for the development-mode workaround.
+- **`/api-docs` is reachable under compose, but gated in production.** `SwaggerModule.setup` is
+  controlled by the `SWAGGER_ENABLED` flag (`back-end/api-gateway/src/swagger.setup.ts`,
+  `swagger.config.ts`), which defaults to `!isProduction()`; the compose stack runs with
+  `NODE_ENV=production` but sets `SWAGGER_ENABLED=true`, so `http://localhost:3000/api-docs` is
+  reachable after `pnpm docker:up`. A production deployment that leaves `SWAGGER_ENABLED` unset
+  still gets `404` by design — the `AuthGuard` never runs for the Express-level Swagger middleware
+  and helmet's CSP is deliberately relaxed there, so the flag is opt-in rather than defaulting open
+  in production. See "Trying it end-to-end" above.

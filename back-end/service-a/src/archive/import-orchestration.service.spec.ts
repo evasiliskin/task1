@@ -1,9 +1,8 @@
 import { type ClientProxy } from '@nestjs/microservices';
 import { type LoggerService } from '@task1/shared/logger/logger.service';
+import { type MetricsService } from '@task1/shared/metrics/metrics.service';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-
-import { type MetricsService } from '../infra/redis/metrics.service.js';
 
 import { type ArchiveDownloadService } from './download/archive-download.service.js';
 import type * as importArchiveModule from './import-archive.js';

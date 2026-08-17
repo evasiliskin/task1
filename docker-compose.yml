@@ -113,6 +113,7 @@ services:
     environment:
       <<: *rabbitmq_url
       SERVICE_NAME: api-gateway
+      SWAGGER_ENABLED: "true"
       PORT: 3000
       RABBITMQ_SERVICE_B_QUEUE: service_b_queue
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue

@@ -6,6 +6,7 @@ import redisConfig from '@task1/shared/config/redis.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/rmq/exception-handling.module';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
 import { MessagingModule } from '@task1/shared/messaging/messaging.module';
+import { MetricsModule } from '@task1/shared/metrics/rmq/metrics.module';
 import { RequestContextModule } from '@task1/shared/request-context/rmq/request-context.module';
 
 import mongodbConfig from './config/mongodb.config.js';
@@ -41,6 +42,7 @@ import { ReportsModule } from './reports/reports.module.js';
     }),
     MongoModule,
     RedisModule,
+    MetricsModule,
     HealthModule,
     ProcessingLogModule,
     ReportsModule,

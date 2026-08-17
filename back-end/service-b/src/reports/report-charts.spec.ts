@@ -4,6 +4,8 @@ import {
   drawEventsOverTimeChart,
   drawStatusBreakdownChart,
   drawSummarySection,
+  formatAxisTimestamp,
+  selectTickIndices,
 } from './report-charts.js';
 
 function buildFakeDoc(extraMethods: string[] = []): Record<string, unknown> {
@@ -159,7 +161,7 @@ describe('drawEventsOverTimeChart', () => {
     expect(doc.text).toHaveBeenCalledWith('0');
   });
 
-  it('should title the chart "Processing Duration (this import)" instead of drawing axis labels, when isAggregate is false and a single point is given', () => {
+  it('should title the chart "Processing Duration (this import)" and label the axis, when isAggregate is false and a single point is given', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
     drawEventsOverTimeChart(
@@ -171,7 +173,8 @@ describe('drawEventsOverTimeChart', () => {
     expect(doc.text).toHaveBeenCalledWith('Processing Duration (this import)', {
       underline: true,
     });
-    expect(doc.text).not.toHaveBeenCalledWith('10');
+    expect(doc.text).toHaveBeenCalledWith('10');
+    expect(doc.text).toHaveBeenCalledWith('0');
     expect(doc.circle).toHaveBeenCalledTimes(1);
   });
 
@@ -184,7 +187,7 @@ describe('drawEventsOverTimeChart', () => {
       true,
     );
 
-    expect(doc.y).toBe(100 + 120 + 20);
+    expect(doc.y).toBe(100 + 120 + 45);
   });
 
   it('should draw one axis line and one polyline, when 3 points are given', () => {
@@ -214,7 +217,69 @@ describe('drawEventsOverTimeChart', () => {
       true,
     );
 
-    expect(doc.y).toBe(100 + 120 + 20);
+    expect(doc.y).toBe(100 + 120 + 45);
+  });
+
+  it('should render a dated tick label for the first and last point, when multiple points are given', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
+
+    drawEventsOverTimeChart(
+      doc as never,
+      [
+        { timestamp: '2026-08-11T00:00:00.000Z', value: 10 },
+        { timestamp: '2026-08-12T06:30:00.000Z', value: 20 },
+      ],
+      true,
+    );
+
+    const rendered = (
+      doc.text as ReturnType<
+        typeof vi.fn<(text: string, options?: Record<string, unknown>) => unknown>
+      >
+    ).mock.calls.map((call) => call[0]);
+
+    expect(rendered).toContain('08-11 00:00');
+    expect(rendered).toContain('08-12 06:30');
+  });
+
+  it('should name both axes with the aggregate metric, when isAggregate is true', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke']);
+
+    drawEventsOverTimeChart(
+      doc as never,
+      [
+        { timestamp: '2026-08-11T00:00:00.000Z', value: 10 },
+        { timestamp: '2026-08-11T01:00:00.000Z', value: 20 },
+      ],
+      true,
+    );
+
+    const rendered = (
+      doc.text as ReturnType<
+        typeof vi.fn<(text: string, options?: Record<string, unknown>) => unknown>
+      >
+    ).mock.calls.map((call) => call[0]);
+
+    expect(rendered).toContain('Events');
+    expect(rendered).toContain('Time (UTC)');
+  });
+
+  it('should name the y-axis with the duration metric, when isAggregate is false', () => {
+    const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
+
+    drawEventsOverTimeChart(
+      doc as never,
+      [{ timestamp: '2026-08-11T00:00:00.000Z', value: 10 }],
+      false,
+    );
+
+    const rendered = (
+      doc.text as ReturnType<
+        typeof vi.fn<(text: string, options?: Record<string, unknown>) => unknown>
+      >
+    ).mock.calls.map((call) => call[0]);
+
+    expect(rendered).toContain('Duration (ms)');
   });
 });
 
@@ -271,5 +336,33 @@ describe('drawStatusBreakdownChart', () => {
     drawStatusBreakdownChart(doc as never, stats);
 
     expect(doc.y).toBe(100 + 120 + 25);
+  });
+});
+
+describe('selectTickIndices', () => {
+  it('should return no indices, when there are no points', () => {
+    expect(selectTickIndices(0, 4)).toEqual([]);
+  });
+
+  it('should return the only index, when there is one point', () => {
+    expect(selectTickIndices(1, 4)).toEqual([0]);
+  });
+
+  it('should return both indices, when there are two points', () => {
+    expect(selectTickIndices(2, 4)).toEqual([0, 1]);
+  });
+
+  it('should return every index, when the point count does not exceed the tick budget', () => {
+    expect(selectTickIndices(3, 4)).toEqual([0, 1, 2]);
+  });
+
+  it('should sample evenly and always include the first and last index, when the point count exceeds the tick budget', () => {
+    expect(selectTickIndices(50, 4)).toEqual([0, 16, 33, 49]);
+  });
+});
+
+describe('formatAxisTimestamp', () => {
+  it('should render month-day and hour-minute in UTC, when given a canonical ISO timestamp', () => {
+    expect(formatAxisTimestamp('2026-08-11T13:45:00.000Z')).toBe('08-11 13:45');
   });
 });

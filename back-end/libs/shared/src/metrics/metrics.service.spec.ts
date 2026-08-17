@@ -1,6 +1,7 @@
-import { type RedisConfiguration } from '@task1/shared/config/redis.config';
-import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type Redis } from 'ioredis';
+
+import { type RedisConfiguration } from '../config/redis.config.js';
+import { type LoggerService } from '../logger/logger.service.js';
 
 import { MetricsService } from './metrics.service.js';
 

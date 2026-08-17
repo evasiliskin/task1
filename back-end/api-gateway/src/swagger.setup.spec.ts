@@ -19,6 +19,7 @@ describe('applySwagger', () => {
   }
 
   it('should mount the documentation outside production', async () => {
+    delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'development';
 
     // A plain fake app cannot stand in here: SwaggerModule.createDocument (real, unmocked,
@@ -36,6 +37,7 @@ describe('applySwagger', () => {
   });
 
   it('should not mount the documentation in production', () => {
+    delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'production';
 
     const { app } = buildApp();
@@ -44,6 +46,7 @@ describe('applySwagger', () => {
   });
 
   it('should not build the OpenAPI document at all in production', () => {
+    delete process.env.SWAGGER_ENABLED;
     process.env.NODE_ENV = 'production';
 
     const createDocument = vi.spyOn(SwaggerModule, 'createDocument');
@@ -51,5 +54,29 @@ describe('applySwagger', () => {
     applySwagger(buildApp().app);
 
     expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it('should mount the documentation in production, when SWAGGER_ENABLED is "true"', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SWAGGER_ENABLED = 'true';
+
+    const moduleRef = await Test.createTestingModule({}).compile();
+    const app: INestApplication = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      expect(applySwagger(app)).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('should not mount the documentation outside production, when SWAGGER_ENABLED is "false"', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.SWAGGER_ENABLED = 'false';
+
+    const { app } = buildApp();
+
+    expect(applySwagger(app)).toBe(false);
   });
 });

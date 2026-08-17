@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { MetricsModule } from '@task1/shared/metrics/rmq/metrics.module';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 
@@ -29,6 +30,7 @@ import { UploadImportController } from './upload/upload-import.controller.js';
 @Module({
   imports: [
     LoggerModule,
+    MetricsModule,
     ClientsModule.registerAsync([
       {
         name: SERVICE_B_RMQ_CLIENT,

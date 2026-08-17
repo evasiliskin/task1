@@ -79,7 +79,8 @@ function rmqOptions(url: string, queue: string, prefetchCount: number): Microser
  *    prefetch-isolation test's `events.search` RPC while the import queue is saturated — the
  *    fake just needs to answer, not return real data).
  *  - Redis: `.connect()`/`.quit()` (RedisConnectionService lifecycle) and `.call()`
- *    (MetricsService.recordMetric, fired as a side effect of that same `events.search` RPC).
+ *    (MetricsService.recordMetric, fired by the globally registered RmqMetricsInterceptor as
+ *    a side effect of that same `events.search` RPC).
  */
 function fakeMongoClient(): unknown {
   const cursor = {

@@ -4,9 +4,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
+import { MetricsService } from '@task1/shared/metrics/metrics.service';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-
-import { MetricsService } from '../infra/redis/metrics.service.js';
 
 import { ArchiveDownloadService } from './download/archive-download.service.js';
 import { importArchive, type IImportArchiveDependencies } from './import-archive.js';

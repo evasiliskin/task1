@@ -7,9 +7,19 @@ export type PdfDocument = InstanceType<typeof PDFDocument>;
 
 const TIME_CHART_WIDTH = 400;
 const TIME_CHART_HEIGHT = 120;
-const TIME_CHART_BOTTOM_MARGIN = 20;
+/** Chart height plus the tick-label row and the x-axis name, so the next section cannot overlap. */
+const TIME_CHART_BOTTOM_MARGIN = 45;
 const SINGLE_POINT_MARKER_RADIUS = 3;
 const AXIS_LABEL_OFFSET_X = 25;
+/** Four 8pt labels fit across 400pt without collision; the 50 points TS.RANGE can return do not. */
+const MAX_AXIS_TICKS = 4;
+const TICK_LABEL_WIDTH = 60;
+const TICK_LABEL_OFFSET_Y = 6;
+const AXIS_NAME_OFFSET_Y = 22;
+const AXIS_LABEL_FONT_SIZE = 8;
+const AGGREGATE_Y_AXIS_NAME = 'Events';
+const SINGLE_IMPORT_Y_AXIS_NAME = 'Duration (ms)';
+const X_AXIS_NAME = 'Time (UTC)';
 
 const BAR_CHART_HEIGHT = 120;
 const BAR_WIDTH = 60;
@@ -26,6 +36,120 @@ interface IBreakdownBar {
   label: string;
   value: number;
   color: string;
+}
+
+/**
+ * Up to `maxTicks` evenly spaced point indices, always including the first and the last.
+ *
+ * Distinctness is guaranteed without deduplication: `step` is `(pointCount - 1) / (tickCount - 1)`
+ * and `tickCount <= pointCount`, so `step >= 1` and consecutive rounded indices cannot collide.
+ */
+export function selectTickIndices(pointCount: number, maxTicks: number): number[] {
+  if (pointCount <= 0) {
+    return [];
+  }
+
+  const tickCount = Math.min(pointCount, maxTicks);
+
+  if (tickCount === 1) {
+    return [0];
+  }
+
+  const step = (pointCount - 1) / (tickCount - 1);
+  const indices: number[] = [];
+
+  for (let tick = 0; tick < tickCount; tick += 1) {
+    indices.push(Math.round(tick * step));
+  }
+
+  return indices;
+}
+
+/**
+ * `2026-08-11T13:45:00.000Z` -> `08-11 13:45`.
+ *
+ * Sliced rather than parsed through `Date`: every timestamp reaching here was produced by
+ * `toISOString()` upstream (`StatsMetricsReader.readEventsTimeSeries`,
+ * `deriveImportDurationStats`), so the offsets are fixed, and slicing cannot drift the rendered
+ * value into the host's local timezone the way `toLocaleString` would.
+ */
+export function formatAxisTimestamp(isoTimestamp: string): string {
+  return `${isoTimestamp.slice(5, 10)} ${isoTimestamp.slice(11, 16)}`;
+}
+
+function pointX(index: number, pointCount: number, originX: number): number {
+  if (pointCount === 1) {
+    return originX;
+  }
+
+  return originX + index * (TIME_CHART_WIDTH / (pointCount - 1));
+}
+
+function drawYAxisLabels(
+  pdf: PdfDocument,
+  originX: number,
+  originY: number,
+  maxValue: number,
+): void {
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY;
+  pdf.fontSize(AXIS_LABEL_FONT_SIZE).text(String(maxValue));
+
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY + TIME_CHART_HEIGHT - 4;
+  pdf.fontSize(AXIS_LABEL_FONT_SIZE).text('0');
+
+  pdf.x = originX;
+}
+
+function drawXAxisTicks(
+  pdf: PdfDocument,
+  timeSeries: IImportTimeSeriesPoint[],
+  originX: number,
+  originY: number,
+): void {
+  const tickY = originY + TIME_CHART_HEIGHT + TICK_LABEL_OFFSET_Y;
+
+  selectTickIndices(timeSeries.length, MAX_AXIS_TICKS).forEach((index) => {
+    const point = timeSeries.at(index);
+
+    if (point === undefined) {
+      return;
+    }
+
+    const x = pointX(index, timeSeries.length, originX);
+
+    pdf
+      .fontSize(AXIS_LABEL_FONT_SIZE)
+      .text(formatAxisTimestamp(point.timestamp), x - TICK_LABEL_WIDTH / 2, tickY, {
+        width: TICK_LABEL_WIDTH,
+        align: 'center',
+      });
+  });
+
+  pdf.x = originX;
+}
+
+function drawAxisNames(
+  pdf: PdfDocument,
+  originX: number,
+  originY: number,
+  isAggregate: boolean,
+): void {
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY - AXIS_LABEL_FONT_SIZE - 2;
+  pdf
+    .fontSize(AXIS_LABEL_FONT_SIZE)
+    .text(isAggregate ? AGGREGATE_Y_AXIS_NAME : SINGLE_IMPORT_Y_AXIS_NAME);
+
+  pdf
+    .fontSize(AXIS_LABEL_FONT_SIZE)
+    .text(X_AXIS_NAME, originX, originY + TIME_CHART_HEIGHT + AXIS_NAME_OFFSET_Y, {
+      width: TIME_CHART_WIDTH,
+      align: 'center',
+    });
+
+  pdf.x = originX;
 }
 
 export function drawSummarySection(
@@ -88,10 +212,8 @@ export function drawEventsOverTimeChart(
 
     pdf.circle(originX, y, SINGLE_POINT_MARKER_RADIUS).fill('black');
   } else {
-    const stepX = TIME_CHART_WIDTH / (timeSeries.length - 1);
-
     timeSeries.forEach((point, index) => {
-      const x = originX + index * stepX;
+      const x = pointX(index, timeSeries.length, originX);
       const y = originY + TIME_CHART_HEIGHT - (point.value / maxValue) * TIME_CHART_HEIGHT;
 
       if (index === 0) {
@@ -104,17 +226,13 @@ export function drawEventsOverTimeChart(
     });
 
     pdf.stroke();
-
-    pdf.x = originX - AXIS_LABEL_OFFSET_X;
-    pdf.y = originY;
-    pdf.fontSize(8).text(String(maxValue));
-
-    pdf.x = originX - AXIS_LABEL_OFFSET_X;
-    pdf.y = originY + TIME_CHART_HEIGHT - 4;
-    pdf.fontSize(8).text('0');
-
-    pdf.x = originX;
   }
+
+  // Labelling runs for both branches. It used to sit inside the multi-point branch, which left a
+  // single-point chart — the shape every per-import report produces — with no scale at all.
+  drawYAxisLabels(pdf, originX, originY, maxValue);
+  drawXAxisTicks(pdf, timeSeries, originX, originY);
+  drawAxisNames(pdf, originX, originY, isAggregate);
 
   pdf.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
 }
