@@ -10,8 +10,8 @@ describe('Contract', () => {
 
     class TestController {
       @Contract({ request: requestSchema, response: responseSchema })
-      public handle(): void {
-        // intentionally empty — this method exists only to carry the decorator under test
+      public handle(): boolean {
+        return true;
       }
     }
 

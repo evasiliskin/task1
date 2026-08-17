@@ -1,1 +1,0 @@
-export const SERVICE_A_RMQ_CLIENT = 'SERVICE_A_RMQ_CLIENT';

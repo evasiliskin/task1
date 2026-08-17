@@ -13,6 +13,7 @@ describe('generateReport', () => {
     invalidEvents: 0,
     errors: 0,
     timeSeries: [],
+    degraded: false,
   };
 
   it('should build the report at a unique path inside the report directory prefixed with importId, when importId is given', async () => {

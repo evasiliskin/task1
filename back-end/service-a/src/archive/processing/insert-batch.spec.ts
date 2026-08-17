@@ -11,7 +11,7 @@ describe('insertBatch', () => {
       createdAt: new Date('2026-08-11T00:00:00Z'),
       actor: { id: 1, login: 'octocat' },
       repo: { id: 2, name: 'octocat/hello-world' },
-      importId: 'import-1',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       payload: {},
     };
   }
@@ -30,7 +30,12 @@ describe('insertBatch', () => {
 
     const result = await insertBatch(collection, []);
 
-    expect(result).toEqual({ insertedCount: 0, duplicateCount: 0, errorCount: 0 });
+    expect(result).toEqual({
+      insertedCount: 0,
+      duplicateCount: 0,
+      errorCount: 0,
+      errorSample: [],
+    });
     expect(insertMany).not.toHaveBeenCalled();
   });
 
@@ -41,7 +46,12 @@ describe('insertBatch', () => {
 
     const result = await insertBatch(collection, batch);
 
-    expect(result).toEqual({ insertedCount: 2, duplicateCount: 0, errorCount: 0 });
+    expect(result).toEqual({
+      insertedCount: 2,
+      duplicateCount: 0,
+      errorCount: 0,
+      errorSample: [],
+    });
     expect(insertMany).toHaveBeenCalledWith(batch, { ordered: false });
   });
 
@@ -53,7 +63,7 @@ describe('insertBatch', () => {
 
     const result = await insertBatch(collection, batch);
 
-    expect(result).toEqual({ insertedCount: 1, duplicateCount: 2, errorCount: 1 });
+    expect(result).toMatchObject({ insertedCount: 1, duplicateCount: 2, errorCount: 1 });
   });
 
   it('should count a single write error, when writeErrors arrives as one object instead of an array', async () => {
@@ -68,7 +78,36 @@ describe('insertBatch', () => {
 
     const result = await insertBatch(collection, batch);
 
-    expect(result).toEqual({ insertedCount: 0, duplicateCount: 1, errorCount: 0 });
+    expect(result).toEqual({
+      insertedCount: 0,
+      duplicateCount: 1,
+      errorCount: 0,
+      errorSample: [],
+    });
+  });
+
+  it('should return a de-duplicated sample, when the batch produces non-duplicate write errors', async () => {
+    const bulkError = Object.assign(new Error('bulk write failed'), {
+      name: 'MongoBulkWriteError',
+      insertedCount: 1,
+      writeErrors: [
+        { code: 11000, errmsg: 'duplicate key' },
+        { code: 121, errmsg: 'Document failed validation' },
+        { code: 121, errmsg: 'Document failed validation' },
+        { code: 2, errmsg: 'BSONObj size exceeds limit' },
+      ],
+    });
+    const collection = {
+      insertMany: vi.fn().mockRejectedValue(bulkError),
+    } as unknown as Collection<IGithubEventDocument>;
+
+    const result = await insertBatch(collection, [buildDocument('e1')]);
+
+    expect(result).toMatchObject({ insertedCount: 1, duplicateCount: 1, errorCount: 3 });
+    expect(result.errorSample).toEqual([
+      { code: 121, message: 'Document failed validation' },
+      { code: 2, message: 'BSONObj size exceeds limit' },
+    ]);
   });
 
   it('should rethrow, when insertMany rejects with an error that is not a MongoBulkWriteError', async () => {

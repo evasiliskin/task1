@@ -1,9 +1,10 @@
-import { InvalidCursorError } from './errors.js';
+import { InvalidCursorError } from '@task1/shared';
+
 import { decodeEventCursor, encodeEventCursor } from './event-cursor.util.js';
 
 describe('encodeEventCursor / decodeEventCursor', () => {
   it('should round-trip createdAt and eventId, when a cursor is encoded then decoded', () => {
-    const cursor = { createdAt: new Date('2026-08-11T00:00:00.000Z'), eventId: 'e1' };
+    const cursor = { createdAt: new Date('2026-08-11T00:00:00.000Z'), eventId: '48291832741' };
 
     const decoded = decodeEventCursor(encodeEventCursor(cursor));
 
@@ -26,7 +27,7 @@ describe('encodeEventCursor / decodeEventCursor', () => {
 
   it('should throw InvalidCursorError, when createdAt is not an ISO datetime string', () => {
     const payload = Buffer.from(
-      JSON.stringify({ createdAt: 'not-a-date', eventId: 'e1' }),
+      JSON.stringify({ createdAt: 'not-a-date', eventId: '48291832741' }),
       'utf8',
     ).toString('base64url');
 

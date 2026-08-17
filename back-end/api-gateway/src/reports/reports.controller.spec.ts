@@ -1,14 +1,15 @@
-import { EventEmitter } from 'node:events';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import type * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { type LoggerService } from '@task1/shared/logger/http/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
+import { type LogFields } from '@task1/shared/logger/types';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
-import { type Response } from 'express';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { of } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -19,9 +20,28 @@ import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
 import { ReportsController } from './reports.controller.js';
 import { type GetReportRequestSchema } from './schemas/get-report-request.schema.js';
 
+const unlinkMock = vi.fn();
+
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof fsPromises>('node:fs/promises');
+
+  return {
+    ...actual,
+    unlink: (...args: Parameters<typeof actual.unlink>) => {
+      unlinkMock(...args);
+
+      return actual.unlink(...args);
+    },
+  };
+});
+
+type LogMock = ReturnType<
+  typeof vi.fn<(fields: LogFields, message: string, error?: unknown) => void>
+>;
+
 function buildController(
   sendMock: ReturnType<typeof vi.fn>,
-  loggerMocks: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> },
+  loggerMocks: { warn: LogMock; error: LogMock },
   requestContextService: RequestContextService,
   reportDirectory: string,
 ): ReportsController {
@@ -43,15 +63,11 @@ function buildController(
 
   return new ReportsController(
     serviceBClient,
-    requestContextService,
+    new ContextPropagatingClient(requestContextService),
     rabbitmqConfiguration,
     reportConfiguration,
     loggerService,
   );
-}
-
-function buildFakeResponse(): Response {
-  return new EventEmitter() as unknown as Response;
 }
 
 async function flushMicrotasks(): Promise<void> {
@@ -85,6 +101,7 @@ describe('ReportsController', () => {
   beforeEach(() => {
     reportDirectory = mkdtempSync(join(tmpdir(), 'reports-controller-spec-'));
     requestContextService = new RequestContextService();
+    unlinkMock.mockClear();
   });
 
   afterEach(() => {
@@ -96,7 +113,7 @@ describe('ReportsController', () => {
       data: { importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' },
     };
 
-    it('should delete the report file, when the response closes after finishing normally', async () => {
+    it('should leave the report file in place, when it did not produce the file', async () => {
       const reportPath = join(reportDirectory, 'report.pdf');
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
       writeFileSync(reportPath, '%PDF-1.4 fake report body');
@@ -109,101 +126,28 @@ describe('ReportsController', () => {
         requestContextService,
         reportDirectory,
       );
-      const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(bound, response),
+        {
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
+        () => controller.getPdfReport(bound),
       );
-      response.emit('finish');
-      response.emit('close');
       await flushMicrotasks();
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-      expect(existsSync(reportPath)).toBe(false);
-      expect(warn).not.toHaveBeenCalled();
+      expect(unlinkMock).not.toHaveBeenCalled();
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
+      expect(existsSync(reportPath)).toBe(true);
     });
 
-    it('should delete the report file, when the response closes without ever finishing (aborted download)', async () => {
-      const reportPath = join(reportDirectory, 'report.pdf');
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-      writeFileSync(reportPath, '%PDF-1.4 fake report body');
-      const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
-      const warn = vi.fn();
-      const error = vi.fn();
-      const controller = buildController(
-        sendMock,
-        { warn, error },
-        requestContextService,
-        reportDirectory,
-      );
-      const response = buildFakeResponse();
-
-      await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(bound, response),
-      );
-      response.emit('close');
-      await flushMicrotasks();
-
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-      expect(existsSync(reportPath)).toBe(false);
+    it('should take only the bound request parameter, when the handler signature is inspected', () => {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- reading .length off the method reference to assert its arity, never calling it unbound.
+      expect(ReportsController.prototype.getPdfReport).toHaveLength(1);
     });
 
-    it('should delete the report file only once, when the response emits close twice', async () => {
-      const reportPath = join(reportDirectory, 'report.pdf');
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-      writeFileSync(reportPath, '%PDF-1.4 fake report body');
-      const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
-      const warn = vi.fn();
-      const error = vi.fn();
-      const controller = buildController(
-        sendMock,
-        { warn, error },
-        requestContextService,
-        reportDirectory,
-      );
-      const response = buildFakeResponse();
-
-      await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(bound, response),
-      );
-      response.emit('close');
-      await flushMicrotasks();
-      response.emit('close');
-      await flushMicrotasks();
-
-      expect(warn).not.toHaveBeenCalled();
-    });
-
-    it('should log a warning and not throw, when deleting the report file fails', async () => {
-      const reportPath = join(reportDirectory, 'missing-report.pdf');
-      const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
-      const warn = vi.fn();
-      const error = vi.fn();
-      const controller = buildController(
-        sendMock,
-        { warn, error },
-        requestContextService,
-        reportDirectory,
-      );
-      const response = buildFakeResponse();
-
-      await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(bound, response),
-      );
-      response.emit('close');
-      await flushMicrotasks();
-
-      expect(warn).toHaveBeenCalledWith(
-        expect.objectContaining({ reportPath }),
-        'failed to delete generated PDF report file',
-      );
-    });
-
-    it('should log an error and still delete the report file, when the report file cannot be read', async () => {
+    it('should log an error, when the report file cannot be read', async () => {
       const reportPath = join(reportDirectory, 'does-not-exist.pdf');
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
@@ -214,22 +158,23 @@ describe('ReportsController', () => {
         requestContextService,
         reportDirectory,
       );
-      const response = buildFakeResponse();
 
       await requestContextService.run(
-        { correlationId: 'correlation-id', requestId: 'request-id' },
-        () => controller.getPdfReport(bound, response),
+        {
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
+        () => controller.getPdfReport(bound),
       );
-      await waitFor(() => warn.mock.calls.length > 0, 'the delete-failure warning to be logged');
+      await waitFor(() => error.mock.calls.length > 0, 'the stream-error to be logged');
 
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
         'failed to stream generated PDF report file',
+        expect.anything(),
       );
-      expect(warn).toHaveBeenCalledWith(
-        expect.objectContaining({ reportPath }),
-        'failed to delete generated PDF report file',
-      );
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('should throw, when the RMQ reply reportPath resolves outside the configured report directory', async () => {
@@ -246,13 +191,16 @@ describe('ReportsController', () => {
         requestContextService,
         reportDirectory,
       );
-      const response = buildFakeResponse();
 
       try {
         await expect(
           requestContextService.run(
-            { correlationId: 'correlation-id', requestId: 'request-id' },
-            () => controller.getPdfReport(bound, response),
+            {
+              correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+              requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+              correlationIdSource: 'inbound',
+            },
+            () => controller.getPdfReport(bound),
           ),
         ).rejects.toThrow(ReportPathOutsideConfiguredDirectoryError);
       } finally {
@@ -263,7 +211,7 @@ describe('ReportsController', () => {
     it('should not delete the outside file, when the RMQ reply reportPath resolves outside the configured report directory', async () => {
       const outsideDirectory = mkdtempSync(join(tmpdir(), 'reports-controller-outside-'));
       const reportPath = join(outsideDirectory, 'report.pdf');
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
       writeFileSync(reportPath, '%PDF-1.4 fake report body');
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
@@ -274,17 +222,21 @@ describe('ReportsController', () => {
         requestContextService,
         reportDirectory,
       );
-      const response = buildFakeResponse();
 
       try {
         await requestContextService
-          .run({ correlationId: 'correlation-id', requestId: 'request-id' }, () =>
-            controller.getPdfReport(bound, response),
+          .run(
+            {
+              correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+              requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+              correlationIdSource: 'inbound',
+            },
+            () => controller.getPdfReport(bound),
           )
           .catch(() => undefined);
         await flushMicrotasks();
 
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is inside a per-test mkdtemp() sandbox directory, not external input.
         expect(existsSync(reportPath)).toBe(true);
       } finally {
         rmSync(outsideDirectory, { recursive: true, force: true });

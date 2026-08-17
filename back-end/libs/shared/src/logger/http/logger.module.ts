@@ -1,26 +1,20 @@
-import { Module } from '@nestjs/common';
-import { type ConfigType } from '@nestjs/config';
-import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
+import { type MiddlewareConsumer, Module, type NestModule, RequestMethod } from '@nestjs/common';
 
-import loggerConfig from '../../config/logger.config.js';
+import { RequestContextMiddleware } from '../../request-context/http/request-context.middleware.js';
 import { RequestContextModule } from '../../request-context/http/request-context.module.js';
-import { RequestContextService } from '../../request-context/request-context.service.js';
+import { LoggerCoreModule } from '../logger-core.module.js';
 
-import { LoggerService } from './logger.service.js';
-import { pinoConfigFactory } from './pino-config.factory.js';
+import { HttpLoggingMiddleware } from './http-logging.middleware.js';
 
 @Module({
-  imports: [
-    RequestContextModule,
-    PinoLoggerModule.forRootAsync({
-      inject: [loggerConfig.KEY, RequestContextService],
-      useFactory: (
-        config: ConfigType<typeof loggerConfig>,
-        requestContextService: RequestContextService,
-      ) => pinoConfigFactory(config, requestContextService),
-    }),
-  ],
-  providers: [LoggerService],
-  exports: [LoggerService],
+  imports: [RequestContextModule, LoggerCoreModule.forChannel('http')],
+  providers: [RequestContextMiddleware, HttpLoggingMiddleware],
+  exports: [LoggerCoreModule],
 })
-export class LoggerModule {}
+export class LoggerModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RequestContextMiddleware, HttpLoggingMiddleware)
+      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
+  }
+}

@@ -1,6 +1,6 @@
+import { decodeCursor, encodeCursor } from '@task1/shared';
+import { InvalidCursorError } from '@task1/shared/errors/index';
 import { z } from 'zod';
-
-import { InvalidCursorError } from './errors.js';
 
 const cursorPayloadSchema = z.object({
   createdAt: z.iso.datetime(),
@@ -13,28 +13,18 @@ export interface IEventCursor {
 }
 
 export function encodeEventCursor(cursor: IEventCursor): string {
-  const payload = JSON.stringify({
+  return encodeCursor({
     createdAt: cursor.createdAt.toISOString(),
     eventId: cursor.eventId,
   });
-
-  return Buffer.from(payload, 'utf8').toString('base64url');
 }
 
 export function decodeEventCursor(cursor: string): IEventCursor {
-  let decodedPayload: unknown;
+  const decoded = decodeCursor(cursor, cursorPayloadSchema);
 
-  try {
-    decodedPayload = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-  } catch (error) {
-    throw new InvalidCursorError(cursor, error instanceof Error ? error : undefined);
-  }
-
-  const result = cursorPayloadSchema.safeParse(decodedPayload);
-
-  if (!result.success) {
+  if (decoded === null) {
     throw new InvalidCursorError(cursor);
   }
 
-  return { createdAt: new Date(result.data.createdAt), eventId: result.data.eventId };
+  return { createdAt: new Date(decoded.createdAt), eventId: decoded.eventId };
 }

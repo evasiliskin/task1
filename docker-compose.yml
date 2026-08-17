@@ -44,12 +44,16 @@ services:
       dockerfile: back-end/service-b/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: service-b
       RABBITMQ_QUEUE: service_b_queue
       MONGODB_URI: mongodb://mongodb:27017/service_b
+      PROCESSING_LOG_RETENTION_MS: 2592000000
       REDIS_URL: redis://redis:6379
       REPORT_DIR: /data/reports
+      HEALTH_PING_TIMEOUT_MS: 3000
     volumes:
       - report-storage:/data/reports
     depends_on:
@@ -59,6 +63,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
   service-a:
     container_name: task1-service-a
@@ -67,13 +73,21 @@ services:
       dockerfile: back-end/service-a/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: service-a
       RABBITMQ_QUEUE: service_a_queue
+      RABBITMQ_IMPORTS_QUEUE: service_a_imports_queue
       MONGODB_URI: mongodb://mongodb:27017/service_a
       MONGO_BATCH_SIZE: 500
+      MONGO_INSERT_CONCURRENCY: 2
       REDIS_URL: redis://redis:6379
+      HEALTH_PING_TIMEOUT_MS: 3000
       STORAGE_DIR: /data/archives
+      ARCHIVE_MAX_DECOMPRESSED_BYTES: 4294967296
+      ARCHIVE_MAX_LINE_BYTES: 1048576
+      SHUTDOWN_DRAIN_TIMEOUT_MS: 60000
     volumes:
       - archive-storage:/data/archives
     depends_on:
@@ -83,6 +97,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
   api-gateway:
     container_name: task1-api-gateway
@@ -91,27 +107,32 @@ services:
       dockerfile: back-end/api-gateway/Dockerfile
       target: runtime
     restart: unless-stopped
+    stop_grace_period: 90s
     ports:
       - "3000:3000"
     environment:
       <<: *rabbitmq_url
+      SERVICE_NAME: api-gateway
+      SWAGGER_ENABLED: "true"
       PORT: 3000
       RABBITMQ_SERVICE_B_QUEUE: service_b_queue
       RABBITMQ_SERVICE_A_QUEUE: service_a_queue
-      MONGODB_URI: mongodb://mongodb:27017/gateway
+      RABBITMQ_SERVICE_A_IMPORTS_QUEUE: service_a_imports_queue
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data/archives
       REPORT_DIR: /data/reports
+      UPLOAD_RETENTION_MS: 86400000
+      UPLOAD_SWEEP_INTERVAL_MS: 900000
     volumes:
       - archive-storage:/data/archives
       - report-storage:/data/reports
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
 
 volumes:
   archive-storage:

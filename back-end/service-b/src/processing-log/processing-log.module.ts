@@ -8,6 +8,9 @@ import { ProcessingLogTracker } from './processing-log-tracker.service.js';
 import { LogsSearchController } from './search/logs-search.controller.js';
 import { LogsSearchService } from './search/logs-search.service.js';
 import { StatsMetricsReader } from './stats/stats-metrics-reader.service.js';
+import { statsRollupCollectionProvider } from './stats/stats-rollup-collection.provider.js';
+import { StatsRollupSeedService } from './stats/stats-rollup-seed.service.js';
+import { StatsRollupTracker } from './stats/stats-rollup.tracker.js';
 import { StatsController } from './stats/stats.controller.js';
 import { StatsService } from './stats/stats.service.js';
 
@@ -19,6 +22,9 @@ import { StatsService } from './stats/stats.service.js';
     EnsureProcessingLogIndexesInitializer,
     ProcessingLogTracker,
     LogsSearchService,
+    statsRollupCollectionProvider,
+    StatsRollupTracker,
+    StatsRollupSeedService,
     StatsMetricsReader,
     StatsService,
   ],

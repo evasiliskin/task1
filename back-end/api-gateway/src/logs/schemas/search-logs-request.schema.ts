@@ -1,7 +1,6 @@
+import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from '@task1/shared';
 import { z } from 'zod';
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
 const LOG_STATUSES = ['started', 'completed', 'failed', 'dead-lettered'] as const;
 
 export const SearchLogsRequestSchema = z.object({
@@ -12,7 +11,7 @@ export const SearchLogsRequestSchema = z.object({
       from: z.iso.datetime().optional(),
       to: z.iso.datetime().optional(),
       cursor: z.string().optional(),
-      limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
+      limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
     })
     .strict()
     .prefault({}),

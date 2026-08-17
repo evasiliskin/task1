@@ -1,4 +1,5 @@
-import { InvalidCursorError } from './errors.js';
+import { InvalidCursorError } from '@task1/shared';
+
 import { decodeLogCursor, encodeLogCursor } from './log-cursor.util.js';
 
 describe('encodeLogCursor / decodeLogCursor', () => {

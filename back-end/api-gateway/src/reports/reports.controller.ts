@@ -1,29 +1,25 @@
 import { createReadStream } from 'node:fs';
-import { unlink } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-import { Controller, Get, Inject, Res, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Inject, StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { type ClientProxy } from '@nestjs/microservices';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/http/logger.service';
-import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
-import { type Response } from 'express';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import reportConfig, { type ReportConfiguration } from '../config/report.config.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { ReportPathOutsideConfiguredDirectoryError } from './errors.js';
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { GetReportRequestSchema } from './schemas/get-report-request.schema.js';
 import { GetReportResponseSchema } from './schemas/get-report-response.schema.js';
-
-const REPORTS_PDF_GENERATE_PATTERN = 'reports.pdf.generate';
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `IGenerateReportResult`
 type GenerateReportRpcResult = { reportPath: string };
@@ -33,13 +29,13 @@ type GenerateReportRpcResult = { reportPath: string };
 export class ReportsController {
   public constructor(
     @Inject(SERVICE_B_RMQ_CLIENT) private readonly serviceBClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
+    private readonly propagatingClient: ContextPropagatingClient,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
     @Inject(reportConfig.KEY) private readonly reportConfiguration: ReportConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('ReportsController');
+    this.logger = loggerService.getLogger(ReportsController.name);
   }
 
   @Get('pdf')
@@ -52,52 +48,31 @@ export class ReportsController {
   @ApiOkResponse({ description: 'The generated PDF report' })
   public async getPdfReport(
     @ModelBinder(GetReportRequestSchema) bound: BoundRequest<typeof GetReportRequestSchema>,
-    @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
-
     const result = await firstValueFrom(
-      this.serviceBClient
-        .send<GenerateReportRpcResult>(REPORTS_PDF_GENERATE_PATTERN, record)
+      this.propagatingClient
+        .send<GenerateReportRpcResult>(
+          this.serviceBClient,
+          RPC_PATTERNS.REPORTS_PDF_GENERATE,
+          bound.data,
+        )
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
     this.assertReportPathIsContained(result.reportPath);
 
-    let reportFileDeleted = false;
-
-    const deleteReportFile = (): void => {
-      if (reportFileDeleted) {
-        return;
-      }
-
-      reportFileDeleted = true;
-
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
-      unlink(result.reportPath).catch((error: unknown) => {
-        this.logger.warn(
-          { reportPath: result.reportPath, error },
-          'failed to delete generated PDF report file',
-        );
-      });
-    };
-
-    // 'close' fires once the response has fully finished sending (after
-    // 'finish') AND when the underlying connection is terminated
-    // prematurely (client-aborted download) — a single listener covers
-    // both the happy path and an aborted download.
-    response.on('close', deleteReportFile);
-
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
+    // service-b writes this file and its ReportCleanupService removes it on retention. The gateway
+    // reads and forgets: two owners for one file produced a race where the sweeper could unlink a
+    // report between generation and download.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- result.reportPath is the path service-b just reported having written inside the shared report-storage volume, not raw external input.
     const reportFileStream = createReadStream(result.reportPath);
 
     reportFileStream.on('error', (error) => {
       this.logger.error(
-        { reportPath: result.reportPath, error },
+        { reportPath: result.reportPath },
         'failed to stream generated PDF report file',
+        error,
       );
-      deleteReportFile();
     });
 
     return new StreamableFile(reportFileStream, {
@@ -108,11 +83,6 @@ export class ReportsController {
 
   private readonly logger: AppLogger;
 
-  // Defense-in-depth: the RMQ reply is internal (service-b's own generated
-  // path, already UUID-constrained upstream), but this refuses to read or
-  // delete anything outside the shared report-storage directory this
-  // gateway process is configured for, rather than trusting the reply path
-  // unconditionally.
   private assertReportPathIsContained(reportPath: string): void {
     const reportDirectory = resolve(this.reportConfiguration.dir);
     const resolvedReportPath = resolve(reportPath);

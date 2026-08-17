@@ -1,115 +1,128 @@
 # AGENTS.md
 
-Instructions for AI coding agents (Claude Code, Codex, Cursor, Copilot, etc.) working in this
-repository. Human contributors should read [README.txt](README.txt) instead.
+Rules for AI coding agents working in this repository. Architecture and setup live in
+[README.md](README.md) and the per-service READMEs — read those first; this file only lists the
+constraints that are easy to violate.
 
-## Project overview
+## Layout
 
-`task1` is a pnpm workspace monorepo containing a NestJS microservices backend that ingests
-[GH Archive](https://www.gharchive.org/) data and exposes it over a REST API:
-
-| Package | Role |
-| --- | --- |
-| `back-end/api-gateway` | Public HTTP entrypoint — REST API (Swagger at `/api-docs`), the only service exposed to clients |
-| `back-end/service-a` | Internal microservice, RabbitMQ transport only — GH Archive ingestion (download/upload, parse, persist events, track import runs) |
-| `back-end/service-b` | Internal microservice, RabbitMQ transport only — processing-log tracking, stats, PDF report generation |
-| `back-end/libs/shared` (`@task1/shared`) | Shared library: error types, exception handling, request-context/correlation-ID propagation, logging, GH Archive event contracts, security config |
-
-The gateway talks to `service-a`/`service-b` exclusively over RabbitMQ RPC (`ClientProxy.send`) and
-fire-and-forget events (`ClientProxy.emit` / `@EventPattern`) — never HTTP, never direct database
-access. See [README.txt](README.txt)'s "Architecture" section for the request-flow diagram, the
-full API reference, and the GH Archive pipeline design.
-
-## Setup
-
-```bash
-nvm use          # Node version pinned in .nvmrc, matches engines.node in package.json
-pnpm install      # also installs Husky git hooks, via the root "prepare" script
+```text
+back-end/
+  api-gateway/        HTTP surface only. No domain logic, no database.
+  service-a/          GH Archive ingestion + event search. RabbitMQ only.
+  service-b/          Processing log, stats, PDF reports. RabbitMQ only.
+  libs/shared/        @task1/shared — infrastructure + message contracts. No business rules.
+docker-compose.yml    Local infrastructure + all three services.
 ```
 
-Per-service env files: copy `back-end/<service>/.env.example` to `.env` before running a service
-outside Docker (`pnpm docker:up` supplies its own environment and needs no `.env` files). Note that
-`ConfigModule.forRoot({ ignoreEnvFile: true })` in every `app.module.ts` means `.env` is a
-reference/template only, never auto-loaded — to override a default, export the variable into the
-shell environment (or use `dotenv-cli`) before running `pnpm dev:*`.
+pnpm workspace (`back-end/*`, `back-end/libs/*`). ESM throughout: **relative imports must carry the
+`.js` extension**, `@task1/shared/...` subpath imports must not.
 
-## Build, lint, test
+## Service boundaries
 
-Run from the repo root — pnpm workspace filters apply automatically:
+- A service never imports another service's source. The only shared code is `@task1/shared`.
+- No cross-service database access. `service-a` owns Mongo `service_a`, `service-b` owns
+  `service_b`, the gateway owns nothing.
+- The gateway must not grow domain logic, queries, or persistence. If a request needs a decision,
+  add an RPC pattern and make the owning service decide.
+- Services talk over RabbitMQ only — never HTTP. The only outbound HTTP in the system is service-a
+  fetching `data.gharchive.org`.
 
-| Command | What it does |
-| --- | --- |
-| `pnpm build` | Build every workspace package |
-| `pnpm test` | Run every package's tests (Vitest) |
-| `pnpm lint` | ESLint across all three back-end services |
-| `pnpm format` / `pnpm format:check` | Prettier across the whole workspace |
-| `pnpm check` | `lint` + `test` — also runs automatically on `git push` via Husky (`.husky/pre-push`) |
-| `pnpm dev:api-gateway` / `dev:service-a` / `dev:service-b` | Run one service in watch mode |
-| `pnpm docker:up` / `pnpm docker:down` | Start/stop RabbitMQ + MongoDB + Redis + all three services |
-| `pnpm --filter service-a run bench:memory <dateHour>` | Manual memory-safety diagnostic against a running Docker stack — not part of `pnpm test` |
+## Shared library rules
 
-Run a single package's suite directly with `pnpm --filter <package> run <script>`, e.g.
-`pnpm --filter api-gateway run test:cov`.
+`@task1/shared` may contain: message pattern constants, event/DTO contracts, error types, NestJS
+cross-cutting modules (logging, request context, exception handling, response envelope, health,
+metrics, messaging topology), and shared conventions such as `storage/archive-paths.ts` and the
+pagination cursor codec.
 
-**Before considering any change done: run `pnpm lint` and `pnpm test` (or `pnpm check`) for every
-package you touched.**
+It must not contain business rules. Import counting, stats derivation, report content, filter
+building and search logic stay in the owning service. If shared code starts branching on a domain
+concept, it is in the wrong package.
 
-## Testing conventions
+Adding an export means also adding it to `src/index.ts`.
 
-- Unit tests: `*.spec.ts`, colocated with the source file.
-- HTTP integration tests: `*.controller.int.spec.ts`, using Supertest — required for every
-  controller with an HTTP endpoint (currently all 8 `api-gateway` controllers).
-- RabbitMQ-only controllers (`@MessagePattern`/`@EventPattern`, no HTTP) are covered by
-  `*.spec.ts` instead — call the handler directly through `Test.createTestingModule()`, no
-  Supertest. `service-a` and `service-b` have no HTTP layer, so every one of their tests is a
-  unit spec.
-- Coverage: each package's `vitest.config.mts` enforces a 90% line/branch threshold
-  (`coverage.thresholds`) — a package with insufficient coverage fails `pnpm test`.
-- Full conventions (naming `should <behavior>, when <condition>`, AAA structure, coverage
-  targets, fixture/UUID rules): [skills/testing-development.md](skills/testing-development.md).
+## Messaging rules
 
-## Code style & architecture rules
+- Add or rename patterns only in `@task1/shared`: `messaging/rpc-patterns.const.ts` (RPC) or
+  `github-archive/events/event-patterns.const.ts` (events). Never hard-code a pattern string.
+- Choose deliberately: `send`/`@MessagePattern` for anything the caller waits on,
+  `emit`/`@EventPattern` for work and notifications. Gateway RPC calls must set
+  `.pipe(timeout(rpcTimeoutMs))`.
+- Every publish goes through `ContextPropagatingClient`. Calling a raw `ClientProxy` drops
+  `x-correlation-id` and silently breaks the trace.
+- Every consumer re-validates its payload with a Zod schema. Malformed payloads are logged and
+  acked, never retried.
+- Consumers use manual ack (`noAck: false`). RPC handlers ack in `finally`; event handlers ack on
+  success and delegate failures to `RetryPublisher`. Never leave a path that neither acks nor nacks.
+- There are no custom exchanges. Queue naming is `<queue>`, `<queue>.retry`, `<queue>.dlq`, derived
+  by `deriveQueueTopology`. Do not declare topology by hand.
+- A pattern's payload shape is owned by the consumer's schema; changing it means changing both sides
+  in the same commit.
 
-This repo enforces a specific layering (controller → service → domain/infrastructure), module
-boundaries, an `AppError`-based error hierarchy, and a security-first posture. **Read
-[CLAUDE.md](CLAUDE.md) before making non-trivial changes** — it is the source of truth for layer
-responsibilities, module boundaries, security defaults, error handling, and what's forbidden
-without explicit approval.
+## Code structure
 
-Deeper topic-specific rules live in `skills/*.md` (`api.md`, `backend-development.md`,
-`security.md`, `testing-development.md`) and are referenced from CLAUDE.md.
+There is no repository/ORM layer and none should be introduced. The actual shape is:
 
-**Note on `skills/backend-development.md`:** it was written against a Sequelize/PostgreSQL/AWS
-stack and includes examples (a `filing-cabinet` module, Sequelize repositories) that don't exist in
-this repo — this project actually uses MongoDB, Redis, and RabbitMQ, with no ORM or Repository
-layer. Apply that file's *principles* (SOLID, layer separation, reuse-before-create,
-lodash-over-hand-rolled-loops) and defer to the actual code under `back-end/*/src` over its
-stack-specific examples.
+```text
+controller (@MessagePattern / @EventPattern / HTTP)
+  → service (DI, config, wiring)
+    → plain exported functions (the logic, unit-testable without Nest)
+      → mongodb driver collection providers
+```
 
-## Current implementation state — read before assuming an endpoint "just works"
+Prefer adding a pure function plus a thin service over a new stateful class. Collections are exposed
+through `*-collection.provider.ts` tokens injected into services.
 
-- **Authentication is a stub.** `AuthGuard`
-  (`back-end/api-gateway/src/auth/auth.guard.ts`) is registered globally and intentionally fails
-  closed: every endpoint except `GET /health`, `/health/live`, `/health/ready` currently returns
-  `403 Forbidden` until real credential verification is implemented. Integration tests override the
-  guard (`.overrideProvider(AuthGuard).useValue({ canActivate: () => true })`) — follow that
-  pattern in new integration tests instead of trying to satisfy the real guard.
-- **No general persistence layer.** The only MongoDB usage is the GH Archive pipeline's own
-  collections (`events`, `imports` in service-a; `processing-logs` in service-b), accessed directly
-  via the `mongodb` driver — no ORM, no Repository pattern. Don't introduce one without an explicit
-  ask (see CLAUDE.md's forbidden-without-approval list).
-- Full endpoint list and RabbitMQ message-pattern names: see [README.txt](README.txt)'s
-  "API reference" section.
+Gateway-specific: every HTTP handler needs `@Contract({ request, response })` and `@ModelBinder` —
+`ContractScanner` fails startup otherwise. Do not add a global `ValidationPipe`; validation is Zod.
 
-## Commits
+## Configuration
 
-**Never create git commits.** The user commits their own work manually — leave changes
-staged/unstaged, even mid-workflow (e.g. a planning/spec-writing step that would normally commit
-as part of its own process).
+`ConfigModule` runs with `ignoreEnvFile: true` — `.env` is never loaded, so a new variable must be
+added to the service's `config/*.ts` Zod schema, to `.env.example`, and to `docker-compose.yml` if
+the stack needs it. Use `requireInProduction` for anything that must not silently fall back.
 
-## Documentation lookups
+## Logging
 
-Use Context7 (or whichever MCP/CLI documentation tool is available) for NestJS, Vitest, or any
-other library/framework/API question instead of relying on training data — this stack tracks
-current major versions (NestJS 11, Vitest 4, Zod 4, MongoDB driver 7) where remembered APIs are
-likely stale. Never guess an API when documentation is available.
+pino via `@task1/shared/logger`, never `nestjs-pino` and never `console`. Call
+`loggerService.getLogger(Name)` and pass `(fields, message, error?)` — the `LogFields` type rejects
+an `Error` in the fields object; errors go in the third argument.
+
+## Testing
+
+- Unit tests are `*.spec.ts` colocated with the source; coverage thresholds are 90% lines/branches.
+- Gateway HTTP tests are `src/**/*.int.spec.ts` (Supertest, RabbitMQ clients mocked) and run with
+  the unit suite.
+- `test/int/*.int.spec.ts` in service-a/service-b use Testcontainers and only run via `test:int`.
+  Do not put container-based tests in the unit suite.
+
+## Commands
+
+```bash
+pnpm install
+pnpm build                                  # required before running a service: @task1/shared resolves to dist/
+pnpm docker:up / pnpm docker:down
+pnpm dev:api-gateway | dev:service-a | dev:service-b
+pnpm test                                   # all packages, no infrastructure
+pnpm test:int                               # service-a/service-b, needs Docker
+pnpm lint
+pnpm check                                  # lint + test; also runs on git push
+pnpm --filter <package> run <script>        # single package
+```
+
+Run `pnpm check` before considering a change done.
+
+## Do not change without being asked
+
+- The `AuthGuard` stub (`isAuthenticated()` returning `true`) — it is an intentional placeholder.
+- `.json.gz` as the stored archive suffix — every reader gunzips, and the gateway validates uploads
+  by magic bytes, not by name.
+- Docker, infrastructure, or the queue topology.
+
+## Library documentation
+
+Before writing code against NestJS, RabbitMQ/amqplib, MongoDB's driver, ioredis, Zod, Vitest, pino
+or any other dependency, fetch current documentation with **Context7** (`npx ctx7@latest library
+"<name>" "<question>"`, then `npx ctx7@latest docs <libraryId> "<question>"`) rather than relying on
+training data. This repository pins recent majors — NestJS 11, Zod 4, Vitest 4, pino 10, ioredis 6,
+mongodb 7 — where remembered APIs are frequently wrong.

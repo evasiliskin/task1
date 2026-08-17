@@ -52,7 +52,7 @@ describe('searchLogs', () => {
       eventType: 'github.import.completed',
       service: 'service-a',
       status: 'completed',
-      timestamp: new Date('2026-08-11T00:02:00.000Z'),
+      timestamp: '2026-08-11T00:02:00.000Z',
       correlationId,
       archive: '2026-08-11-0.json.gz',
       metadata: { eventsProcessed: 10 },
@@ -83,9 +83,48 @@ describe('searchLogs', () => {
 
     await searchLogs(collection, { limit: 50 });
 
-    expect(find).toHaveBeenCalledWith({});
+    expect(find).toHaveBeenCalledOnce();
+    const findCall = find.mock.calls[0];
+    expect(findCall[0]).toEqual({});
+    expect(findCall[1]).toEqual({
+      projection: {
+        _id: 1,
+        importId: 1,
+        eventType: 1,
+        service: 1,
+        status: 1,
+        timestamp: 1,
+        correlationId: 1,
+        archive: 1,
+        metadata: 1,
+        errorInfo: 1,
+      },
+    });
     expect(cursor.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
     expect(cursor.limit).toHaveBeenCalledWith(51);
+  });
+
+  it('should pass a field-limiting projection to find(), when logs are searched', async () => {
+    const { collection, find } = buildCollection([]);
+
+    await searchLogs(collection, { limit: 50 });
+
+    expect(find).toHaveBeenCalledOnce();
+    const findCall = find.mock.calls[0];
+    expect(findCall[1]).toBeDefined();
+    const projection = (findCall[1] as Record<string, unknown>)?.projection;
+    expect(projection).toEqual({
+      _id: 1,
+      importId: 1,
+      eventType: 1,
+      service: 1,
+      status: 1,
+      timestamp: 1,
+      correlationId: 1,
+      archive: 1,
+      metadata: 1,
+      errorInfo: 1,
+    });
   });
 
   it('should decode the cursor and build a keyset filter, when a cursor is provided', async () => {
@@ -96,7 +135,9 @@ describe('searchLogs', () => {
 
     await searchLogs(collection, { limit: 50, cursor: priorCursor });
 
-    expect(find).toHaveBeenCalledWith({
+    expect(find).toHaveBeenCalledOnce();
+    const findCall = find.mock.calls[0];
+    expect(findCall[0]).toEqual({
       $and: [
         {},
         {
@@ -106,6 +147,20 @@ describe('searchLogs', () => {
           ],
         },
       ],
+    });
+    expect(findCall[1]).toEqual({
+      projection: {
+        _id: 1,
+        importId: 1,
+        eventType: 1,
+        service: 1,
+        status: 1,
+        timestamp: 1,
+        correlationId: 1,
+        archive: 1,
+        metadata: 1,
+        errorInfo: 1,
+      },
     });
   });
 });

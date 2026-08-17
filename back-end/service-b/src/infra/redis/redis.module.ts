@@ -1,10 +1,12 @@
 import { Global, Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
+import redisConfig from '@task1/shared/config/redis.config';
+import { type ILoggerFactory } from '@task1/shared/logger/logger-factory.interface';
+import { LOGGER_FACTORY } from '@task1/shared/logger/logger.tokens';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { createRedisClient } from '@task1/shared/redis/create-redis-client';
 import { RedisConnectionService } from '@task1/shared/redis/redis-connection.service';
-import { Redis } from 'ioredis';
 
-import redisConfig from '../../config/redis.config.js';
 import { REDIS_CLIENT } from '../infra-clients.tokens.js';
 
 @Global()
@@ -14,20 +16,9 @@ import { REDIS_CLIENT } from '../infra-clients.tokens.js';
     RedisConnectionService,
     {
       provide: REDIS_CLIENT,
-      inject: [redisConfig.KEY],
-      useFactory: (config: ConfigType<typeof redisConfig>) => {
-        const client = new Redis(config.url, { lazyConnect: true });
-
-        // ioredis emits 'error' on a lazily-connected client before connect()
-        // resolves or rejects; without a listener this crashes the process
-        // (unhandled EventEmitter 'error' event). RedisConnectionService's own
-        // connect() call surfaces real connection failures via its rejected
-        // promise instead — this listener only prevents the process crash.
-        // eslint-disable-next-line @typescript-eslint/no-empty-function -- deliberately swallowed; see comment above.
-        client.on('error', () => {});
-
-        return client;
-      },
+      inject: [redisConfig.KEY, LOGGER_FACTORY],
+      useFactory: (config: ConfigType<typeof redisConfig>, loggerFactory: ILoggerFactory) =>
+        createRedisClient(config.url, loggerFactory),
     },
   ],
   exports: [REDIS_CLIENT],

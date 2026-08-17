@@ -70,4 +70,20 @@ describe('statusFromAppError', () => {
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   });
+
+  it('should return 409, when the error category is CONFLICT', () => {
+    expect(statusFromAppError(new TestAppError(ErrorCategory.CONFLICT))).toBe(HttpStatus.CONFLICT);
+  });
+
+  it('should return 429, when the error category is RATE_LIMIT', () => {
+    expect(statusFromAppError(new TestAppError(ErrorCategory.RATE_LIMIT))).toBe(
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  });
+
+  it('should return 503, when the error category is EXTERNAL', () => {
+    expect(statusFromAppError(new TestAppError(ErrorCategory.EXTERNAL))).toBe(
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  });
 });

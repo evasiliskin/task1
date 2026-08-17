@@ -23,3 +23,19 @@ export class ArchiveDownloadError extends AppError {
     });
   }
 }
+
+const RETRYABLE_MIN_STATUS = 500;
+
+export function isRetryableDownloadError(error: unknown): boolean {
+  if (!(error instanceof ArchiveDownloadError)) {
+    return false;
+  }
+
+  const statusCode = error.params?.statusCode;
+
+  if (typeof statusCode !== 'number') {
+    return true;
+  }
+
+  return statusCode >= RETRYABLE_MIN_STATUS;
+}

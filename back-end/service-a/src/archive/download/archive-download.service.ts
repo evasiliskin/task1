@@ -5,23 +5,25 @@ import storageConfig, { type StorageConfiguration } from '../../config/storage.c
 
 import { downloadArchive, type IDownloadArchiveResult } from './download-archive.js';
 import { type HttpGetFunction } from './fetch-archive-stream.js';
+import { HTTP_GET } from './http-get.provider.js';
 
 @Injectable()
 export class ArchiveDownloadService {
   public constructor(
     @Inject(archiveConfig.KEY) private readonly archiveConfiguration: ArchiveConfiguration,
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
+    @Inject(HTTP_GET) private readonly httpGet: HttpGetFunction,
   ) {}
 
-  public download(dateHour: string, httpGet?: HttpGetFunction): Promise<IDownloadArchiveResult> {
-    return downloadArchive(
-      dateHour,
-      {
-        baseUrl: this.archiveConfiguration.baseUrl,
-        storageDirectory: this.storageConfiguration.dir,
-        timeoutMs: this.archiveConfiguration.downloadTimeoutMs,
-      },
-      httpGet,
-    );
+  public download(dateHour: string, importId: string): Promise<IDownloadArchiveResult> {
+    return downloadArchive(dateHour, importId, {
+      baseUrl: this.archiveConfiguration.baseUrl,
+      storageDirectory: this.storageConfiguration.dir,
+      timeoutMs: this.archiveConfiguration.downloadTimeoutMs,
+      totalTimeoutMs: this.archiveConfiguration.downloadTotalTimeoutMs,
+      maxAttempts: this.archiveConfiguration.downloadMaxAttempts,
+      retryDelayMs: this.archiveConfiguration.downloadRetryDelayMs,
+      httpGet: this.httpGet,
+    });
   }
 }

@@ -2,8 +2,8 @@ import { IS_PUBLIC_KEY, Public } from './public.decorator.js';
 
 class TestController {
   @Public()
-  public handler(this: void): void {
-    // no-op: only the metadata attached by @Public() is under test.
+  public handler(this: void): boolean {
+    return true;
   }
 }
 

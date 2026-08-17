@@ -10,7 +10,6 @@ export const importCompletedEventSchema = z.object({
   invalidEvents: z.coerce.number().int().nonnegative(),
   duplicateEvents: z.coerce.number().int().nonnegative(),
   errorCount: z.coerce.number().int().nonnegative(),
-  correlationId: z.string().min(1),
 });
 
 export type ImportCompletedEvent = z.infer<typeof importCompletedEventSchema>;

@@ -1,6 +1,6 @@
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
 import { ensureProcessingLogIndexes } from './ensure-processing-log-indexes.js';
@@ -14,7 +14,7 @@ export class EnsureProcessingLogIndexesInitializer implements OnModuleInit {
     private readonly collection: Collection<IProcessingLogDocument>,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('EnsureProcessingLogIndexesInitializer');
+    this.logger = loggerService.getLogger(EnsureProcessingLogIndexesInitializer.name);
   }
 
   public async onModuleInit(): Promise<void> {

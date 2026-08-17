@@ -7,9 +7,17 @@ export type PdfDocument = InstanceType<typeof PDFDocument>;
 
 const TIME_CHART_WIDTH = 400;
 const TIME_CHART_HEIGHT = 120;
-const TIME_CHART_BOTTOM_MARGIN = 20;
+const TIME_CHART_BOTTOM_MARGIN = 45;
 const SINGLE_POINT_MARKER_RADIUS = 3;
 const AXIS_LABEL_OFFSET_X = 25;
+const TICK_LABEL_WIDTH = 60;
+const MIN_AXIS_TICKS = 2;
+const TICK_LABEL_OFFSET_Y = 6;
+const AXIS_NAME_OFFSET_Y = 22;
+const AXIS_LABEL_FONT_SIZE = 8;
+const AGGREGATE_Y_AXIS_NAME = 'Events';
+const SINGLE_IMPORT_Y_AXIS_NAME = 'Duration (ms)';
+const X_AXIS_NAME = 'Time (UTC)';
 
 const BAR_CHART_HEIGHT = 120;
 const BAR_WIDTH = 60;
@@ -28,21 +36,135 @@ interface IBreakdownBar {
   color: string;
 }
 
+export function selectTickIndices(pointCount: number, maxTicks: number): number[] {
+  if (pointCount <= 0) {
+    return [];
+  }
+
+  const tickCount = Math.min(pointCount, maxTicks);
+
+  if (tickCount === 1) {
+    return [0];
+  }
+
+  const step = (pointCount - 1) / (tickCount - 1);
+  const indices: number[] = [];
+
+  for (let tick = 0; tick < tickCount; tick += 1) {
+    indices.push(Math.round(tick * step));
+  }
+
+  return indices;
+}
+
+export function maxTicksForWidth(chartWidth: number, labelWidth: number): number {
+  return Math.max(MIN_AXIS_TICKS, Math.floor(chartWidth / labelWidth));
+}
+
+export function formatAxisTimestamp(isoTimestamp: string): string {
+  return `${isoTimestamp.slice(5, 10)} ${isoTimestamp.slice(11, 16)}`;
+}
+
+function pointX(index: number, pointCount: number, originX: number): number {
+  if (pointCount === 1) {
+    return originX;
+  }
+
+  return originX + index * (TIME_CHART_WIDTH / (pointCount - 1));
+}
+
+function drawYAxisLabels(
+  pdf: PdfDocument,
+  originX: number,
+  originY: number,
+  maxValue: number,
+): void {
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY;
+  pdf.fontSize(AXIS_LABEL_FONT_SIZE).text(String(maxValue));
+
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY + TIME_CHART_HEIGHT - 4;
+  pdf.fontSize(AXIS_LABEL_FONT_SIZE).text('0');
+
+  pdf.x = originX;
+}
+
+function drawXAxisTicks(
+  pdf: PdfDocument,
+  timeSeries: IImportTimeSeriesPoint[],
+  originX: number,
+  originY: number,
+): void {
+  const tickY = originY + TIME_CHART_HEIGHT + TICK_LABEL_OFFSET_Y;
+
+  const maxTicks = maxTicksForWidth(TIME_CHART_WIDTH, TICK_LABEL_WIDTH);
+
+  selectTickIndices(timeSeries.length, maxTicks).forEach((index) => {
+    const point = timeSeries.at(index);
+
+    if (point === undefined) {
+      return;
+    }
+
+    const x = pointX(index, timeSeries.length, originX);
+
+    pdf
+      .fontSize(AXIS_LABEL_FONT_SIZE)
+      .text(formatAxisTimestamp(point.timestamp), x - TICK_LABEL_WIDTH / 2, tickY, {
+        width: TICK_LABEL_WIDTH,
+        align: 'center',
+      });
+  });
+
+  pdf.x = originX;
+}
+
+function drawAxisNames(
+  pdf: PdfDocument,
+  originX: number,
+  originY: number,
+  isAggregate: boolean,
+): void {
+  pdf.x = originX - AXIS_LABEL_OFFSET_X;
+  pdf.y = originY - AXIS_LABEL_FONT_SIZE - 2;
+  pdf
+    .fontSize(AXIS_LABEL_FONT_SIZE)
+    .text(isAggregate ? AGGREGATE_Y_AXIS_NAME : SINGLE_IMPORT_Y_AXIS_NAME);
+
+  pdf
+    .fontSize(AXIS_LABEL_FONT_SIZE)
+    .text(X_AXIS_NAME, originX, originY + TIME_CHART_HEIGHT + AXIS_NAME_OFFSET_Y, {
+      width: TIME_CHART_WIDTH,
+      align: 'center',
+    });
+
+  pdf.x = originX;
+}
+
 export function drawSummarySection(
-  document_: PdfDocument,
+  pdf: PdfDocument,
   stats: IStatsResult,
   isAggregate: boolean,
 ): void {
-  document_.fontSize(14).text('Summary', { underline: true });
-  document_.moveDown(0.5);
-  document_.fontSize(11);
-  document_.text(`Report scope: ${isAggregate ? 'all imports' : 'single import'}`);
-  document_.text(`Archives processed: ${stats.archivesProcessed}`);
-  document_.text(`Events processed: ${stats.eventsProcessed}`);
-  document_.text(`Successful events: ${stats.successfulEvents}`);
-  document_.text(`Invalid events: ${stats.invalidEvents}`);
-  document_.text(`Errors: ${stats.errors}`);
-  document_.text(
+  pdf.fontSize(14).text('Summary', { underline: true });
+  pdf.moveDown(0.5);
+  pdf.fontSize(11);
+  pdf.text(`Report scope: ${isAggregate ? 'all imports' : 'single import'}`);
+
+  if (stats.degraded) {
+    pdf
+      .fillColor('#C62828')
+      .text('Warning: some data sources were unavailable; figures may be incomplete.');
+    pdf.fillColor('black');
+  }
+
+  pdf.text(`Archives processed: ${stats.archivesProcessed}`);
+  pdf.text(`Events processed: ${stats.eventsProcessed}`);
+  pdf.text(`Successful events: ${stats.successfulEvents}`);
+  pdf.text(`Invalid events: ${stats.invalidEvents}`);
+  pdf.text(`Errors: ${stats.errors}`);
+  pdf.text(
     stats.processingDurationMs === undefined
       ? 'Processing duration: n/a'
       : `Processing duration: ${stats.processingDurationMs} ms`,
@@ -50,26 +172,26 @@ export function drawSummarySection(
 }
 
 export function drawEventsOverTimeChart(
-  document_: PdfDocument,
+  pdf: PdfDocument,
   timeSeries: IImportTimeSeriesPoint[],
   isAggregate: boolean,
 ): void {
-  document_
+  pdf
     .fontSize(14)
     .text(isAggregate ? AGGREGATE_CHART_TITLE : SINGLE_IMPORT_CHART_TITLE, { underline: true });
-  document_.moveDown(0.5);
+  pdf.moveDown(0.5);
 
   if (timeSeries.length === 0) {
-    document_.fontSize(11).text('No data available to draw a chart.');
+    pdf.fontSize(11).text('No data available to draw a chart.');
 
     return;
   }
 
-  const originX = document_.x;
-  const originY = document_.y;
+  const originX = pdf.x;
+  const originY = pdf.y;
   const maxValue = Math.max(...timeSeries.map((point) => point.value), 1);
 
-  document_
+  pdf
     .moveTo(originX, originY + TIME_CHART_HEIGHT)
     .lineTo(originX + TIME_CHART_WIDTH, originY + TIME_CHART_HEIGHT)
     .stroke();
@@ -78,45 +200,37 @@ export function drawEventsOverTimeChart(
     const [point] = timeSeries;
     const y = originY + TIME_CHART_HEIGHT - (point.value / maxValue) * TIME_CHART_HEIGHT;
 
-    document_.circle(originX, y, SINGLE_POINT_MARKER_RADIUS).fill('black');
+    pdf.circle(originX, y, SINGLE_POINT_MARKER_RADIUS).fill('black');
   } else {
-    const stepX = TIME_CHART_WIDTH / (timeSeries.length - 1);
-
     timeSeries.forEach((point, index) => {
-      const x = originX + index * stepX;
+      const x = pointX(index, timeSeries.length, originX);
       const y = originY + TIME_CHART_HEIGHT - (point.value / maxValue) * TIME_CHART_HEIGHT;
 
       if (index === 0) {
-        document_.moveTo(x, y);
+        pdf.moveTo(x, y);
 
         return;
       }
 
-      document_.lineTo(x, y);
+      pdf.lineTo(x, y);
     });
 
-    document_.stroke();
-
-    document_.x = originX - AXIS_LABEL_OFFSET_X;
-    document_.y = originY;
-    document_.fontSize(8).text(String(maxValue));
-
-    document_.x = originX - AXIS_LABEL_OFFSET_X;
-    document_.y = originY + TIME_CHART_HEIGHT - 4;
-    document_.fontSize(8).text('0');
-
-    document_.x = originX;
+    pdf.stroke();
   }
 
-  document_.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
+  drawYAxisLabels(pdf, originX, originY, maxValue);
+  drawXAxisTicks(pdf, timeSeries, originX, originY);
+  drawAxisNames(pdf, originX, originY, isAggregate);
+
+  pdf.y = originY + TIME_CHART_HEIGHT + TIME_CHART_BOTTOM_MARGIN;
 }
 
-export function drawStatusBreakdownChart(document_: PdfDocument, stats: IStatsResult): void {
-  document_.fontSize(14).text('Event Outcome Breakdown', { underline: true });
-  document_.moveDown(0.5);
+export function drawStatusBreakdownChart(pdf: PdfDocument, stats: IStatsResult): void {
+  pdf.fontSize(14).text('Event Outcome Breakdown', { underline: true });
+  pdf.moveDown(0.5);
 
-  const originX = document_.x;
-  const originY = document_.y;
+  const originX = pdf.x;
+  const originY = pdf.y;
   const bars: IBreakdownBar[] = [
     { label: 'Successful', value: stats.successfulEvents, color: SUCCESSFUL_BAR_COLOR },
     { label: 'Invalid', value: stats.invalidEvents, color: INVALID_BAR_COLOR },
@@ -129,8 +243,8 @@ export function drawStatusBreakdownChart(document_: PdfDocument, stats: IStatsRe
     const x = originX + index * (BAR_WIDTH + BAR_GAP);
     const y = originY + BAR_CHART_HEIGHT - barHeight;
 
-    document_.rect(x, y, BAR_WIDTH, barHeight).fill(bar.color);
-    document_
+    pdf.rect(x, y, BAR_WIDTH, barHeight).fill(bar.color);
+    pdf
       .fillColor('black')
       .fontSize(9)
       .text(`${bar.label}: ${bar.value}`, x, originY + BAR_CHART_HEIGHT + 5, {
@@ -138,5 +252,5 @@ export function drawStatusBreakdownChart(document_: PdfDocument, stats: IStatsRe
       });
   });
 
-  document_.y = originY + BAR_CHART_HEIGHT + BAR_CHART_BOTTOM_MARGIN;
+  pdf.y = originY + BAR_CHART_HEIGHT + BAR_CHART_BOTTOM_MARGIN;
 }

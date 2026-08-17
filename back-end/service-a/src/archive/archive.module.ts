@@ -2,27 +2,35 @@ import { Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LoggerModule } from '@task1/shared/logger/rmq/logger.module';
+import { MetricsModule } from '@task1/shared/metrics/rmq/metrics.module';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 
+import { ClaimImportController } from './claim/claim-import.controller.js';
 import { ArchiveDownloadService } from './download/archive-download.service.js';
 import { DownloadImportController } from './download/download-import.controller.js';
+import { httpGetProvider } from './download/http-get.provider.js';
 import { EnsureEventIndexesInitializer } from './ensure-event-indexes-initializer.service.js';
 import { EnsureImportIndexesInitializer } from './ensure-import-indexes-initializer.service.js';
 import { eventsCollectionProvider } from './events-collection.provider.js';
+import { GracefulShutdownService } from './graceful-shutdown.service.js';
 import { ImportOrchestrationService } from './import-orchestration.service.js';
+import { ImportRunReconciliationService } from './import-run-reconciliation.service.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { ImportStatusController } from './import-status.controller.js';
 import { importsCollectionProvider } from './imports-collection.provider.js';
+import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { EventsSearchController } from './search/events-search.controller.js';
 import { EventsSearchService } from './search/events-search.service.js';
+import { StorageCleanupService } from './storage-cleanup.service.js';
 import { ArchiveProcessingService } from './upload/archive-processing.service.js';
 import { UploadImportController } from './upload/upload-import.controller.js';
 
 @Module({
   imports: [
     LoggerModule,
+    MetricsModule,
     ClientsModule.registerAsync([
       {
         name: SERVICE_B_RMQ_CLIENT,
@@ -43,6 +51,7 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     DownloadImportController,
     EventsSearchController,
     ImportStatusController,
+    ClaimImportController,
   ],
   providers: [
     eventsCollectionProvider,
@@ -51,9 +60,15 @@ import { UploadImportController } from './upload/upload-import.controller.js';
     EnsureImportIndexesInitializer,
     ArchiveProcessingService,
     ArchiveDownloadService,
+    httpGetProvider,
     ImportRunTracker,
+    ImportRunReconciliationService,
     ImportOrchestrationService,
     EventsSearchService,
+    StorageCleanupService,
+    InFlightImportRegistry,
+    GracefulShutdownService,
   ],
+  exports: [InFlightImportRegistry],
 })
 export class ArchiveModule {}

@@ -17,7 +17,7 @@ export const rawGithubEventSchema = z.object({
   actor: rawGithubActorSchema,
   repo: rawGithubRepositorySchema,
   org: rawGithubActorSchema.optional(),
-  payload: z.record(z.string(), z.unknown()),
+  payload: z.unknown(),
 });
 
 export type RawGithubEvent = z.infer<typeof rawGithubEventSchema>;

@@ -25,7 +25,7 @@ describe('RmqContextInterceptor', () => {
     } as unknown as ExecutionContext;
   };
 
-  it('should extract and reuse valid correlation id and request id headers', async () => {
+  it('should reuse the inbound correlation id and request id, when both headers are valid', async () => {
     const executionContext = buildExecutionContext({
       'x-correlation-id': '11111111-1111-4111-8111-111111111111',
       'x-request-id': '22222222-2222-4222-8222-222222222222',
@@ -44,7 +44,30 @@ describe('RmqContextInterceptor', () => {
     expect(observedContext).toEqual({
       correlationId: '11111111-1111-4111-8111-111111111111',
       requestId: '22222222-2222-4222-8222-222222222222',
+      correlationIdSource: 'inbound',
     });
+  });
+
+  it('should generate valid UUID v4 ids, when the headers property is missing entirely', async () => {
+    const rmqContext = {
+      getMessage: () => ({ properties: {} }),
+    } as unknown as RmqContext;
+    const executionContext = {
+      switchToRpc: () => ({ getContext: <T>() => rmqContext as T }),
+    } as unknown as ExecutionContext;
+    let observedContext: Partial<{ correlationId: string; requestId: string }> = {};
+    const callHandler: CallHandler = {
+      handle: () => {
+        observedContext = requestContextService.getAttributes();
+
+        return of(null);
+      },
+    };
+
+    await firstValueFrom(interceptor.intercept(executionContext, callHandler));
+
+    expect(observedContext.correlationId).toMatch(UUID_V4_PATTERN);
+    expect(observedContext.requestId).toMatch(UUID_V4_PATTERN);
   });
 
   it('should generate valid UUID v4 ids, when headers are absent', async () => {
@@ -84,7 +107,7 @@ describe('RmqContextInterceptor', () => {
     expect(observedContext.requestId).toMatch(UUID_V4_PATTERN);
   });
 
-  it('should emit the value produced by the handler', async () => {
+  it('should emit the value produced by the handler, when the handler succeeds', async () => {
     const executionContext = buildExecutionContext({});
     const callHandler: CallHandler = { handle: () => of({ status: 'ok' }) };
 
@@ -93,7 +116,7 @@ describe('RmqContextInterceptor', () => {
     expect(result).toEqual({ status: 'ok' });
   });
 
-  it('should propagate an error emitted by the handler', async () => {
+  it('should propagate the error, when the handler fails', async () => {
     const executionContext = buildExecutionContext({});
     const callHandler: CallHandler = {
       handle: () =>

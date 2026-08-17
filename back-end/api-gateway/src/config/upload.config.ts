@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { z } from 'zod';
 
-const DEFAULT_MAX_UPLOAD_FILE_SIZE_BYTES = 2_147_483_648;
+const DEFAULT_MAX_UPLOAD_FILE_SIZE_BYTES = 536_870_912;
 
 const uploadConfigSchema = z.object({
   maxFileSizeBytes: z.coerce.number().int().positive().default(DEFAULT_MAX_UPLOAD_FILE_SIZE_BYTES),

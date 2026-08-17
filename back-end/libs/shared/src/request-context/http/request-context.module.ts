@@ -1,24 +1,11 @@
-import {
-  Global,
-  type MiddlewareConsumer,
-  Module,
-  type NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 
 import { RequestContextService } from '../request-context.service.js';
-
-import { RequestContextMiddleware } from './request-context.middleware.js';
+import { ContextPropagatingClient } from '../rmq/context-propagating.client.js';
 
 @Global()
 @Module({
-  providers: [RequestContextService],
-  exports: [RequestContextService],
+  providers: [RequestContextService, ContextPropagatingClient],
+  exports: [RequestContextService, ContextPropagatingClient],
 })
-export class RequestContextModule implements NestModule {
-  public configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(RequestContextMiddleware)
-      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
-  }
-}
+export class RequestContextModule {}

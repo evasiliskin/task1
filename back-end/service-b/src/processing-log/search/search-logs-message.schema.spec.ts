@@ -40,7 +40,7 @@ describe('searchLogsMessageSchema', () => {
     expect(() => searchLogsMessageSchema.parse({ status: 'unknown' })).toThrow();
   });
 
-  it('should accept "dead-lettered" as a valid status', () => {
+  it('should accept the payload, when the status is "dead-lettered"', () => {
     expect(searchLogsMessageSchema.parse({ status: 'dead-lettered' }).status).toBe('dead-lettered');
   });
 

@@ -5,7 +5,6 @@ describe('importStartedEventSchema', () => {
     importId: '11111111-1111-4111-8111-111111111111',
     archive: '2026-08-11-0.json.gz',
     startedAt: '2026-08-11T00:00:00.000Z',
-    correlationId: 'c1',
   };
 
   it('should accept a valid payload, when all fields are present and well-formed', () => {
@@ -26,12 +25,5 @@ describe('importStartedEventSchema', () => {
     expect(() =>
       importStartedEventSchema.parse({ ...validPayload, startedAt: 'not-a-date' }),
     ).toThrow();
-  });
-
-  it('should throw, when correlationId is missing', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { correlationId, ...withoutCorrelationId } = validPayload;
-
-    expect(() => importStartedEventSchema.parse(withoutCorrelationId)).toThrow();
   });
 });

@@ -198,12 +198,6 @@ export default [
           },
         ],
 
-        // eslint-plugin-n's resolver isn't TypeScript-aware (it looks for the
-        // literal extensionless path on disk), so it false-positives on every
-        // relative import in this project. import-x (configured with the
-        // typescript resolver below) already covers unresolved-import
-        // checking correctly, and `tsc`/nest build catches real missing
-        // modules at compile time.
         'n/no-missing-import': 'off',
       },
       env: {

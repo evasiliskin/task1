@@ -1,42 +1,55 @@
-import { type LogChannel, type LogFields } from './types.js';
+import { type Logger } from 'pino';
 
-export interface IPinoLikeLogger {
-  trace(fields: LogFields, message: string): void;
-  debug(fields: LogFields, message: string): void;
-  info(fields: LogFields, message: string): void;
-  warn(fields: LogFields, message: string): void;
-  error(fields: LogFields, message: string): void;
-  fatal(fields: LogFields, message: string): void;
-}
+import { redactLogPayload } from './redact-payload.js';
+import { type LogChannel, type LogFields, type LogLevelName } from './types.js';
 
 export class AppLogger {
-  public constructor(
-    private readonly pinoLogger: IPinoLikeLogger,
-    private readonly source: string,
-    private readonly channel: LogChannel,
-  ) {}
+  public with(bindings: LogFields): AppLogger {
+    return new AppLogger(this.pinoLogger.child(redactLogPayload(bindings) as LogFields));
+  }
+
+  public isLevelEnabled(level: LogLevelName): boolean {
+    return this.pinoLogger.isLevelEnabled(level);
+  }
 
   public trace(fields: LogFields, message: string): void {
-    this.pinoLogger.trace({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('trace', fields, message);
   }
 
   public debug(fields: LogFields, message: string): void {
-    this.pinoLogger.debug({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('debug', fields, message);
   }
 
   public info(fields: LogFields, message: string): void {
-    this.pinoLogger.info({ ...fields, source: this.source, channel: this.channel }, message);
+    this.write('info', fields, message);
   }
 
-  public warn(fields: LogFields, message: string): void {
-    this.pinoLogger.warn({ ...fields, source: this.source, channel: this.channel }, message);
+  public warn(fields: LogFields, message: string, error?: unknown): void {
+    this.write('warn', fields, message, error);
   }
 
-  public error(fields: LogFields, message: string): void {
-    this.pinoLogger.error({ ...fields, source: this.source, channel: this.channel }, message);
+  public error(fields: LogFields, message: string, error?: unknown): void {
+    this.write('error', fields, message, error);
   }
 
-  public fatal(fields: LogFields, message: string): void {
-    this.pinoLogger.fatal({ ...fields, source: this.source, channel: this.channel }, message);
+  public fatal(fields: LogFields, message: string, error?: unknown): void {
+    this.write('fatal', fields, message, error);
+  }
+
+  public static create(root: Logger, source: string, channel: LogChannel): AppLogger {
+    return new AppLogger(root.child({ source, channel }));
+  }
+
+  private constructor(private readonly pinoLogger: Logger) {}
+
+  private write(level: LogLevelName, fields: LogFields, message: string, error?: unknown): void {
+    if (!this.pinoLogger.isLevelEnabled(level)) {
+      return;
+    }
+
+    const redacted = redactLogPayload(fields) as Record<string, unknown>;
+
+    // eslint-disable-next-line security/detect-object-injection -- level is a constrained LogLevelName, not user input
+    this.pinoLogger[level](error === undefined ? redacted : { ...redacted, err: error }, message);
   }
 }

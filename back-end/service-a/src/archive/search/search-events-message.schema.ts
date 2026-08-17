@@ -1,7 +1,5 @@
+import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from '@task1/shared';
 import { z } from 'zod';
-
-const MAX_LIMIT = 200;
-const DEFAULT_LIMIT = 50;
 
 export const searchEventsMessageSchema = z.object({
   type: z.string().min(1).optional(),
@@ -10,7 +8,7 @@ export const searchEventsMessageSchema = z.object({
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
   cursor: z.string().min(1).optional(),
-  limit: z.coerce.number().int().positive().max(MAX_LIMIT).default(DEFAULT_LIMIT),
+  limit: z.coerce.number().int().positive().max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
 });
 
 export type SearchEventsMessage = z.infer<typeof searchEventsMessageSchema>;

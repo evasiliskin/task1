@@ -1,47 +1,33 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { type ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
-import {
-  type ApiResponseSchemaHost,
-  ApiOkResponse,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
-import { buildOutboundHeaders } from '@task1/shared/request-context/propagation.util';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { type ClientProxy } from '@nestjs/microservices';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { type IEventView } from '@task1/shared/github-archive/index';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
+import { listResult } from '@task1/shared/pagination/list-result';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { firstValueFrom, timeout } from 'rxjs';
-import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { ApiListResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
-import { type EventView } from './schemas/event.schema.js';
 import { SearchEventsRequestSchema } from './schemas/search-events-request.schema.js';
 import {
   type SearchEventsResponse,
   SearchEventsResponseSchema,
+  SearchEventsResultShape,
 } from './schemas/search-events-response.schema.js';
-
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- deliberately a `type`, not an `I`-prefixed `interface`, matching the RMQ reply shape of `SearchEventsResult`
-type SearchEventsRpcResult = { data: EventView[]; nextCursor?: string };
-
-const EVENTS_SEARCH_PATTERN = 'events.search';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 @ApiTags('events')
 @Controller('events')
 export class EventsController {
   public constructor(
     @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
-    private readonly requestContextService: RequestContextService,
+    private readonly propagatingClient: ContextPropagatingClient,
     @Inject(rabbitmqConfig.KEY)
     private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
   ) {}
@@ -68,20 +54,17 @@ export class EventsController {
     required: false,
     description: 'Max results per page (default 50, max 200)',
   })
-  @ApiOkResponse({ schema: z.toJSONSchema(SearchEventsResponseSchema) as SwaggerSchema })
+  @ApiListResponse(SearchEventsResultShape)
   public async search(
     @ModelBinder(SearchEventsRequestSchema)
     bound: BoundRequest<typeof SearchEventsRequestSchema>,
   ): Promise<SearchEventsResponse> {
-    const headers = buildOutboundHeaders(this.requestContextService.requireContext());
-    const record = new RmqRecordBuilder(bound.data).setOptions({ headers }).build();
-
     const result = await firstValueFrom(
-      this.serviceAClient
-        .send<SearchEventsRpcResult>(EVENTS_SEARCH_PATTERN, record)
+      this.propagatingClient
+        .send<ICursorPage<IEventView>>(this.serviceAClient, RPC_PATTERNS.EVENTS_SEARCH, bound.data)
         .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
     );
 
-    return { data: result.data, nextCursor: result.nextCursor };
+    return listResult(result.data, { nextCursor: result.nextCursor });
   }
 }

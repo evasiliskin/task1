@@ -2,36 +2,23 @@ import { randomUUID } from 'node:crypto';
 
 import { Module } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
 import { MulterModule } from '@nestjs/platform-express';
+import { LoggerModule } from '@task1/shared/logger/http/logger.module';
+import { buildUploadTemporaryFilename } from '@task1/shared/storage/archive-paths';
 import { diskStorage } from 'multer';
 
-import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 
 import { GetImportStatusController } from './get-import-status.controller.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { TriggerImportController } from './trigger-import.controller.js';
+import { UploadCleanupService } from './upload-cleanup.service.js';
 import { UploadImportController } from './upload-import.controller.js';
-import { buildTemporaryUploadFilename } from './upload-storage.util.js';
+import { isArchiveFilename } from './upload-storage.util.js';
 
 @Module({
   imports: [
-    ClientsModule.registerAsync([
-      {
-        name: SERVICE_A_RMQ_CLIENT,
-        inject: [rabbitmqConfig.KEY],
-        useFactory: (config: ConfigType<typeof rabbitmqConfig>) => ({
-          transport: Transport.RMQ,
-          options: {
-            urls: [config.url],
-            queue: config.serviceAQueue,
-            queueOptions: { durable: true },
-          },
-        }),
-      },
-    ]),
+    LoggerModule,
     MulterModule.registerAsync({
       inject: [storageConfig.KEY, uploadConfig.KEY],
       useFactory: (
@@ -43,13 +30,24 @@ import { buildTemporaryUploadFilename } from './upload-storage.util.js';
             callback(null, storageConfiguration.dir);
           },
           filename: (_request, _file, callback) => {
-            callback(null, buildTemporaryUploadFilename(randomUUID()));
+            callback(null, buildUploadTemporaryFilename(randomUUID()));
           },
         }),
+        fileFilter: (request, file, callback) => {
+          if (isArchiveFilename(file.originalname)) {
+            callback(null, true);
+
+            return;
+          }
+
+          (request as { rejectedFilename?: string }).rejectedFilename = file.originalname;
+          callback(null, false);
+        },
         limits: { fileSize: uploadConfiguration.maxFileSizeBytes },
       }),
     }),
   ],
   controllers: [UploadImportController, TriggerImportController, GetImportStatusController],
+  providers: [UploadCleanupService],
 })
 export class ImportsModule {}

@@ -6,6 +6,7 @@ import { type INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ResponseEnvelopeModule } from '@task1/shared/api-response/response-envelope.module';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
@@ -17,8 +18,9 @@ import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import reportConfig from '../config/report.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
-import { SERVICE_B_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { ReportsModule } from './reports.module.js';
 
 type App = Parameters<typeof request>[0];
@@ -47,8 +49,10 @@ describe('ReportsController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         ReportsModule,
       ],
     })
@@ -91,6 +95,16 @@ describe('ReportsController (HTTP Integration)', () => {
       expect((response.body as Buffer).toString('utf8')).toBe(REPORT_BODY);
     });
 
+    it('should stream the pdf unenveloped, when the report exists', async () => {
+      serviceBClient.send.mockReturnValue(of({ reportPath }));
+
+      const response = await request(httpServer).get('/reports/pdf').query({ importId });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBeInstanceOf(Buffer);
+      expect((response.body as Buffer).toString()).not.toContain('SUCCESS');
+    });
+
     it('should forward importId inside the RMQ message, when provided', async () => {
       serviceBClient.send.mockReturnValue(of({ reportPath }));
 
@@ -104,7 +118,7 @@ describe('ReportsController (HTTP Integration)', () => {
       expect(record.data).toEqual({ importId });
     });
 
-    it('should delete the report file after the response finishes, when the download completes', async () => {
+    it('should not delete the report file after the response finishes, when the download completes', async () => {
       serviceBClient.send.mockReturnValue(of({ reportPath }));
 
       await request(httpServer).get('/reports/pdf').query({ importId });
@@ -113,7 +127,7 @@ describe('ReportsController (HTTP Integration)', () => {
       });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      expect(existsSync(reportPath)).toBe(false);
+      expect(existsSync(reportPath)).toBe(true);
     });
 
     it('should return 400 and not call service-b, when importId is not a uuid', async () => {
@@ -122,6 +136,11 @@ describe('ReportsController (HTTP Integration)', () => {
         .query({ importId: 'not-a-uuid' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceBClient.send).not.toHaveBeenCalled();
     });
 
@@ -136,6 +155,7 @@ describe('ReportsController (HTTP Integration)', () => {
         const response = await request(httpServer).get('/reports/pdf').query({ importId });
 
         expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({ status: 'FAILED', code: 500 });
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         expect(existsSync(outsideReportPath)).toBe(true);
       } finally {

@@ -12,7 +12,7 @@ describe('UnauthenticatedError', () => {
     expect(error.code).toBe('AUTH_REQUIRED');
   });
 
-  it('should not include request-specific or provider-specific details in its message', () => {
+  it('should expose a generic message, when constructed', () => {
     const error = new UnauthenticatedError();
 
     expect(error.message).toBe('Authentication is required to access this resource.');

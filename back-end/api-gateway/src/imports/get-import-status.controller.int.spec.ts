@@ -2,6 +2,7 @@ import { type INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ResponseEnvelopeModule } from '@task1/shared/api-response/response-envelope.module';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
@@ -14,9 +15,10 @@ import rabbitmqConfig from '../config/rabbitmq.config.js';
 import storageConfig from '../config/storage.config.js';
 import uploadConfig from '../config/upload.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { ImportsModule } from './imports.module.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 
 type App = Parameters<typeof request>[0];
 
@@ -37,8 +39,10 @@ describe('GetImportStatusController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         ImportsModule,
       ],
     })
@@ -84,8 +88,15 @@ describe('GetImportStatusController (HTTP Integration)', () => {
       const response = await request(httpServer).get(`/imports/${importId}`);
 
       expect(response.status).toBe(200);
-      expect((response.body as { importId: string }).importId).toBe(importId);
-      expect((response.body as { status: string }).status).toBe('completed');
+      expect(response.body).toMatchObject({ status: 'SUCCESS', code: 200, message: 'OK' });
+      expect(
+        (response.body as { result: { data: { importId: string; status: string } } }).result.data
+          .importId,
+      ).toBe(importId);
+      expect(
+        (response.body as { result: { data: { importId: string; status: string } } }).result.data
+          .status,
+      ).toBe('completed');
     });
 
     it('should send the imports.status.get pattern with the importId, when called', async () => {
@@ -114,12 +125,23 @@ describe('GetImportStatusController (HTTP Integration)', () => {
       const response = await request(httpServer).get(`/imports/${importId}`);
 
       expect(response.status).toBe(404);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 404,
+        reason: 'IMPORT_NOT_FOUND',
+      });
+      expect((response.body as { details?: unknown }).details).toBeUndefined();
     });
 
     it('should return 400 and not call service-a, when importId is not a valid UUID', async () => {
       const response = await request(httpServer).get('/imports/not-a-uuid');
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
   });

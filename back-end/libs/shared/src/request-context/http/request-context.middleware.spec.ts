@@ -70,7 +70,7 @@ describe('RequestContextMiddleware', () => {
     );
   });
 
-  it('should set both response headers unconditionally', () => {
+  it('should set both response headers, when a request is handled', () => {
     const request = { headers: {} } as unknown as Request;
 
     middleware.use(request, response as unknown as Response, next);
@@ -85,7 +85,7 @@ describe('RequestContextMiddleware', () => {
     );
   });
 
-  it('should call next() inside the request context, making both ids readable via the service', () => {
+  it('should expose both ids via the service, when next() runs', () => {
     const request = {
       headers: {
         'x-correlation-id': '11111111-1111-4111-8111-111111111111',

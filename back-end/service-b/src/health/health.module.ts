@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TerminusModule } from '@nestjs/terminus';
+import { SharedHealthModule } from '@task1/shared/health/health.module';
 
 import { HealthController } from './health.controller.js';
 
 @Module({
-  imports: [TerminusModule],
+  imports: [SharedHealthModule],
   controllers: [HealthController],
 })
 export class HealthModule {}

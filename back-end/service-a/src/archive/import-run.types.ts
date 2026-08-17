@@ -17,4 +17,6 @@ export interface IImportRunDocument {
   duplicateEvents?: number;
   errorCount?: number;
   errorSamples?: string[];
+  idempotencyKey?: string;
+  claimedAt?: Date;
 }

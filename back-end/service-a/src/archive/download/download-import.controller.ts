@@ -1,41 +1,54 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { Ctx, EventPattern, Payload, type RmqContext } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
-import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
+import { RetryPublisher } from '@task1/shared/messaging/retry-publisher';
+import { type IRmqChannel, type IRmqMessage } from '@task1/shared/messaging/rmq-channel.types';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 
 import { ImportOrchestrationService } from '../import-orchestration.service.js';
-import { ImportRunTracker } from '../import-run-tracker.service.js';
+import { settleImportResult } from '../import-settlement.js';
 
 import { downloadImportMessageSchema } from './download-import-message.schema.js';
 
-const ALREADY_RECORDED_LOG_MESSAGE = 'Import already recorded, skipping duplicate download trigger';
+const MALFORMED_MESSAGE_LOG =
+  'Rejected malformed download-import message, acking without importing';
 
 @Controller()
 export class DownloadImportController {
   public constructor(
     private readonly importOrchestrationService: ImportOrchestrationService,
-    private readonly importRunTracker: ImportRunTracker,
-    private readonly requestContextService: RequestContextService,
+    private readonly retryPublisher: RetryPublisher,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('DownloadImportController');
+    this.logger = loggerService.getLogger(DownloadImportController.name);
   }
 
-  @EventPattern('archive.import.download')
-  public async handleDownload(@Payload() payload: unknown): Promise<void> {
-    const { importId, dateHour } = downloadImportMessageSchema.parse(payload);
-    const existing = await this.importRunTracker.findByImportId(importId);
+  @EventPattern(RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD)
+  public async handleDownload(
+    @Payload() payload: unknown,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    const parsed = downloadImportMessageSchema.safeParse(payload);
 
-    if (existing !== null) {
-      this.logger.info({ importId }, ALREADY_RECORDED_LOG_MESSAGE);
+    if (!parsed.success) {
+      this.logger.warn({}, MALFORMED_MESSAGE_LOG, parsed.error);
+      ackMessage(context);
 
       return;
     }
 
-    const { correlationId } = this.requestContextService.requireContext();
+    const { importId, dateHour } = parsed.data;
 
-    await this.importOrchestrationService.importDownload(dateHour, importId, correlationId);
+    await settleImportResult({
+      run: () => this.importOrchestrationService.importDownload(dateHour, importId),
+      channel: context.getChannelRef() as IRmqChannel,
+      message: context.getMessage() as IRmqMessage,
+      retryPublisher: this.retryPublisher,
+      logger: this.logger,
+      importId,
+    });
   }
 
   private readonly logger: AppLogger;

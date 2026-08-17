@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
+import redisConfig, { type RedisConfiguration } from '@task1/shared/config/redis.config';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
 import { type Redis } from 'ioredis';
 
-import redisConfig, { type RedisConfiguration } from '../../config/redis.config.js';
 import { REDIS_CLIENT } from '../../infra/infra-clients.tokens.js';
 
 import { type IImportTimeSeriesPoint } from './derive-import-duration-stats.js';
@@ -16,6 +16,16 @@ const FAILED_READ_TIME_SERIES_LOG = 'Failed to read events-processed time series
 
 type TsRangeReply = [number, string][];
 
+export interface IProcessingDurationResult {
+  value: number | undefined;
+  degraded: boolean;
+}
+
+export interface IEventsTimeSeriesResult {
+  timeSeries: IImportTimeSeriesPoint[];
+  degraded: boolean;
+}
+
 @Injectable()
 export class StatsMetricsReader {
   public constructor(
@@ -23,10 +33,10 @@ export class StatsMetricsReader {
     @Inject(redisConfig.KEY) private readonly redisConfiguration: RedisConfiguration,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('StatsMetricsReader');
+    this.logger = loggerService.getLogger(StatsMetricsReader.name);
   }
 
-  public async readAverageProcessingDuration(): Promise<number | undefined> {
+  public async readAverageProcessingDuration(): Promise<IProcessingDurationResult> {
     try {
       const reply = (await this.client.call(
         'TS.RANGE',
@@ -40,18 +50,18 @@ export class StatsMetricsReader {
 
       const lastSample = reply.at(-1);
 
-      return lastSample === undefined ? undefined : Number(lastSample[1]);
+      return {
+        value: lastSample === undefined ? undefined : Number(lastSample[1]),
+        degraded: false,
+      };
     } catch (error) {
-      this.logger.warn(
-        { error: error instanceof Error ? error.message : String(error) },
-        FAILED_READ_DURATION_LOG,
-      );
+      this.logger.warn({}, FAILED_READ_DURATION_LOG, error);
 
-      return undefined;
+      return { value: undefined, degraded: true };
     }
   }
 
-  public async readEventsTimeSeries(): Promise<IImportTimeSeriesPoint[]> {
+  public async readEventsTimeSeries(): Promise<IEventsTimeSeriesResult> {
     const bucketMs = Math.ceil(this.redisConfiguration.metricsRetentionMs / MAX_TIME_SERIES_POINTS);
 
     try {
@@ -65,17 +75,17 @@ export class StatsMetricsReader {
         bucketMs,
       )) as TsRangeReply;
 
-      return reply.map(([timestamp, value]) => ({
-        timestamp: new Date(timestamp).toISOString(),
-        value: Number(value),
-      }));
+      return {
+        timeSeries: reply.map(([timestamp, value]) => ({
+          timestamp: new Date(timestamp).toISOString(),
+          value: Number(value),
+        })),
+        degraded: false,
+      };
     } catch (error) {
-      this.logger.warn(
-        { error: error instanceof Error ? error.message : String(error) },
-        FAILED_READ_TIME_SERIES_LOG,
-      );
+      this.logger.warn({}, FAILED_READ_TIME_SERIES_LOG, error);
 
-      return [];
+      return { timeSeries: [], degraded: true };
     }
   }
 

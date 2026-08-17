@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import PDFDocument from 'pdfkit';
@@ -22,25 +22,37 @@ export async function buildReport(
 
   const document = new PDFDocument({ margin: 50 });
 
-  await new Promise<void>((resolve, reject) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- see justification above.
-    const writeStream = createWriteStream(reportPath);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reportPath is built from the configured report directory and a server-generated id, never raw external input.
+      const writeStream = createWriteStream(reportPath);
 
-    writeStream.on('finish', resolve);
-    writeStream.on('error', reject);
-    document.on('error', reject);
+      const fail = (error: Error): void => {
+        writeStream.destroy();
+        reject(error);
+      };
 
-    document.pipe(writeStream);
+      writeStream.on('finish', resolve);
+      writeStream.on('error', fail);
+      document.on('error', fail);
 
-    document.fontSize(20).text('GitHub Archive Processing Report', { align: 'center' });
-    document.moveDown();
+      document.pipe(writeStream);
 
-    drawSummarySection(document, stats, isAggregate);
-    document.moveDown();
-    drawEventsOverTimeChart(document, stats.timeSeries, isAggregate);
-    document.moveDown();
-    drawStatusBreakdownChart(document, stats);
+      document.fontSize(20).text('GitHub Archive Processing Report', { align: 'center' });
+      document.moveDown();
 
-    document.end();
-  });
+      drawSummarySection(document, stats, isAggregate);
+      document.moveDown();
+      drawEventsOverTimeChart(document, stats.timeSeries, isAggregate);
+      document.moveDown();
+      drawStatusBreakdownChart(document, stats);
+
+      document.end();
+    });
+  } catch (error) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reportPath is the file this function just created, under the configured report directory.
+    await unlink(reportPath).catch(() => undefined);
+
+    throw error;
+  }
 }

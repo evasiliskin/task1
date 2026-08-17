@@ -1,4 +1,4 @@
-import { Controller, Inject } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, type RmqContext } from '@nestjs/microservices';
 import {
   EVENT_PATTERNS,
@@ -10,49 +10,35 @@ import {
   type ImportStartedEvent,
 } from '@task1/shared/github-archive/index';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
-import { LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { LoggerService } from '@task1/shared/logger/logger.service';
+import { ackMessage } from '@task1/shared/messaging/ack.util';
+import { RetryPublisher } from '@task1/shared/messaging/retry-publisher';
+import { type IRmqChannel, type IRmqMessage } from '@task1/shared/messaging/rmq-channel.types';
+import { RequestContextService } from '@task1/shared/request-context/request-context.service';
 import { type ZodType } from 'zod';
-
-import rabbitmqConfig, { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
 
 import { ProcessingLogTracker } from './processing-log-tracker.service.js';
 import { type IProcessingLogDocument } from './processing-log.types.js';
-import { buildRetryHeaders, getRetryCount, type IRmqMessage } from './retry-count.util.js';
 import {
   toCompletedLogEntry,
   toFailedLogEntry,
   toStartedLogEntry,
 } from './to-processing-log-entry.js';
 
-interface IRmqChannel {
-  ack(message: IRmqMessage): void;
-  sendToQueue(
-    queue: string,
-    content: Buffer,
-    options?: { headers?: Record<string, unknown> },
-  ): boolean;
-  assertQueue(queue: string, options?: { durable?: boolean }): Promise<unknown>;
-}
-
-const MALFORMED_MESSAGE_LOG = 'Rejected malformed import event, acking without storing';
-const RETRY_SCHEDULED_LOG =
-  'Processing-log write failed, republishing with an incremented retry count';
-const DEAD_LETTERED_LOG =
-  'Processing-log write failed at maxRetries, moving message to the dead-letter queue';
-const DEAD_LETTER_RECORD_FAILED_LOG =
+export const MALFORMED_MESSAGE_LOG = 'Rejected malformed import event, acking without storing';
+export const DEAD_LETTER_RECORD_FAILED_LOG =
   'Failed to record the dead-lettered event as a processing-log entry';
-const REPUBLISH_FAILED_LOG =
-  'Retry/dead-letter republish failed, acking the original message to release the prefetch slot';
 const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
 @Controller()
 export class ImportEventsController {
   public constructor(
     private readonly tracker: ProcessingLogTracker,
-    @Inject(rabbitmqConfig.KEY) private readonly rabbitmqConfiguration: RabbitmqConfiguration,
+    private readonly retryPublisher: RetryPublisher,
+    private readonly requestContextService: RequestContextService,
     loggerService: LoggerService,
   ) {
-    this.logger = loggerService.getLogger('ImportEventsController');
+    this.logger = loggerService.getLogger(ImportEventsController.name);
   }
 
   @EventPattern(EVENT_PATTERNS.IMPORT_STARTED)
@@ -104,7 +90,7 @@ export class ImportEventsController {
   >(
     eventType: string,
     schema: ZodType<TEvent>,
-    toEntry: (event: TEvent, eventType: string) => IProcessingLogDocument,
+    toEntry: (event: TEvent, eventType: string, correlationId: string) => IProcessingLogDocument,
     payload: unknown,
     context: RmqContext,
   ): Promise<void> {
@@ -114,54 +100,41 @@ export class ImportEventsController {
     const parseResult = schema.safeParse(payload);
 
     if (!parseResult.success) {
-      this.logger.warn({ eventType, error: parseResult.error.message }, MALFORMED_MESSAGE_LOG);
+      this.logger.warn({ eventType }, MALFORMED_MESSAGE_LOG, parseResult.error);
       channel.ack(message);
 
       return;
     }
 
-    const entry = toEntry(parseResult.data, eventType);
+    const entry = toEntry(
+      parseResult.data,
+      eventType,
+      this.requestContextService.requireContext().correlationId,
+    );
 
     try {
       await this.tracker.upsertLog(entry);
-      channel.ack(message);
+      ackMessage(context);
     } catch (error) {
-      await this.retryOrDeadLetter(channel, message, eventType, entry, error);
+      await this.handleWriteFailure(channel, message, eventType, entry, error);
     }
   }
 
-  private async retryOrDeadLetter(
+  private async handleWriteFailure(
     channel: IRmqChannel,
     message: IRmqMessage,
     eventType: string,
     entry: IProcessingLogDocument,
     error: unknown,
   ): Promise<void> {
-    const retryCount = getRetryCount(message) + 1;
-    const headers = buildRetryHeaders(message, retryCount);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const outcome = await this.retryPublisher.settleFailure(channel, message, error);
 
-    try {
-      if (retryCount > this.rabbitmqConfiguration.maxRetries) {
-        await channel.assertQueue(this.rabbitmqConfiguration.deadLetterQueue, { durable: true });
-        channel.sendToQueue(this.rabbitmqConfiguration.deadLetterQueue, message.content, {
-          headers,
-        });
-        this.logger.error({ eventType, retryCount, error: errorMessage }, DEAD_LETTERED_LOG);
-        await this.recordDeadLetter(entry, eventType, errorMessage);
-      } else {
-        channel.sendToQueue(this.rabbitmqConfiguration.queue, message.content, { headers });
-        this.logger.warn({ eventType, retryCount, error: errorMessage }, RETRY_SCHEDULED_LOG);
-      }
-    } catch (republishError) {
-      const republishErrorMessage =
-        republishError instanceof Error ? republishError.message : String(republishError);
-      this.logger.error(
-        { eventType, retryCount, error: errorMessage, republishError: republishErrorMessage },
-        REPUBLISH_FAILED_LOG,
+    if (outcome === 'dead-lettered' || outcome === 'rejected') {
+      await this.recordDeadLetter(
+        entry,
+        eventType,
+        error instanceof Error ? error.message : String(error),
       );
-    } finally {
-      channel.ack(message);
     }
   }
 
@@ -177,13 +150,7 @@ export class ImportEventsController {
         errorInfo: { reason: reason.slice(0, DEAD_LETTER_REASON_MAX_LENGTH) },
       });
     } catch (writeError) {
-      this.logger.error(
-        {
-          eventType,
-          error: writeError instanceof Error ? writeError.message : String(writeError),
-        },
-        DEAD_LETTER_RECORD_FAILED_LOG,
-      );
+      this.logger.error({ eventType }, DEAD_LETTER_RECORD_FAILED_LOG, writeError);
     }
   }
 }

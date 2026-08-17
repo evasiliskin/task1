@@ -2,6 +2,7 @@ import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type HealthIndicatorService } from '@nestjs/terminus';
 import { RequestContextService } from '@task1/shared/request-context/request-context.service';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { NEVER, of, throwError } from 'rxjs';
 
 import type rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -11,6 +12,7 @@ import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js
 describe('RabbitMqPingHealthIndicator', () => {
   let indicator: RabbitMqPingHealthIndicator;
   let requestContextService: RequestContextService;
+  let propagatingClient: ContextPropagatingClient;
   let upMock: ReturnType<typeof vi.fn>;
   let downMock: ReturnType<typeof vi.fn>;
 
@@ -25,14 +27,22 @@ describe('RabbitMqPingHealthIndicator', () => {
     } as unknown as HealthIndicatorService;
 
     requestContextService = new RequestContextService();
+    propagatingClient = new ContextPropagatingClient(requestContextService);
 
-    indicator = new RabbitMqPingHealthIndicator(healthIndicatorService, requestContextService, {
+    indicator = new RabbitMqPingHealthIndicator(healthIndicatorService, propagatingClient, {
       pingTimeoutMs: 3000,
     } as ConfigType<typeof rabbitmqConfig>);
   });
 
   const runWithinContext = <T>(callback: () => T): T =>
-    requestContextService.run({ correlationId: 'c-123', requestId: 'r-inbound' }, callback);
+    requestContextService.run(
+      {
+        correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+        requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        correlationIdSource: 'inbound',
+      },
+      callback,
+    );
 
   it('should report the indicator as up, when the target service replies to health.check', async () => {
     const expectedResult = { 'service-b': { status: 'up' } };
@@ -77,7 +87,7 @@ describe('RabbitMqPingHealthIndicator', () => {
     expect(result).toEqual(expectedResult);
   });
 
-  it('should send a message record whose headers forward the active correlation id and a fresh request id', async () => {
+  it('should forward the active correlation id and a fresh request id, when it pings a service', async () => {
     upMock.mockReturnValue({ 'service-b': { status: 'up' } });
 
     const send = vi.fn().mockReturnValue(of({ status: 'ok' }));
@@ -92,7 +102,7 @@ describe('RabbitMqPingHealthIndicator', () => {
         options: expect.objectContaining({
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
-            'x-correlation-id': 'c-123',
+            'x-correlation-id': 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             'x-request-id': expect.any(String),
           }),
@@ -104,7 +114,7 @@ describe('RabbitMqPingHealthIndicator', () => {
       string,
       { options: { headers: Record<string, string> } },
     ];
-    expect(record.options.headers['x-request-id']).not.toBe('r-inbound');
+    expect(record.options.headers['x-request-id']).not.toBe('7c9e6679-7425-40de-944b-e07fc1f90ae7');
   });
 
   it('should throw MissingRequestContextError, when called outside of any request context', async () => {
@@ -127,7 +137,7 @@ describe('RabbitMqPingHealthIndicator', () => {
 
     const shortTimeoutIndicator = new RabbitMqPingHealthIndicator(
       healthIndicatorService,
-      requestContextService,
+      propagatingClient,
       {
         pingTimeoutMs: 10,
       } as ConfigType<typeof rabbitmqConfig>,

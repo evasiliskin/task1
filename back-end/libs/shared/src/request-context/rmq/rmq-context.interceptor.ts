@@ -7,9 +7,8 @@ import {
 import { type RmqContext } from '@nestjs/microservices';
 import { Observable, type Subscription } from 'rxjs';
 
-import { resolveId } from '../id-validation.util.js';
 import { RequestContextService } from '../request-context.service.js';
-import { CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from '../request-context.types.js';
+import { resolveRequestContext } from '../resolve-request-context.util.js';
 
 interface IRmqMessage {
   properties: { headers?: Record<string, string | string[] | undefined> };
@@ -23,15 +22,12 @@ export class RmqContextInterceptor implements NestInterceptor {
     const rmqContext = executionContext.switchToRpc().getContext<RmqContext>();
     const message = rmqContext.getMessage() as IRmqMessage;
     const headers = message.properties.headers ?? {};
-    // eslint-disable-next-line security/detect-object-injection
-    const correlationId = resolveId(headers[CORRELATION_ID_HEADER]);
-    // eslint-disable-next-line security/detect-object-injection
-    const requestId = resolveId(headers[REQUEST_ID_HEADER]);
+    const context = resolveRequestContext(headers);
 
     return new Observable((subscriber) => {
       let subscription: Subscription | undefined;
 
-      this.requestContextService.run({ correlationId, requestId }, () => {
+      this.requestContextService.run(context, () => {
         subscription = next.handle().subscribe(subscriber);
       });
 

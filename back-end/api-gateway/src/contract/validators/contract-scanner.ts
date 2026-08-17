@@ -4,7 +4,6 @@ import { MissingContractError } from '@task1/shared/errors/index';
 
 import { CONTRACT_METADATA } from '../decorators/contract.decorator.js';
 
-/** Matches NestJS `METHOD_METADATA` (`@nestjs/common/constants`). */
 const NEST_HTTP_METHOD_METADATA_KEY = 'method';
 
 @Injectable()
@@ -26,33 +25,46 @@ export class ContractScanner implements OnModuleInit {
     }
   }
 
+  private collectHandlers(instance: object): Map<string, unknown> {
+    const handlers = new Map<string, unknown>();
+    let prototype: object | null = Object.getPrototypeOf(instance) as object | null;
+
+    while (prototype !== null && prototype !== Object.prototype) {
+      for (const methodName of Object.getOwnPropertyNames(prototype)) {
+        if (methodName === 'constructor' || handlers.has(methodName)) {
+          continue;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, methodName);
+
+        if (typeof descriptor?.value === 'function') {
+          handlers.set(methodName, descriptor.value);
+        }
+      }
+
+      prototype = Object.getPrototypeOf(prototype) as object | null;
+    }
+
+    return handlers;
+  }
+
   private assertHandlersHaveContract(instance: object): void {
-    const prototype = Object.getPrototypeOf(instance) as Record<string, unknown>;
-    const methodNames = Object.getOwnPropertyNames(prototype);
     const controllerName = (instance.constructor as { name?: string }).name ?? 'Unknown';
 
-    for (const methodName of methodNames) {
-      if (methodName === 'constructor') {
-        continue;
-      }
-
-      const descriptor = Object.getOwnPropertyDescriptor(prototype, methodName);
-      const handler = descriptor?.value as ((...arguments_: unknown[]) => unknown) | undefined;
-
-      if (typeof handler !== 'function') {
-        continue;
-      }
-
+    for (const [methodName, handler] of this.collectHandlers(instance)) {
       const httpMethod = this.reflector.get<number | undefined>(
         NEST_HTTP_METHOD_METADATA_KEY,
-        handler,
+        handler as (...arguments_: unknown[]) => unknown,
       );
 
       if (httpMethod === undefined) {
         continue;
       }
 
-      const contract = this.reflector.get<unknown>(CONTRACT_METADATA, handler);
+      const contract = this.reflector.get<unknown>(
+        CONTRACT_METADATA,
+        handler as (...arguments_: unknown[]) => unknown,
+      );
 
       if (contract === undefined) {
         throw new MissingContractError({ controllerName, methodName });

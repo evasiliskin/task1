@@ -1,4 +1,4 @@
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
 import { EnsureProcessingLogIndexesInitializer } from './ensure-processing-log-indexes-initializer.service.js';
@@ -18,6 +18,19 @@ describe('EnsureProcessingLogIndexesInitializer', () => {
 
     expect(createIndex).toHaveBeenCalledWith({ importId: 1, status: 1 }, { unique: true });
     expect(infoMock).toHaveBeenCalledWith({}, 'Ensured processing-logs collection indexes');
+  });
+
+  it('should create exactly four indexes (no TTL index), when the module initializes', async () => {
+    const createIndex = vi.fn().mockResolvedValue('ok');
+    const collection = { createIndex } as unknown as Collection<IProcessingLogDocument>;
+    const loggerService = {
+      getLogger: vi.fn().mockReturnValue({ info: vi.fn() }),
+    } as unknown as LoggerService;
+    const initializer = new EnsureProcessingLogIndexesInitializer(collection, loggerService);
+
+    await initializer.onModuleInit();
+
+    expect(createIndex).toHaveBeenCalledTimes(4);
   });
 
   it('should propagate the error, when index creation fails', async () => {

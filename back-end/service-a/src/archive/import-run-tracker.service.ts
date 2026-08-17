@@ -1,6 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { type Collection } from 'mongodb';
+import { randomUUID } from 'node:crypto';
 
+import { Inject, Injectable } from '@nestjs/common';
+import { DUPLICATE_KEY_ERROR_CODE } from '@task1/shared/mongo/duplicate-key.const';
+import { type Collection, MongoServerError } from 'mongodb';
+
+import { ImportAlreadyClaimedError } from './import-claim.error.js';
 import { type IImportRunDocument, type ImportSourceRecord } from './import-run.types.js';
 import { IMPORTS_COLLECTION } from './imports-collection.provider.js';
 import { type ImportResult } from './processing/process-archive.js';
@@ -15,7 +19,22 @@ export class ImportRunTracker {
   ) {}
 
   public async findByImportId(importId: string): Promise<IImportRunDocument | null> {
-    return await this.collection.findOne({ importId }, { projection: { _id: 0 } });
+    return await this.collection.findOne(
+      { importId, startedAt: { $exists: true } },
+      { projection: { _id: 0 } },
+    );
+  }
+
+  public async claim(idempotencyKey: string): Promise<{ importId: string }> {
+    const candidateImportId = randomUUID();
+
+    const document = await this.collection.findOneAndUpdate(
+      { idempotencyKey },
+      { $setOnInsert: { importId: candidateImportId, idempotencyKey, claimedAt: new Date() } },
+      { upsert: true, returnDocument: 'after' },
+    );
+
+    return { importId: document?.importId ?? candidateImportId };
   }
 
   public async recordStarted(
@@ -23,7 +42,19 @@ export class ImportRunTracker {
     source: ImportSourceRecord,
     startedAt: Date,
   ): Promise<void> {
-    await this.collection.insertOne({ importId, source, status: 'started', startedAt });
+    try {
+      await this.collection.updateOne(
+        { importId, startedAt: { $exists: false } },
+        { $set: { importId, source, status: 'started', startedAt } },
+        { upsert: true },
+      );
+    } catch (error) {
+      if (error instanceof MongoServerError && error.code === DUPLICATE_KEY_ERROR_CODE) {
+        throw new ImportAlreadyClaimedError(importId);
+      }
+
+      throw error;
+    }
   }
 
   public async recordCompleted(
@@ -50,5 +81,31 @@ export class ImportRunTracker {
         },
       },
     );
+  }
+
+  public async failStaleRuns(olderThan: Date, reason: string): Promise<number> {
+    const result = await this.collection.updateMany(
+      { status: 'started', startedAt: { $lt: olderThan } },
+      {
+        $set: { status: 'failed', failedAt: new Date() },
+        $push: {
+          errorSamples: {
+            $each: [reason.slice(0, ERROR_SAMPLE_MAX_LENGTH)],
+            $slice: -ERROR_SAMPLES_LIMIT,
+          },
+        },
+      },
+    );
+
+    return result.modifiedCount;
+  }
+
+  public async expireStaleClaims(olderThan: Date): Promise<number> {
+    const result = await this.collection.deleteMany({
+      claimedAt: { $lt: olderThan },
+      startedAt: { $exists: false },
+    });
+
+    return result.deletedCount;
   }
 }

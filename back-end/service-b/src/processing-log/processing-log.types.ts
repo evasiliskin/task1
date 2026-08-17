@@ -14,4 +14,5 @@ export interface IProcessingLogDocument {
   archive: string;
   metadata: Record<string, number>;
   errorInfo?: IProcessingLogErrorInfo;
+  rolledUpAt?: Date;
 }

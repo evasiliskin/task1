@@ -1,6 +1,8 @@
 import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
 import { RequestContractViolationError } from '@task1/shared/errors/index';
-import { z, type ZodType } from 'zod';
+import { type z, type ZodType } from 'zod';
+
+import { toFieldErrors } from '../validators/zod-issues-to-field-errors.js';
 
 export interface IBoundRequest<TData> {
   readonly data: TData;
@@ -51,7 +53,7 @@ export function bindRequest(schema: ZodType, context: ExecutionContext): IBoundR
     throw new RequestContractViolationError({
       controllerName: context.getClass().name,
       methodName: context.getHandler().name,
-      errors: z.treeifyError(parsed.error),
+      fieldErrors: toFieldErrors(parsed.error.issues),
     });
   }
 
@@ -62,13 +64,6 @@ interface IModelBinderInput {
   readonly schema: ZodType;
 }
 
-// NestJS's createParamDecorator() distinguishes a decorator's `data` argument from a
-// PipeTransform via duck-typing: anything with a function-typed `.transform` property is
-// treated as a pipe (see @nestjs/common's `isPipe` in create-route-param-metadata.decorator.js).
-// A bare ZodType has a `.transform()` method (`z.string().transform(...)`), so passing the
-// schema directly as `data` makes NestJS misclassify it as a pipe and silently drop it — the
-// factory below then receives `undefined` instead of the schema. Wrapping it in a plain object
-// with no `transform` property avoids the false match.
 const modelBinderFactory = createParamDecorator(
   (input: IModelBinderInput, context: ExecutionContext): IBoundRequest<unknown> =>
     bindRequest(input.schema, context),

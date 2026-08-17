@@ -1,4 +1,5 @@
 import { parseAndValidate } from './parse-and-validate.js';
+import type { RawGithubEvent } from './raw-github-event.schema.js';
 
 describe('parseAndValidate', () => {
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -19,7 +20,7 @@ describe('parseAndValidate', () => {
 
   it('should yield the parsed event and not call onInvalidLine, when the line is valid', async () => {
     const onInvalidLine = vi.fn();
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(fromLines([validLine]), onInvalidLine)) {
       results.push(event);
@@ -32,7 +33,7 @@ describe('parseAndValidate', () => {
 
   it('should call onInvalidLine and yield nothing, when the line is not valid JSON', async () => {
     const onInvalidLine = vi.fn();
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(fromLines(['{not valid json']), onInvalidLine)) {
       results.push(event);
@@ -45,7 +46,7 @@ describe('parseAndValidate', () => {
   it('should call onInvalidLine and yield nothing, when the line is valid JSON but fails schema validation', async () => {
     const onInvalidLine = vi.fn();
     const invalidLine = JSON.stringify({ type: 'PushEvent' });
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(fromLines([invalidLine]), onInvalidLine)) {
       results.push(event);
@@ -58,7 +59,7 @@ describe('parseAndValidate', () => {
   it('should truncate the sample passed to onInvalidLine to 200 characters, when the line is longer', async () => {
     const onInvalidLine = vi.fn();
     const longInvalidLine = `{"padding":"${'x'.repeat(300)}"`;
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(fromLines([longInvalidLine]), onInvalidLine)) {
       results.push(event);
@@ -69,7 +70,7 @@ describe('parseAndValidate', () => {
 
   it('should yield only the valid events in order, when valid and invalid lines are mixed', async () => {
     const onInvalidLine = vi.fn();
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(
       fromLines(['not json', validLine, '{"type":"PushEvent"}']),
@@ -83,7 +84,7 @@ describe('parseAndValidate', () => {
   });
 
   it('should not throw, when onInvalidLine is omitted and a line is invalid', async () => {
-    const results = [];
+    const results: RawGithubEvent[] = [];
 
     for await (const event of parseAndValidate(fromLines(['not json']))) {
       results.push(event);

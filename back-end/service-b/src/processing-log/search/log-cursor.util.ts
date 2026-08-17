@@ -1,6 +1,6 @@
+import { decodeCursor, encodeCursor } from '@task1/shared';
+import { InvalidCursorError } from '@task1/shared/errors/index';
 import { z } from 'zod';
-
-import { InvalidCursorError } from './errors.js';
 
 const cursorPayloadSchema = z.object({
   timestamp: z.string().datetime(),
@@ -13,28 +13,18 @@ export interface ILogCursor {
 }
 
 export function encodeLogCursor(cursor: ILogCursor): string {
-  const payload = JSON.stringify({
+  return encodeCursor({
     timestamp: cursor.timestamp.toISOString(),
     id: cursor.id,
   });
-
-  return Buffer.from(payload, 'utf8').toString('base64url');
 }
 
 export function decodeLogCursor(cursor: string): ILogCursor {
-  let decodedPayload: unknown;
+  const decoded = decodeCursor(cursor, cursorPayloadSchema);
 
-  try {
-    decodedPayload = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-  } catch (error) {
-    throw new InvalidCursorError(cursor, error instanceof Error ? error : undefined);
-  }
-
-  const result = cursorPayloadSchema.safeParse(decodedPayload);
-
-  if (!result.success) {
+  if (decoded === null) {
     throw new InvalidCursorError(cursor);
   }
 
-  return { timestamp: new Date(result.data.timestamp), id: result.data.id };
+  return { timestamp: new Date(decoded.timestamp), id: decoded.id };
 }

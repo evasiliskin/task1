@@ -2,6 +2,7 @@ import { type INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ResponseEnvelopeModule } from '@task1/shared/api-response/response-envelope.module';
 import loggerConfig from '@task1/shared/config/logger.config';
 import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/exception-handling.module';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
@@ -12,9 +13,10 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ContractModule } from '../contract/contract.module.js';
+import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { RmqClientsModule } from '../rmq/rmq-clients.module.js';
 
 import { EventsModule } from './events.module.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 
 type App = Parameters<typeof request>[0];
 
@@ -35,8 +37,10 @@ describe('EventsController (HTTP Integration)', () => {
         }),
         RequestContextModule,
         ExceptionHandlingModule,
+        ResponseEnvelopeModule,
         AuthModule,
         ContractModule,
+        RmqClientsModule,
         EventsModule,
       ],
     })
@@ -66,12 +70,12 @@ describe('EventsController (HTTP Integration)', () => {
         of({
           data: [
             {
-              eventId: 'e1',
+              eventId: '48291832741',
               eventType: 'PushEvent',
               createdAt: '2026-08-11T00:00:00.000Z',
               actor: { id: 1, login: 'octocat' },
               repo: { id: 2, name: 'octocat/hello-world' },
-              importId: 'import-1',
+              importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
               payload: { ref: 'refs/heads/main', commitCount: 1 },
             },
           ],
@@ -83,18 +87,25 @@ describe('EventsController (HTTP Integration)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        data: [
-          {
-            eventId: 'e1',
-            eventType: 'PushEvent',
-            createdAt: '2026-08-11T00:00:00.000Z',
-            actor: { id: 1, login: 'octocat' },
-            repo: { id: 2, name: 'octocat/hello-world' },
-            importId: 'import-1',
-            payload: { ref: 'refs/heads/main', commitCount: 1 },
-          },
-        ],
-        nextCursor: 'some-cursor',
+        status: 'SUCCESS',
+        code: 200,
+        message: 'OK',
+        result: {
+          items: [
+            {
+              eventId: '48291832741',
+              eventType: 'PushEvent',
+              createdAt: '2026-08-11T00:00:00.000Z',
+              actor: { id: 1, login: 'octocat' },
+              repo: { id: 2, name: 'octocat/hello-world' },
+              importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              payload: { ref: 'refs/heads/main', commitCount: 1 },
+            },
+          ],
+          pagination: { nextCursor: 'some-cursor' },
+        },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+        meta: { tracing: { correlationId: expect.any(String) } },
       });
     });
 
@@ -127,6 +138,11 @@ describe('EventsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/events').query({ limit: '201' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
 
@@ -134,6 +150,11 @@ describe('EventsController (HTTP Integration)', () => {
       const response = await request(httpServer).get('/events').query({ unknown: 'value' });
 
       expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
   });

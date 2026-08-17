@@ -9,7 +9,6 @@ export const HealthResponseSchema = z.object({
     rabbitmq: ServiceStatusSchema,
     serviceA: ServiceStatusSchema,
     serviceB: ServiceStatusSchema,
-    mongodb: ServiceStatusSchema,
     redis: ServiceStatusSchema,
   }),
 });

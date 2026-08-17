@@ -1,4 +1,4 @@
-import { type LoggerService } from '@task1/shared/logger/rmq/logger.service';
+import { type LoggerService } from '@task1/shared/logger/logger.service';
 import { type Collection } from 'mongodb';
 
 import { EnsureImportIndexesInitializer } from './ensure-import-indexes-initializer.service.js';

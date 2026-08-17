@@ -1,31 +1,27 @@
 import { randomUUID } from 'node:crypto';
 
 import { Controller, Headers, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
+import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
-import {
-  type ApiResponseSchemaHost,
-  ApiAcceptedResponse,
-  ApiBody,
-  ApiHeader,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
+import { MessagePublishFailedError } from '@task1/shared/errors/index';
+import { type IImportClaimView } from '@task1/shared/github-archive/index';
+import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
+import { firstValueFrom, timeout } from 'rxjs';
 import { z } from 'zod';
 
+import rabbitmqConfig from '../config/rabbitmq.config.js';
+import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
+import { toSwaggerSchema } from '../contract/schemas/swagger-schema.js';
+import { publishImportMessage } from '../rmq/publish-import-message.js';
+import { SERVICE_A_IMPORTS_RMQ_CLIENT, SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
 
 import { InvalidIdempotencyKeyError } from './errors.js';
-import { SERVICE_A_RMQ_CLIENT } from './rabbitmq-client.token.js';
 import { TriggerImportRequestSchema } from './schemas/trigger-import-request.schema.js';
 import { TriggerImportResponseSchema } from './schemas/trigger-import-response.schema.js';
-
-const ARCHIVE_IMPORT_DOWNLOAD_PATTERN = 'archive.import.download';
-
-// zod's z.toJSONSchema() return type isn't structurally identical to
-// @nestjs/swagger's SchemaObject (recursive `not`/`allOf` typing differs),
-// so it needs an explicit cast at this doc-generation boundary only — the
-// runtime contract enforcement (ContractValidationInterceptor) is unaffected.
-type SwaggerSchema = ApiResponseSchemaHost['schema'];
 
 function isValidIdempotencyKey(value: string): boolean {
   return z.string().uuid().safeParse(value).success;
@@ -34,7 +30,13 @@ function isValidIdempotencyKey(value: string): boolean {
 @ApiTags('imports')
 @Controller('imports')
 export class TriggerImportController {
-  public constructor(@Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy) {}
+  public constructor(
+    @Inject(SERVICE_A_IMPORTS_RMQ_CLIENT) private readonly serviceAImportsClient: ClientProxy,
+    @Inject(SERVICE_A_RMQ_CLIENT) private readonly serviceAClient: ClientProxy,
+    @Inject(rabbitmqConfig.KEY)
+    private readonly rabbitmqConfiguration: ConfigType<typeof rabbitmqConfig>,
+    private readonly propagatingClient: ContextPropagatingClient,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
@@ -43,26 +45,46 @@ export class TriggerImportController {
     name: 'Idempotency-Key',
     required: false,
     description:
-      'Client-supplied UUID. Replaying the same key returns the same importId and does not start a second import.',
+      'Client-supplied UUID. The returned importId is always server-generated — replaying the same key resolves to the same server-generated importId and does not start a second import.',
   })
-  @ApiBody({ schema: z.toJSONSchema(TriggerImportRequestSchema.shape.body) as SwaggerSchema })
-  @ApiAcceptedResponse({ schema: z.toJSONSchema(TriggerImportResponseSchema) as SwaggerSchema })
-  public trigger(
+  @ApiBody({ schema: toSwaggerSchema(TriggerImportRequestSchema.shape.body) })
+  @ApiSingleResponse(TriggerImportResponseSchema, { status: HttpStatus.ACCEPTED })
+  public async trigger(
     @ModelBinder(TriggerImportRequestSchema)
     bound: BoundRequest<typeof TriggerImportRequestSchema>,
     @Headers('idempotency-key') idempotencyKey?: string,
-  ): { importId: string } {
+  ): Promise<{ importId: string }> {
     if (idempotencyKey !== undefined && !isValidIdempotencyKey(idempotencyKey)) {
       throw new InvalidIdempotencyKeyError(idempotencyKey);
     }
 
-    const importId = idempotencyKey ?? randomUUID();
+    const { importId } = await this.resolveImportId(idempotencyKey);
 
-    this.serviceAClient.emit(ARCHIVE_IMPORT_DOWNLOAD_PATTERN, {
-      importId,
-      dateHour: bound.data.dateHour,
+    await publishImportMessage({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceAImportsClient,
+      pattern: RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD,
+      payload: { importId, dateHour: bound.data.dateHour },
     });
 
     return { importId };
+  }
+
+  private async resolveImportId(idempotencyKey?: string): Promise<IImportClaimView> {
+    if (idempotencyKey === undefined) {
+      return { importId: randomUUID() };
+    }
+
+    try {
+      return await firstValueFrom(
+        this.propagatingClient
+          .send<IImportClaimView>(this.serviceAClient, RPC_PATTERNS.IMPORTS_CLAIM, {
+            idempotencyKey,
+          })
+          .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
+      );
+    } catch (error) {
+      throw new MessagePublishFailedError(RPC_PATTERNS.IMPORTS_CLAIM, error);
+    }
   }
 }
