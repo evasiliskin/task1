@@ -7,12 +7,6 @@ const healthConfigSchema = z.object({
 
 export type HealthConfiguration = z.infer<typeof healthConfigSchema>;
 
-/**
- * Bounds how long a dependency ping may take before the dependency is reported down.
- *
- * Its own config rather than a field on the Redis config: the same budget applies to the MongoDB
- * ping, and a health concern does not belong inside a Redis concern.
- */
 export default registerAs('health', (): HealthConfiguration =>
   healthConfigSchema.parse({
     pingTimeoutMs: process.env.HEALTH_PING_TIMEOUT_MS,

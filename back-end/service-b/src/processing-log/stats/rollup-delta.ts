@@ -2,13 +2,6 @@ import { type IProcessingLogDocument } from '../processing-log.types.js';
 
 import { type IMongoStats } from './shape-stats.js';
 
-/**
- * What one newly recorded log entry adds to the all-time totals.
- *
- * Mirrors `shapeStats` term for term — that function derives the same figures by grouping the whole
- * collection, and the two must agree or the rollup silently drifts from the numbers it replaced.
- * `started` and `dead-lettered` entries contribute nothing, exactly as the grouping ignores them.
- */
 export function buildRollupDelta(entry: IProcessingLogDocument): Partial<IMongoStats> {
   if (entry.status === 'failed') {
     return { errors: 1 };

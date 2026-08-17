@@ -28,14 +28,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = context.getRequest<Request>();
     const response = context.getResponse<Response>();
 
-    // Requests that fail before RequestContextMiddleware runs (a body-parser error, for example)
-    // have no context, so an id is minted here purely to keep the response envelope well formed.
     const attributes = this.requestContextService.getAttributes();
     const correlationId = attributes.correlationId ?? resolveId(undefined);
     const { statusCode, error } = this.errorFormatService.format(exception);
 
-    // The correlation id is stamped by pino's mixin, so it is deliberately not interpolated into
-    // the message — method, url and statusCode are fields, not prose, so they stay queryable.
     const fields = {
       method: request.method,
       url: request.originalUrl,
@@ -46,11 +42,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (statusCode >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
       this.logger.error(fields, UNHANDLED_ERROR_LOG, exception);
     } else {
-      // 4xx used to be invisible: the completion line showed a status code and nothing about the
-      // cause, which made "why is this client getting 400s?" unanswerable from logs. Different
-      // format strategies populate different cause-carrying fields (e.g. AppErrorFormatStrategy
-      // sets `details`, RequestContractViolationFormatStrategy sets `fieldErrors`), so both are
-      // logged here — JSON.stringify drops whichever one is undefined.
       this.logger.warn(
         { ...fields, details: error.details, fieldErrors: error.fieldErrors },
         REQUEST_REJECTED_LOG,

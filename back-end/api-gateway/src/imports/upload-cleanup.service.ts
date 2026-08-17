@@ -12,17 +12,6 @@ import storageConfig, { type StorageConfiguration } from '../config/storage.conf
 const SWEPT_LOG = 'Removed orphaned uploaded archives past their retention window';
 const SWEEP_FAILED_LOG = 'Could not sweep the archive storage directory';
 
-/**
- * Collects uploaded archives nobody will process.
- *
- * service-a deletes an uploaded archive after a *successful* import, and deliberately keeps it when
- * the import failed. Add a failed publish and a duplicate-claim short-circuit, and the volume grows
- * without bound — up to the 512 MiB upload cap per orphan, on a disk all three services share.
- *
- * The window must outlive a full retry cycle: an upload import gets five retries with exponential
- * backoff, so deleting after minutes would break the last attempt. It sweeps only what the gateway
- * writes — service-a's `.download.tmp` files belong to service-a.
- */
 @Injectable()
 export class UploadCleanupService implements OnModuleInit, OnModuleDestroy {
   public constructor(
@@ -51,7 +40,6 @@ export class UploadCleanupService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Exposed so a test can assert the timer was released rather than reaching into the instance. */
   public hasScheduledSweep(): boolean {
     return this.timer !== undefined;
   }

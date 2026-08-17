@@ -20,14 +20,6 @@ export type AmqpConnectFunction = (url: string) => Promise<{
   close: () => Promise<void>;
 }>;
 
-/**
- * Declares the retry and dead-letter queues exactly once, at startup, over a short-lived
- * connection. Declaring them on the message path costs a round-trip per failure and risks closing
- * the consumer's channel on an argument mismatch.
- *
- * A broker that is unreachable at boot is logged, not fatal: the RMQ transport itself retries the
- * connection, and failing startup here would turn a transient broker blip into a crash loop.
- */
 @Injectable()
 export class QueueTopologyInitializer implements OnApplicationBootstrap {
   public constructor(

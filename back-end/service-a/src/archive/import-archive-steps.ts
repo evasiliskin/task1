@@ -26,11 +26,6 @@ export interface IImportSource {
   sourceRecord: ImportSourceRecord;
 }
 
-/**
- * The archive label is the business-facing name carried in every lifecycle event and stored on the
- * import run. It stays `<dateHour>.json.gz` for downloads even though Phase 3 made the on-disk path
- * importId-keyed — the two are deliberately different things.
- */
 export function buildImportSource(source: ImportSourceInput): IImportSource {
   const archiveLabel =
     source.type === 'download' ? `${source.dateHour}.json.gz` : basename(source.filePath);
@@ -61,14 +56,6 @@ export function buildCompletionMetrics(
   return metrics;
 }
 
-/**
- * The failure-path counterpart of `buildCompletionMetrics`. Without it a completed import writes
- * five RedisTimeSeries points and a failed one writes none, so no dashboard over
- * `service_a.archive.*` can express a failure rate.
- *
- * The counter is always `1` rather than a running total: RedisTimeSeries aggregates the datapoints,
- * so summing the series over a window yields the failure count for that window.
- */
 export function buildFailureMetrics(failureDurationMs: number): [string, number][] {
   return [
     [METRIC_IMPORTS_FAILED, 1],
@@ -120,10 +107,6 @@ export function toFailedEvent(
   };
 }
 
-/**
- * A downloaded archive is always disposable — it can be fetched again. A failed upload is kept for
- * diagnosis; the gateway's retention sweep collects it later.
- */
 export function shouldDeleteArchive(source: ImportSourceInput, hasFailed: boolean): boolean {
   return source.type === 'download' || !hasFailed;
 }

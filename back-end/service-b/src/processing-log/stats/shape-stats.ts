@@ -33,13 +33,6 @@ export function shapeStats(groups: IStatsGroup[]): IMongoStats {
   };
 }
 
-/**
- * The per-import counterpart of `shapeStats`.
- *
- * The `importId` branch already fetches its (at most four) documents, so grouping them server-side
- * as well was a second round trip for the same data. Both functions must agree — they describe the
- * same five figures, one from a `$group` and one from documents in hand.
- */
 export function shapeStatsFromDocuments(documents: IProcessingLogDocument[]): IMongoStats {
   const completed = documents.find((document) => document.status === COMPLETED_STATUS);
   const failedCount = documents.filter((document) => document.status === FAILED_STATUS).length;

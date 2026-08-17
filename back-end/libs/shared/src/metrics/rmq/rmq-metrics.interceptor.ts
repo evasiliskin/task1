@@ -13,28 +13,14 @@ import { RPC_PATTERNS } from '../../messaging/rpc-patterns.const.js';
 import { buildErrorMetricKey, buildRequestMetricKey } from '../metric-key.util.js';
 import { MetricsService } from '../metrics.service.js';
 
-/**
- * Patterns that are never metered. The health pattern is polled continuously by the gateway's
- * dependency checks and by any external monitor, so a counter for it would swamp the series that
- * describe real traffic — the same reason `RmqLoggingInterceptor` excludes it from logging.
- */
 const UNMETERED_PATTERNS: ReadonlySet<string> = new Set([RPC_PATTERNS.HEALTH_CHECK]);
 
-/**
- * Publishes one RedisTimeSeries datapoint per handled message, for every `@MessagePattern` and
- * `@EventPattern` in the host service.
- *
- * Registered globally rather than called from each handler: hand-written `recordMetric` calls are
- * exactly what left `imports.claim`, the import-failure path and all of service-b unmetered. As an
- * interceptor the coverage is structural — a new handler is metered the moment it exists.
- */
 @Injectable()
 export class RmqMetricsInterceptor implements NestInterceptor {
   public constructor(
     private readonly metricsService: MetricsService,
     @Inject(loggerConfig.KEY) loggerConfiguration: ILoggerConfiguration,
   ) {
-    // Read once: the service name is fixed for the process lifetime.
     this.serviceName = loggerConfiguration.serviceName;
   }
 

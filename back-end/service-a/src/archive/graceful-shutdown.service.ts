@@ -11,16 +11,6 @@ const DRAINED_LOG = 'In-flight imports finished; continuing shutdown';
 const DRAIN_TIMED_OUT_LOG =
   'In-flight imports did not finish within the drain timeout; they will be redelivered';
 
-/**
- * Holds shutdown open until running imports finish.
- *
- * `onModuleDestroy` is the first hook Nest runs, which is exactly why the drain lives here:
- * MongoConnectionService and RedisConnectionService now close in `onApplicationShutdown`, so the
- * order is drain → stop consuming → close.
- *
- * A timeout is not a failure. Phase 1 made a failed import redeliverable, so abandoning the wait
- * costs a retry, not the import.
- */
 @Injectable()
 export class GracefulShutdownService implements OnModuleDestroy {
   public constructor(

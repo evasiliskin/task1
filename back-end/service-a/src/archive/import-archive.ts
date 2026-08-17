@@ -44,7 +44,6 @@ export interface IImportArchiveDependencies {
   logger: AppLogger;
 }
 
-/** Resolves the archive to process, downloading it first when the import is download-triggered. */
 async function resolveArchivePath(
   source: ImportSourceInput,
   importId: string,
@@ -73,8 +72,6 @@ export async function importArchive(
   const startedAt = new Date();
   const { archiveLabel, sourceRecord } = buildImportSource(source);
 
-  // Bound once: every line below — and every warning the injected dependencies emit — carries
-  // importId without any call site having to remember it.
   const logger = dependencies.logger.with({ importId, archive: archiveLabel });
 
   logger.info({ importSource: sourceRecord.type }, IMPORT_STARTED_LOG);
@@ -134,8 +131,6 @@ export async function importArchive(
     const failedAt = new Date();
     const reason = error instanceof Error ? error.message : String(error);
 
-    // Before `recordImportFailed` on purpose: that call writes to Mongo and can itself reject, and
-    // a Mongo outage is exactly when the failure counter matters most.
     await dependencies.recordMetrics(buildFailureMetrics(failedAt.getTime() - startedAt.getTime()));
 
     dependencies.emitEvent(

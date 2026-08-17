@@ -4,7 +4,6 @@ import { MissingContractError } from '@task1/shared/errors/index';
 
 import { CONTRACT_METADATA } from '../decorators/contract.decorator.js';
 
-/** Matches NestJS `METHOD_METADATA` (`@nestjs/common/constants`). */
 const NEST_HTTP_METHOD_METADATA_KEY = 'method';
 
 @Injectable()
@@ -26,14 +25,6 @@ export class ContractScanner implements OnModuleInit {
     }
   }
 
-  /**
-   * Collects every method reachable on the instance, nearest prototype first.
-   *
-   * Own-prototype-only traversal skipped handlers inherited from a base controller: they still carry
-   * `@Get`/`@Post` metadata and still serve traffic, so the startup guarantee would quietly stop
-   * covering them. Nearest-first means an override's metadata wins over the method it replaces,
-   * which matches what actually executes.
-   */
   private collectHandlers(instance: object): Map<string, unknown> {
     const handlers = new Map<string, unknown>();
     let prototype: object | null = Object.getPrototypeOf(instance) as object | null;

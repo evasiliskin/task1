@@ -6,12 +6,6 @@ import { applySwagger } from './swagger.setup.js';
 
 type App = Parameters<typeof request>[0];
 
-/**
- * A single documented route, so `SwaggerModule.createDocument` has something real to describe and
- * `/api-docs-json` can be asserted against a path rather than an empty document. The gateway's own
- * `AppModule` is deliberately not booted: it would dial RabbitMQ, Mongo and Redis, none of which
- * the Swagger gate depends on.
- */
 @Controller('probe')
 class ProbeController {
   @Get()
@@ -20,12 +14,6 @@ class ProbeController {
   }
 }
 
-/**
- * `swagger.setup.spec.ts` asserts only `applySwagger`'s boolean return. That leaves the thing the
- * gate actually promises untested: that `/api-docs` serves when enabled and 404s when not. Swagger
- * mounts Express-level middleware, so the return value and the served route are genuinely separate
- * facts — this suite covers the second one.
- */
 describe('applySwagger (HTTP Integration)', () => {
   const originalEnvironment = { ...process.env };
   let app: INestApplication | undefined;

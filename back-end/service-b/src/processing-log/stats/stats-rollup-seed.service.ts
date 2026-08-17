@@ -18,19 +18,6 @@ const SEEDED_LOG = 'Seeded the processing-log stats rollup from existing history
 const SEED_FAILED_LOG =
   'Could not seed the stats rollup; aggregate statistics will fall back to a full scan until it succeeds';
 
-/**
- * Backfills the all-time totals once, so introducing the rollup preserves existing history instead
- * of resetting it to zero.
- *
- * Gated on `seededAt`, not on the document's absence: `StatsRollupTracker.applyEntry` upserts, so a
- * partial rollup can exist before the first seed. `$set`ting the authoritative aggregate is safe
- * even when some of those events are already counted, because it replaces rather than adds.
- *
- * The processing-logs TTL index is created here, AFTER the seed attempt, rather than alongside the
- * collection's other indexes at module-init time — see `ensureProcessingLogRetentionIndex`'s doc
- * comment for why: creating it earlier risks MongoDB's TTL monitor deleting history before this
- * one-time backfill counts it.
- */
 @Injectable()
 export class StatsRollupSeedService implements OnApplicationBootstrap {
   public constructor(
@@ -48,9 +35,6 @@ export class StatsRollupSeedService implements OnApplicationBootstrap {
   public async onApplicationBootstrap(): Promise<void> {
     await this.requestContextService.runAsRoot('stats-rollup-seed', () => this.seed());
 
-    // Not wrapped in try/catch: an index-creation failure fails startup closed, consistent with
-    // how index creation has always behaved elsewhere in this codebase (ensureImportIndexes,
-    // ensureEventIndexes, and the non-TTL processing-log indexes all block boot on failure).
     await ensureProcessingLogRetentionIndex(
       this.processingLogs,
       this.mongodbConfiguration.processingLogRetentionMs,
@@ -80,8 +64,6 @@ export class StatsRollupSeedService implements OnApplicationBootstrap {
 
       this.logger.info({ ...totals }, SEEDED_LOG);
     } catch (error) {
-      // Never fatal: `getAggregateStats` falls back to the live aggregation while the rollup is
-      // unseeded, so a failed seed degrades performance, not correctness.
       this.logger.warn({}, SEED_FAILED_LOG, error);
     }
   }

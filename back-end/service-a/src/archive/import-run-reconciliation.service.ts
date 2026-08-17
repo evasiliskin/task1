@@ -7,7 +7,6 @@ import archiveConfig, { type ArchiveConfiguration } from '../config/archive.conf
 
 import { ImportRunTracker } from './import-run-tracker.service.js';
 
-/** Headroom over the download budget so a legitimately slow import is never reconciled away. */
 const STALENESS_MULTIPLIER = 3;
 
 const RECONCILED_LOG = 'Failed import runs abandoned in "started" by an interrupted process';
@@ -44,8 +43,6 @@ export class ImportRunReconciliationService implements OnApplicationBootstrap {
         this.logger.info({ count: reconciled, stalenessMs }, RECONCILED_LOG);
       }
     } catch (error) {
-      // A reconciliation failure must not stop the service booting — the stale documents are a
-      // reporting defect, not a correctness one, and the next start will retry.
       this.logger.warn({ stalenessMs }, RECONCILE_FAILED_LOG, error);
     }
 
@@ -56,8 +53,6 @@ export class ImportRunReconciliationService implements OnApplicationBootstrap {
         this.logger.info({ count: expired, stalenessMs }, CLAIMS_EXPIRED_LOG);
       }
     } catch (error) {
-      // Same rationale as above: a claim a client never retried is a hygiene gap, not a
-      // correctness one (see expireStaleClaims's doc comment), so this must not block startup.
       this.logger.warn({ stalenessMs }, CLAIMS_EXPIRE_FAILED_LOG, error);
     }
   }

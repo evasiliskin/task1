@@ -33,7 +33,6 @@ export type ImportResult = {
   errorCount: number;
 };
 
-/** Called once per batch that produced non-duplicate write errors. */
 export type OnBatchErrors = (errorCount: number, errorSample: readonly IWriteErrorSample[]) => void;
 
 async function* transformEvents(
@@ -45,7 +44,6 @@ async function* transformEvents(
   }
 }
 
-/** The read side of the pipeline: file → gunzip → size bound → lines → validated events → batches. */
 function buildBatchStream(
   filePath: string,
   importId: string,
@@ -90,10 +88,6 @@ export async function processArchive(
       },
     });
   } catch (error) {
-    // An AppError already carries its own code, category and HTTP mapping. Re-wrapping an
-    // ArchiveTooLargeError (400) as ArchiveProcessingError (503) would report bad input as a
-    // failing dependency and send every investigation the wrong way. A driver error is not an
-    // AppError, so a genuine infrastructure failure still wraps.
     if (error instanceof AppError) {
       throw error;
     }

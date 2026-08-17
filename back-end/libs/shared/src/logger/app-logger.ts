@@ -4,11 +4,6 @@ import { redactLogPayload } from './redact-payload.js';
 import { type LogChannel, type LogFields, type LogLevelName } from './types.js';
 
 export class AppLogger {
-  /**
-   * Derives an operation-scoped logger. Every line from the result carries `bindings`, which is
-   * how a whole business operation becomes followable by e.g. `importId` without threading the
-   * value through every call site.
-   */
   public with(bindings: LogFields): AppLogger {
     return new AppLogger(this.pinoLogger.child(redactLogPayload(bindings) as LogFields));
   }
@@ -41,22 +36,12 @@ export class AppLogger {
     this.write('fatal', fields, message, error);
   }
 
-  /**
-   * Binds `source` and `channel` once, via a pino child logger, rather than re-spreading them onto
-   * every call's merge object.
-   */
   public static create(root: Logger, source: string, channel: LogChannel): AppLogger {
     return new AppLogger(root.child({ source, channel }));
   }
 
   private constructor(private readonly pinoLogger: Logger) {}
 
-  /**
-   * Redaction happens here, not at the call site, so no caller can forget it — but it is a deep
-   * clone, so it must never run for a line that will be discarded. The level check comes first:
-   * raising the level under load then sheds the serialization cost, not just the output. `err` is
-   * attached after redaction; pino's `err` serializer handles it and it must not be deep-cloned.
-   */
   private write(level: LogLevelName, fields: LogFields, message: string, error?: unknown): void {
     if (!this.pinoLogger.isLevelEnabled(level)) {
       return;

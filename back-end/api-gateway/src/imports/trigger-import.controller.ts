@@ -60,9 +60,6 @@ export class TriggerImportController {
 
     const { importId } = await this.resolveImportId(idempotencyKey);
 
-    // Published on every request, replays included. Suppressing it here would look tidier and break
-    // recovery: a first request whose publish failed with 503 would leave a claim that silences the
-    // retry forever. service-a's recordStarted already turns a duplicate into a benign skip.
     await publishImportMessage({
       propagatingClient: this.propagatingClient,
       client: this.serviceAImportsClient,
@@ -73,13 +70,6 @@ export class TriggerImportController {
     return { importId };
   }
 
-  /**
-   * The importId is always ours, never the caller's.
-   *
-   * Without a key there is nothing to deduplicate against, so one is generated locally and no round
-   * trip is spent. With a key, service-a — which owns the `imports` collection — resolves it, which
-   * is what keeps "same key, same importId" true without letting the client pick the id.
-   */
   private async resolveImportId(idempotencyKey?: string): Promise<IImportClaimView> {
     if (idempotencyKey === undefined) {
       return { importId: randomUUID() };
@@ -94,9 +84,6 @@ export class TriggerImportController {
           .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
       );
     } catch (error) {
-      // Mirrors publishImportMessage's own catch/rethrow below: both failure legs of this handler
-      // — the claim RPC and the publish — must report identically (503, same error contract), since
-      // from the caller's point of view a broker/service-a outage looks the same either way.
       throw new MessagePublishFailedError(RPC_PATTERNS.IMPORTS_CLAIM, error);
     }
   }

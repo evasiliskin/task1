@@ -58,16 +58,11 @@ export class HealthCheckService {
   public async getReadiness(): Promise<{ ready: boolean; result: IAggregatedHealth }> {
     const result = await this.runAllChecks();
 
-    // Every one of these sits on the request path. rabbitmq, serviceA and serviceB because routing
-    // through them is the gateway's whole job; redis because the global ThrottlerGuard is backed by
-    // ThrottlerStorageRedisService, so a Redis outage turns every request into a 500. Readiness
-    // that stays green through that gives the orchestrator nothing to act on.
     const ready = Object.values(result.services).every((status) => status === 'ok');
 
     return { ready, result };
   }
 
-  /** Exposed so a test can assert the in-flight slot was released rather than reaching inside. */
   public hasCheckInFlight(): boolean {
     return this.inFlightCheck !== undefined;
   }
@@ -78,13 +73,6 @@ export class HealthCheckService {
 
   private inFlightCheck?: Promise<IAggregatedHealth>;
 
-  /**
-   * Probes that overlap share one check.
-   *
-   * Deliberately not a cache: a probe arriving after the previous check settled runs a fresh one,
-   * so no stale status is ever reported. This only removes the duplicated fan-out — four indicators
-   * including two RMQ round trips — when probes pile up.
-   */
   private async runAllChecks(): Promise<IAggregatedHealth> {
     this.inFlightCheck ??= this.executeAllChecks().finally(() => {
       this.inFlightCheck = undefined;
@@ -105,10 +93,6 @@ export class HealthCheckService {
 
     const services: IAggregatedHealth['services'] = {
       gateway: raw.details.gateway?.status === 'up' ? 'ok' : 'unavailable',
-      // Derived, not separately probed. Both pings travel over the ClientProxy connections the
-      // request path actually uses, so one succeeding proves the broker is reachable *and* the
-      // gateway's own client works — which a dedicated connection could not, since it stayed `up`
-      // while those clients were broken.
       rabbitmq: serviceA === 'ok' || serviceB === 'ok' ? 'ok' : 'unavailable',
       serviceA,
       serviceB,
@@ -133,11 +117,6 @@ export class HealthCheckService {
         () => this.redisIndicator.isHealthy('redis', this.redisConfiguration.pingTimeoutMs),
       ]);
     } catch (error) {
-      // Terminus's own check() throws ServiceUnavailableException as soon as
-      // any indicator is down; its response body still holds every
-      // indicator's result (up and down alike), so we recover it here
-      // instead of letting the throw propagate — /health and /health/ready
-      // decide what to do with a down dependency themselves.
       if (error instanceof ServiceUnavailableException) {
         return error.getResponse() as HealthCheckResult;
       }

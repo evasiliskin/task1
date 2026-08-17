@@ -28,12 +28,6 @@ export interface IMessagingModuleAsyncOptions {
   useFactory: (...arguments_: never[]) => IMessagingModuleOptions;
 }
 
-/**
- * Wires the retry/DLQ machinery for one queue.
- *
- * Async-only by design: both consumers derive the queue name and the retry policy from validated
- * env config, so a synchronous variant taking literals would have no caller.
- */
 @Module({})
 export class MessagingModule {
   public static forQueueAsync(options: IMessagingModuleAsyncOptions): DynamicModule {

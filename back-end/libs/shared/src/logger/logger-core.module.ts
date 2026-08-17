@@ -12,14 +12,6 @@ import { LOG_CHANNEL, LOGGER_FACTORY, PINO_DESTINATION, PINO_LOGGER } from './lo
 import { createPinoDestination, type IFlushableDestination } from './pino-destination.factory.js';
 import { type LogChannel } from './types.js';
 
-/**
- * Owns the process-wide pino instance. The transport-specific modules
- * (`logger/http/logger.module.ts`, `logger/rmq/logger.module.ts`) import this and add only their
- * own request-logging middleware or interceptor.
- *
- * Consumers must import a transport module, not this one — `RequestContextService` has to come
- * from the matching (middleware- or interceptor-based) `RequestContextModule`.
- */
 @Module({})
 export class LoggerCoreModule {
   public static forChannel(channel: LogChannel): DynamicModule {

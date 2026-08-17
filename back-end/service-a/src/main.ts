@@ -15,9 +15,6 @@ import { type Logger } from 'pino';
 import { AppModule } from './app.module.js';
 import rabbitmqConfig from './config/rabbitmq.config.js';
 
-// `tmpdir()` resolves to `/tmp` in the container (matching the Dockerfile HEALTHCHECK's hard-coded
-// path) but to a real per-platform temp directory in local dev — a hard-coded '/tmp' resolves to
-// `<drive>:\tmp` on Windows, which may not exist and would otherwise crash bootstrap.
 const READINESS_MARKER_PATH = join(tmpdir(), 'service-ready');
 
 function buildRmqOptions(url: string, queue: string, prefetchCount: number): MicroserviceOptions {
@@ -45,14 +42,6 @@ async function bootstrap(): Promise<void> {
   try {
     const { url, queue, importsQueue, rpcPrefetch, importPrefetch } = rabbitmqConfig();
 
-    // A single application hosting two RMQ listeners. Imports run for minutes and hold their
-    // prefetch slot until they finish; RPCs must answer in milliseconds. Sharing one queue means
-    // the second workload waits behind the first, so each gets its own queue and prefetch budget.
-    //
-    // connectMicroservice/startAllMicroservices only exist on INestApplication (Nest's hybrid-app
-    // API), not on the INestApplicationContext returned by createApplicationContext, so this uses
-    // NestFactory.create(). No HTTP port is ever opened (listen() is never called) — service-a
-    // stays RabbitMQ-only; the HTTP adapter is instantiated but unused.
     const application = await NestFactory.create<INestApplication>(AppModule, { bufferLogs: true });
 
     application.connectMicroservice(buildRmqOptions(url, queue, rpcPrefetch), {
@@ -72,20 +61,9 @@ async function bootstrap(): Promise<void> {
 
     application.enableShutdownHooks();
 
-    // startAllMicroservices() only calls listen() on each connected microservice — it does not run
-    // the shared container's onModuleInit/onApplicationBootstrap hooks (that's normally listen()'s
-    // job, and we never call listen() since there's no HTTP server). init() must be called
-    // explicitly so MongoConnectionService/RedisConnectionService connect and
-    // QueueTopologyInitializer declares the retry/DLQ queues before either listener starts
-    // consuming.
     await application.init();
     await application.startAllMicroservices();
 
-    // A file the container healthcheck can stat. `startAllMicroservices()` has resolved, so both
-    // listeners are consuming and every OnApplicationBootstrap hook has run — which is the thing a
-    // healthcheck should assert, and precisely what connecting to the broker from outside cannot.
-    // Non-fatal: a diagnostic marker failing to write should leave the container correctly
-    // unhealthy, not crash a process whose RMQ listeners are otherwise up and consuming.
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- READINESS_MARKER_PATH is built from os.tmpdir() and a fixed filename, never from request/user input
       await writeFile(READINESS_MARKER_PATH, new Date().toISOString(), 'utf8');

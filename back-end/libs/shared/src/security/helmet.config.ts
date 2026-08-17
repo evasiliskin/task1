@@ -61,8 +61,6 @@ const documentationCsp: HelmetOptions['contentSecurityPolicy'] = {
   },
 };
 
-// Helmet's HelmetOptions is incompatible with exactOptionalPropertyTypes (e.g. strictTransportSecurity).
-// Options are valid at runtime; assertion is required for this library.
 const strictOptions = {
   ...baseOptions,
   contentSecurityPolicy: strictCsp,

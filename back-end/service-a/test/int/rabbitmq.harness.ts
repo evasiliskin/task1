@@ -66,27 +66,6 @@ function rmqOptions(url: string, queue: string, prefetchCount: number): Microser
   };
 }
 
-/**
- * Most of these integration tests exercise RabbitMQ behaviour only (message delivery, retry,
- * dead-lettering, prefetch isolation) — nothing there touches Mongo or Redis data. Real
- * MongoClient/Redis clients are swapped for minimal fakes so `application.init()` never dials
- * localhost:27017/6379, which docker-compose.yml doesn't expose to the host. The fakes only
- * implement what's actually invoked while the DI graph boots:
- *  - Mongo: `.connect()`/`.close()` (MongoConnectionService lifecycle),
- *    `.db().collection().createIndex()` (EnsureEventIndexesInitializer /
- *    EnsureImportIndexesInitializer, which run in onModuleInit), the
- *    `.find().sort().limit().toArray()` chain (EventsSearchService, exercised by the
- *    prefetch-isolation test's `events.search` RPC while the import queue is saturated — the
- *    fake just needs to answer, not return real data), and `.findOneAndUpdate()`
- *    (ImportRunTracker.claim, behind the `imports.claim` RPC).
- *  - Redis: `.connect()`/`.quit()` (RedisConnectionService lifecycle) and `.call()`
- *    (MetricsService.recordMetric, fired by the globally registered RmqMetricsInterceptor as
- *    a side effect of that same `events.search` RPC).
- *
- * `rmq-metrics.int.spec.ts` is the exception: it asserts on the datapoints that interceptor
- * writes, so a `call()` stub returning `undefined` would prove nothing. It opts out via
- * `IHarnessOptions.realRedis`, pointing `REDIS_URL` at a RedisTimeSeries container instead.
- */
 function fakeMongoClient(): unknown {
   const cursor = {
     sort: vi.fn().mockReturnThis(),
@@ -115,11 +94,6 @@ function fakeRedisClient(): unknown {
 }
 
 export interface IHarnessOptions {
-  /**
-   * Keeps the real ioredis client built by `RedisModule` from `REDIS_URL`, so a test can read back
-   * what the metrics interceptor actually wrote. The caller owns pointing `REDIS_URL` at a
-   * RedisTimeSeries-capable server before booting.
-   */
   realRedis?: boolean;
 }
 
@@ -148,7 +122,6 @@ async function buildContext(
   return moduleReference.createNestApplication();
 }
 
-/** Boots only the import listener — used by the redelivery and dead-letter tests. */
 export async function buildImportListener(
   url: string,
   stub: IOrchestrationStub,
@@ -165,7 +138,6 @@ export async function buildImportListener(
   return application;
 }
 
-/** Boots both listeners — used by the prefetch-isolation test. */
 export async function buildBothListeners(
   url: string,
   stub: IOrchestrationStub,
@@ -185,11 +157,6 @@ export async function buildBothListeners(
   return application;
 }
 
-/**
- * Publishes an RPC and awaits the reply on an exclusive queue, mirroring what NestJS's ClientProxy
- * does on the wire. Kept explicit rather than reusing ClientProxy so the test measures broker and
- * consumer behaviour, not client-library buffering.
- */
 export async function sendRpc(
   channel: Channel,
   queue: string,

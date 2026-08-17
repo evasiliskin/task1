@@ -13,7 +13,6 @@ const loggerConfigSchema = z.object({
 export interface ILoggerConfiguration {
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
   transport: 'json' | 'pretty';
-  /** Stamped on every log line so the three services stay distinguishable in one aggregator. */
   serviceName: string;
 }
 

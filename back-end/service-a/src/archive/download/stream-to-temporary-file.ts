@@ -4,13 +4,6 @@ import { pipeline } from 'node:stream/promises';
 
 import { ArchiveDownloadError } from './errors.js';
 
-/**
- * Streams a response to disk under a total-duration watchdog.
- *
- * `request.setTimeout` only bounds socket inactivity, so a slow-but-alive server could stream for
- * hours. The watchdog bounds the whole transfer and is cleared in a `finally` so a completed
- * download never leaves a timer holding the event loop.
- */
 export async function streamToTemporaryFile(
   stream: Readable,
   temporaryPath: string,
@@ -30,7 +23,6 @@ export async function streamToTemporaryFile(
   }
 }
 
-/** Classifies a download failure without losing the original as `cause`. */
 export function toDownloadError(error: unknown, url: string): ArchiveDownloadError {
   if (error instanceof ArchiveDownloadError) {
     return error;

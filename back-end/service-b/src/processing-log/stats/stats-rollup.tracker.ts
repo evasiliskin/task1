@@ -15,14 +15,6 @@ export class StatsRollupTracker {
     private readonly collection: Collection<IStatsRollupDocument>,
   ) {}
 
-  /**
-   * Adds one newly recorded entry to the all-time totals.
-   *
-   * The caller must only invoke this once it has atomically claimed the entry (its `rolledUpAt`
-   * marker), and must revert that claim if this call throws. `$inc` is not idempotent, so an
-   * unguarded or unclaimed call would inflate the totals under RabbitMQ redelivery — see
-   * `ProcessingLogTracker.upsertLog`'s claim/revert logic, which is what makes calling this safe.
-   */
   public async applyEntry(entry: IProcessingLogDocument): Promise<void> {
     const delta = buildRollupDelta(entry);
 
@@ -36,10 +28,6 @@ export class StatsRollupTracker {
   public async read(): Promise<IMongoStats | undefined> {
     const document = await this.collection.findOne({ _id: STATS_ROLLUP_ID });
 
-    // A document can exist without ever having been seeded: `applyEntry`'s `upsert: true` lets a
-    // `$inc` create it before `StatsRollupSeedService`'s backfill runs (e.g. the seeder failed at
-    // bootstrap). Treat that the same as "no document" so the caller falls back to a full scan
-    // instead of serving a partial, under-reported total as if it were authoritative.
     if (document?.seededAt === undefined) {
       return undefined;
     }

@@ -11,23 +11,8 @@ export const REQUEST_STARTED_LOG = 'request started';
 export const REQUEST_COMPLETED_LOG = 'request completed';
 export const REQUEST_DETAIL_LOG = 'request detail';
 
-/**
- * Paths that are never logged: health probes (polled continuously by Docker and by the gateway's
- * own dependency checks) and the Swagger UI (which pulls a burst of static assets on every page
- * load) — logging either would bury real traffic.
- *
- * The gateway's bootstrap sets a global route prefix plus URI versioning, so a genuine health
- * probe's request path arrives as `/api/v1/health/live`, not `/health/live`. This pattern
- * tolerates that optional prefix (an "api" segment, then an optional "v<n>" segment) ahead of
- * `/health`/`/api-docs`, while still requiring the match to end a path segment — a resource such
- * as `/api/v1/imports/health` or `/health-report` is real traffic and must still be logged.
- */
 const UNLOGGED_PATH_PATTERN = /^(?:\/api(?:\/v\d+)?)?(?:\/health|\/api-docs)(?:\/|$)/;
 
-/**
- * Request headers worth keeping. An allowlist, not a denylist: a denylist silently leaks every
- * header nobody thought of, which is the wrong default for something written to durable storage.
- */
 export const LOGGED_HEADERS: readonly string[] = [
   'user-agent',
   'content-type',
@@ -62,15 +47,6 @@ function pickHeaders(headers: Request['headers']): Record<string, unknown> {
   );
 }
 
-/**
- * Logs the start and the completion of every HTTP request.
- *
- * Must run after `RequestContextMiddleware` so `correlationId`/`requestId` are available.
- *
- * The request body and the full header set are *detail*, emitted only at `debug` and only when
- * that level is actually enabled — so raising the level under load sheds the serialization cost,
- * not just the output.
- */
 @Injectable()
 export class HttpLoggingMiddleware implements NestMiddleware {
   public constructor(
@@ -87,9 +63,6 @@ export class HttpLoggingMiddleware implements NestMiddleware {
       return;
     }
 
-    // The response 'finish'/'close' events can fire outside the AsyncLocalStorage scope opened by
-    // RequestContextMiddleware, so the ids are captured here and passed explicitly instead of
-    // relying on pino's mixin for the completion line.
     const context = this.requestContextService.getAttributes();
     const startedAt = Date.now();
 
@@ -120,7 +93,6 @@ export class HttpLoggingMiddleware implements NestMiddleware {
   private buildStartFields(request: Request, context: LogFields): LogFields {
     return {
       ...context,
-      // Deliberately not named `req`: that key belongs to pino-http's own serializer.
       request: {
         method: request.method,
         url: request.originalUrl,
@@ -143,8 +115,6 @@ export class HttpLoggingMiddleware implements NestMiddleware {
           method: request.method,
           url: request.originalUrl,
           query: truncateForLog(request.query),
-          // Populated by Nest's body parser, which runs before module middleware. Multipart
-          // uploads are parsed later, inside the route handler, so file payloads never reach here.
           body: truncateForLog(request.body as unknown),
           headers: pickHeaders(request.headers),
         },

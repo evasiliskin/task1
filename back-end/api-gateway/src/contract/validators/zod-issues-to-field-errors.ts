@@ -1,8 +1,6 @@
 import { type IFieldError } from '@task1/shared/errors/index';
 import { type z } from 'zod';
 
-// Request schemas nest under params/query/body (see model-binder.decorator.ts). The handler
-// receives them merged flat, so the client-facing field name drops the section prefix.
 const REQUEST_SECTIONS = new Set(['params', 'query', 'body']);
 
 function toField(path: readonly PropertyKey[]): string {

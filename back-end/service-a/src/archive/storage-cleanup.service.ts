@@ -13,14 +13,6 @@ import storageConfig, { type StorageConfiguration } from '../config/storage.conf
 const SWEPT_LOG = 'Removed stale temporary archive files left by an interrupted download';
 const SWEEP_FAILED_LOG = 'Could not sweep the archive storage directory';
 
-/**
- * Removes download temp files an interrupted run left behind.
- *
- * Scoped twice, deliberately. By **suffix**, because `STORAGE_DIR` is shared with the api-gateway
- * and a bare `.tmp` match deleted the gateway's in-flight multer uploads. By **age**, because a
- * restarting replica must not delete a temp file another replica is still streaming into — a
- * download cannot legitimately outlive `downloadTotalTimeoutMs`.
- */
 @Injectable()
 export class StorageCleanupService implements OnModuleInit {
   public constructor(

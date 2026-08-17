@@ -20,13 +20,6 @@ export interface IFinalizedUpload {
   finalPath: string;
 }
 
-/**
- * Turns multer's temp file into the archive service-a will process.
- *
- * Extracted from the controller: verifying magic bytes, deleting a rejected upload and atomically
- * renaming are filesystem concerns, not routing or serialization, and they are the part of the
- * upload path most worth testing on its own.
- */
 export async function finalizeUpload(options: IFinalizeUploadOptions): Promise<IFinalizedUpload> {
   const { file, storageDirectory, onUnlinkFailed } = options;
 

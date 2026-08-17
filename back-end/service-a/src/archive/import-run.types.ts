@@ -17,8 +17,6 @@ export interface IImportRunDocument {
   duplicateEvents?: number;
   errorCount?: number;
   errorSamples?: string[];
-  /** Present only when the caller supplied an Idempotency-Key. */
   idempotencyKey?: string;
-  /** Set when the run was reserved by a claim, before the import message was consumed. */
   claimedAt?: Date;
 }

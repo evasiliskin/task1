@@ -31,8 +31,6 @@ export class ImportOrchestrationService {
     loggerService: LoggerService,
   ) {
     this.logger = loggerService.getLogger(ImportOrchestrationService.name);
-    // Nothing in the dependency set varies per import, so it is a constant of this service rather
-    // than an eleven-member object re-allocated on every call.
     this.dependencies = this.buildDependencies();
   }
 

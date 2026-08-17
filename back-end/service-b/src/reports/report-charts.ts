@@ -7,18 +7,10 @@ export type PdfDocument = InstanceType<typeof PDFDocument>;
 
 const TIME_CHART_WIDTH = 400;
 const TIME_CHART_HEIGHT = 120;
-/** Chart height plus the tick-label row and the x-axis name, so the next section cannot overlap. */
 const TIME_CHART_BOTTOM_MARGIN = 45;
 const SINGLE_POINT_MARKER_RADIUS = 3;
 const AXIS_LABEL_OFFSET_X = 25;
-/**
- * A tick label is never narrower than this, so it doubles as the collision budget: the 50 points
- * `TS.RANGE` can return would be an unreadable smear at 8pt across 400pt. The tick count is derived
- * from it by `maxTicksForWidth` rather than fixed, so widening the chart yields more dates instead
- * of the same four stretched further apart.
- */
 const TICK_LABEL_WIDTH = 60;
-/** Two ticks — the first and the last point — are the least that still conveys a time range. */
 const MIN_AXIS_TICKS = 2;
 const TICK_LABEL_OFFSET_Y = 6;
 const AXIS_NAME_OFFSET_Y = 22;
@@ -44,12 +36,6 @@ interface IBreakdownBar {
   color: string;
 }
 
-/**
- * Up to `maxTicks` evenly spaced point indices, always including the first and the last.
- *
- * Distinctness is guaranteed without deduplication: `step` is `(pointCount - 1) / (tickCount - 1)`
- * and `tickCount <= pointCount`, so `step >= 1` and consecutive rounded indices cannot collide.
- */
 export function selectTickIndices(pointCount: number, maxTicks: number): number[] {
   if (pointCount <= 0) {
     return [];
@@ -71,26 +57,10 @@ export function selectTickIndices(pointCount: number, maxTicks: number): number[
   return indices;
 }
 
-/**
- * How many tick labels of `labelWidth` fit across `chartWidth` without touching.
- *
- * `n` ticks sit `chartWidth / (n - 1)` apart. Flooring gives `n <= chartWidth / labelWidth`, hence
- * `n - 1 < chartWidth / labelWidth`, hence that spacing is strictly wider than a label — so no two
- * labels can touch, with a whole label's width still in hand. Below two labels' worth of width the
- * floor would drop to one or zero and the chart would lose its time range entirely, so it clamps.
- */
 export function maxTicksForWidth(chartWidth: number, labelWidth: number): number {
   return Math.max(MIN_AXIS_TICKS, Math.floor(chartWidth / labelWidth));
 }
 
-/**
- * `2026-08-11T13:45:00.000Z` -> `08-11 13:45`.
- *
- * Sliced rather than parsed through `Date`: every timestamp reaching here was produced by
- * `toISOString()` upstream (`StatsMetricsReader.readEventsTimeSeries`,
- * `deriveImportDurationStats`), so the offsets are fixed, and slicing cannot drift the rendered
- * value into the host's local timezone the way `toLocaleString` would.
- */
 export function formatAxisTimestamp(isoTimestamp: string): string {
   return `${isoTimestamp.slice(5, 10)} ${isoTimestamp.slice(11, 16)}`;
 }
@@ -248,8 +218,6 @@ export function drawEventsOverTimeChart(
     pdf.stroke();
   }
 
-  // Labelling runs for both branches. It used to sit inside the multi-point branch, which left a
-  // single-point chart — the shape every per-import report produces — with no scale at all.
   drawYAxisLabels(pdf, originX, originY, maxValue);
   drawXAxisTicks(pdf, timeSeries, originX, originY);
   drawAxisNames(pdf, originX, originY, isAggregate);

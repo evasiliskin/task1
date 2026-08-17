@@ -15,13 +15,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === null || prototype === Object.prototype;
 }
 
-/**
- * Whether cloning is worth it. The overwhelming majority of log payloads are shallow objects of
- * ids, counts and durations with nothing to redact, and this runs for every line that will be
- * written — so the scan (no allocation) decides whether to pay for the walk (allocates at every
- * level). Circular and over-deep structures return `true` so `deepRedact` can install its
- * placeholders.
- */
 function needsRedaction(value: unknown, depth: number, seen: WeakSet<object>): boolean {
   if (depth > MAX_DEPTH) {
     return true;

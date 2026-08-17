@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 const ONE_DAY_MS = 86_400_000;
 const FIFTEEN_MINUTES_MS = 900_000;
-/** Phase 1's retry cycle spans ~8 minutes of exponential backoff; retention must outlive it. */
 const MIN_UPLOAD_RETENTION_MS = 600_000;
 
 const storageConfigSchema = z.object({

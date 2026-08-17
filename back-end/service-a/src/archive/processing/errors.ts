@@ -11,11 +11,6 @@ export class ArchiveProcessingError extends AppError {
   }
 }
 
-/**
- * Categorised VALIDATION, not EXTERNAL: an archive that expands past the budget is bad input, not a
- * failing dependency. Reporting a gzip bomb as 503 would point every investigation at the wrong
- * system.
- */
 export class ArchiveTooLargeError extends ValidationError {
   public constructor(maxDecompressedBytes: number) {
     super(`Archive exceeds the maximum decompressed size of ${maxDecompressedBytes} bytes`, {

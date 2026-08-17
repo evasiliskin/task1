@@ -21,14 +21,6 @@ const RAW_LINE_PREVIEW_LENGTH = 200;
 const BATCH_WRITE_ERRORS_LOG_MESSAGE = 'Batch insert reported non-duplicate write errors';
 const MAX_BATCH_ERROR_LOGS = 10;
 
-/**
- * A hard cap on how many lines one operation may emit for a repeating condition.
- *
- * Different policy from `LogThrottle`: an import is a bounded operation, so "the first N, then
- * silence" is the right shape — a time window would let a long import emit indefinitely. Returns
- * `undefined` once the cap is passed; otherwise the flag to stamp on the line so the reader knows
- * the log is about to go quiet.
- */
 function createLogCap(max: number): () => { suppressingFurtherLines: boolean } | undefined {
   let logged = 0;
 
@@ -74,12 +66,6 @@ export class ArchiveProcessingService {
 
   private readonly logger: AppLogger;
 
-  /**
-   * A drifted or truncated archive invalidates every line. Without a cap, one bad import emits
-   * hundreds of thousands of warnings carrying full raw JSON — enough to evict real logs from
-   * retention. The totals still reach the caller as `invalidEvents` / `errorCount`, which are the
-   * numbers worth alerting on.
-   */
   private buildInvalidLineLogger(importId: string): OnInvalidLine {
     const cap = createLogCap(MAX_INVALID_LINE_LOGS);
 

@@ -18,13 +18,6 @@ export class ImportRunTracker {
     @Inject(IMPORTS_COLLECTION) private readonly collection: Collection<IImportRunDocument>,
   ) {}
 
-  /**
-   * A row can exist before it has started: `claim()` reserves an importId/idempotencyKey pair with
-   * only `claimedAt` set, before the download/upload message is ever consumed. Excluding those rows
-   * here keeps this method — and everything built on it, like `/imports/{id}` — reporting "no run
-   * yet" for a claimed-but-not-started id exactly as it did before claim rows existed, instead of
-   * surfacing a partially-populated document that `toImportStatusView` cannot render.
-   */
   public async findByImportId(importId: string): Promise<IImportRunDocument | null> {
     return await this.collection.findOne(
       { importId, startedAt: { $exists: true } },
@@ -32,13 +25,6 @@ export class ImportRunTracker {
     );
   }
 
-  /**
-   * Reserves an importId for an Idempotency-Key, or returns the one already reserved.
-   *
-   * The key is the client's; the importId is ours. Keeping them separate is what stops a caller
-   * choosing the collection's primary key — and `$setOnInsert` makes the reservation atomic, so two
-   * concurrent replays of the same key converge on one run.
-   */
   public async claim(idempotencyKey: string): Promise<{ importId: string }> {
     const candidateImportId = randomUUID();
 
@@ -57,10 +43,6 @@ export class ImportRunTracker {
     startedAt: Date,
   ): Promise<void> {
     try {
-      // Upsert filtered on `startedAt` being absent, not a plain insert: a run reserved by `claim`
-      // already exists as a row, and an insert would report every claimed import as a duplicate. A
-      // run that has already started fails the filter, attempts an insert, and collides on the
-      // unique `importId` — which is still exactly the duplicate-delivery signal.
       await this.collection.updateOne(
         { importId, startedAt: { $exists: false } },
         { $set: { importId, source, status: 'started', startedAt } },
@@ -101,12 +83,6 @@ export class ImportRunTracker {
     );
   }
 
-  /**
-   * Marks runs abandoned in `started` as failed.
-   *
-   * A SIGKILL, an OOM or a drain timeout leaves the document `started` with no `failedAt` and
-   * nothing to ever correct it, so `/imports/{id}` reports an import as running indefinitely.
-   */
   public async failStaleRuns(olderThan: Date, reason: string): Promise<number> {
     const result = await this.collection.updateMany(
       { status: 'started', startedAt: { $lt: olderThan } },
@@ -124,18 +100,6 @@ export class ImportRunTracker {
     return result.modifiedCount;
   }
 
-  /**
-   * Deletes reservations `claim()` made that were never started.
-   *
-   * A claim-only row is not a correctness bug on its own — service-a's `recordStarted` upsert and
-   * the gateway's always-publish-on-replay behaviour mean a client retrying the same key still
-   * converges on one run (see the Phase 6 plan's "how F16 preserves the idempotency contract" design
-   * note). But a client that claims a key and never retries at all leaves a row with no `status`
-   * that `failStaleRuns` above can never match — it only looks at `status: 'started'`. Left alone
-   * that grows the collection without bound and without observability. There is nothing to "fail":
-   * the run never started, so deleting the reservation is correct, and the idempotencyKey becomes
-   * free for a genuinely new claim.
-   */
   public async expireStaleClaims(olderThan: Date): Promise<number> {
     const result = await this.collection.deleteMany({
       claimedAt: { $lt: olderThan },

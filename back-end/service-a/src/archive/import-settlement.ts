@@ -15,13 +15,6 @@ export interface ISettleImportOptions {
   importId: string;
 }
 
-/**
- * Runs one import and decides the message's fate.
- *
- * The acknowledgement is deliberately NOT in a `finally`: acking tells the broker the work is done,
- * so acking a failed import destroys it. A claimed-duplicate still acks — redelivering it would
- * only produce the same benign collision.
- */
 export async function settleImportResult(options: ISettleImportOptions): Promise<void> {
   try {
     await options.run();

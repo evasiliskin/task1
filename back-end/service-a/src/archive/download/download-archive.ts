@@ -62,8 +62,6 @@ async function attemptDownload(
 ): Promise<IDownloadArchiveResult> {
   const url = buildArchiveUrl(dateHour, options.baseUrl);
 
-  // Keyed on importId, not dateHour: two imports of the same hour are two distinct runs and must
-  // not share a path. The `archive` label in the lifecycle events stays dateHour-based.
   const finalPath = join(options.storageDirectory, buildArchiveFilename(importId));
   const temporaryPath = join(options.storageDirectory, buildDownloadTemporaryFilename(importId));
 

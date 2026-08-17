@@ -4,11 +4,6 @@ const ARCHIVE_FILENAME_PATTERN = /\.json\.gz$/i;
 const GZIP_MAGIC_BYTE_0 = 0x1f;
 const GZIP_MAGIC_BYTE_1 = 0x8b;
 
-/**
- * Validates the client-supplied original filename in multer's `fileFilter`. Deliberately not part
- * of `@task1/shared/storage/archive-paths` — that module describes what this service writes to
- * disk, this one describes what a caller is allowed to send.
- */
 export function isArchiveFilename(filename: string): boolean {
   return ARCHIVE_FILENAME_PATTERN.test(filename);
 }

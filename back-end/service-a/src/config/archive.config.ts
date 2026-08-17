@@ -1,9 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { z } from 'zod';
 
-/** GH Archive hourly files decompress to roughly 0.5–2 GB; 4 GiB leaves headroom without being unbounded. */
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 4_294_967_296;
-/** One JSON event is a few KB at most. 1 MiB is generous and still bounds a newline-free file. */
 const DEFAULT_MAX_LINE_BYTES = 1_048_576;
 
 const archiveConfigSchema = z.object({

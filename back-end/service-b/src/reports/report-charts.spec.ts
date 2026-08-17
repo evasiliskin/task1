@@ -261,8 +261,6 @@ describe('drawEventsOverTimeChart', () => {
 
     expect(dated.at(0)).toBe('08-11 00:00');
     expect(dated.at(-1)).toBe('08-11 00:49');
-    // 400pt of axis against a 60pt label budget — denser than the fixed four it replaced, and still
-    // 80pt apart, so no two labels can touch.
     expect(dated).toHaveLength(6);
   });
 

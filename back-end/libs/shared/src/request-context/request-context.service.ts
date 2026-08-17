@@ -28,22 +28,10 @@ export class RequestContextService {
     return store === undefined ? {} : { ...store };
   }
 
-  /**
-   * The live store, by reference, for pino's `mixin` — which runs for every written line and only
-   * ever reads. `getAttributes()` keeps returning a copy for callers that might mutate.
-   */
   public getStoreForLogging(): Partial<IRequestContext> {
     return this.storage.getStore() ?? EMPTY_ATTRIBUTES;
   }
 
-  /**
-   * Runs background work — timers, lifecycle hooks — under a fresh root context.
-   *
-   * Two things depend on this. Every line one sweep emits shares a correlation id, so the sweep is
-   * followable; and `ContextPropagatingClient` can publish from background code without
-   * `requireContext()` throwing, which it otherwise would at the publish call rather than at
-   * startup.
-   */
   public runAsRoot<T>(operation: string, callback: () => T): T {
     return this.run(
       {

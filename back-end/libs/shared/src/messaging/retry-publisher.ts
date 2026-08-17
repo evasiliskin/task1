@@ -24,14 +24,6 @@ export const DEAD_LETTERED_LOG =
 export const REPUBLISH_FAILED_LOG =
   'retry/dead-letter republish failed, dead-lettering the original message';
 
-/**
- * Owns what happens to a message when its handler fails.
- *
- * Consumers decide what work to do; this decides the delivery outcome. Queues are declared once at
- * bootstrap by `QueueTopologyInitializer`, so nothing here touches `assertQueue` — a per-message
- * `assertQueue` costs a broker round-trip on every failure and closes the channel with
- * PRECONDITION_FAILED if the arguments ever drift.
- */
 @Injectable()
 export class RetryPublisher {
   public constructor(
@@ -97,11 +89,6 @@ export class RetryPublisher {
     });
   }
 
-  /**
-   * `requeue: false`, never `true`. Requeueing redelivers immediately, the same failure recurs
-   * immediately, and the result is a CPU-bound redelivery loop that also floods the log. With the
-   * main queue carrying an `x-dead-letter-exchange`, a rejected message lands in the DLQ instead.
-   */
   private rejectToDeadLetterExchange(
     channel: IRmqChannel,
     message: IRmqMessage,

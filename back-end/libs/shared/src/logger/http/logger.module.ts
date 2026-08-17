@@ -12,10 +12,6 @@ import { HttpLoggingMiddleware } from './http-logging.middleware.js';
   exports: [LoggerCoreModule],
 })
 export class LoggerModule implements NestModule {
-  // Order is explicit and local: HttpLoggingMiddleware must see the correlation id that
-  // RequestContextMiddleware puts in the ALS store. Previously this depended on the position of
-  // RequestContextModule in the consuming AppModule's imports array — a silently breakable
-  // coupling that no test covered.
   public configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(RequestContextMiddleware, HttpLoggingMiddleware)

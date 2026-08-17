@@ -10,13 +10,6 @@ export interface IPublishImportMessageOptions {
   payload: Record<string, unknown>;
 }
 
-/**
- * Publishes and waits for the broker to accept.
- *
- * Fire-and-forget made `202 Accepted` a lie: a refused publish left the caller holding an importId
- * for work that was never queued, with only a log line to show for it. Awaiting turns the status
- * code back into a guarantee.
- */
 export async function publishImportMessage(options: IPublishImportMessageOptions): Promise<void> {
   try {
     await firstValueFrom(

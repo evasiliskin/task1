@@ -30,12 +30,6 @@ export const DEAD_LETTER_RECORD_FAILED_LOG =
   'Failed to record the dead-lettered event as a processing-log entry';
 const DEAD_LETTER_REASON_MAX_LENGTH = 500;
 
-/**
- * Retry/DLQ delivery outcomes are owned by `RetryPublisher` (`@task1/shared/messaging`) — this
- * controller only maps payloads to processing-log entries and, once the delivery outcome comes
- * back as `dead-lettered` (exhausted retries) or `rejected` (republish itself failed, nacked
- * straight to the DLQ), records that outcome as a queryable log entry.
- */
 @Controller()
 export class ImportEventsController {
   public constructor(

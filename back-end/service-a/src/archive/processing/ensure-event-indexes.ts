@@ -1,11 +1,6 @@
 import { type IGithubEventDocument } from '@task1/shared/github-archive/index';
 import { type Collection } from 'mongodb';
 
-/**
- * The index definitions are independent, so they are created concurrently rather than in eleven
- * serialised round trips across the three ensure functions. Safe parallelism: no shared state, and
- * MongoDB builds indexes on distinct keys concurrently.
- */
 export async function ensureEventIndexes(
   collection: Collection<IGithubEventDocument>,
 ): Promise<void> {

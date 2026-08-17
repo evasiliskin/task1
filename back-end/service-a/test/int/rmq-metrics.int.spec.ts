@@ -12,23 +12,12 @@ import {
 
 const RPC_QUEUE = 'service_a_queue';
 const REDIS_PORT = 6379;
-/**
- * The plain `redis` image has no TimeSeries module, so `TS.ADD` would be an unknown command and
- * every assertion here would pass vacuously against an empty keyspace. This mirrors the image
- * `docker-compose.yml` runs, which is what production writes into.
- */
 const REDIS_STACK_IMAGE = 'redis/redis-stack-server:latest';
 
 const CLAIM_REQUESTS_KEY = `service_a.rmq.${RPC_PATTERNS.IMPORTS_CLAIM}.requests`;
 const CLAIM_ERRORS_KEY = `service_a.rmq.${RPC_PATTERNS.IMPORTS_CLAIM}.errors`;
 const HEALTH_KEY_PATTERN = `service_a.rmq.${RPC_PATTERNS.HEALTH_CHECK}.*`;
 
-/**
- * Proves the transport counters end-to-end rather than re-asserting `rmq-metrics.interceptor.spec.ts`
- * against a spy: a spy shows the interceptor calls `MetricsService`, not that the interceptor is
- * globally registered, that `imports.claim` escapes `UNMETERED_PATTERNS`, or that the datapoint
- * survives as a readable RedisTimeSeries series.
- */
 describe('RMQ transport metrics against real Redis', () => {
   let harness: IRabbitMqHarness;
   let redisContainer: StartedTestContainer;
@@ -46,9 +35,6 @@ describe('RMQ transport metrics against real Redis', () => {
   }
 
   beforeAll(async () => {
-    // The key namespace is derived from SERVICE_NAME (`buildMetricKey` in metric-key.util.ts), which
-    // compose sets per service. Without it the series would land under `unknown_service.rmq.*` and
-    // this suite would assert the wrong keys while production wrote the right ones.
     process.env.SERVICE_NAME = 'service-a';
 
     harness = await startRabbitMq();
@@ -90,9 +76,6 @@ describe('RMQ transport metrics against real Redis', () => {
   });
 
   it('should publish an errors datapoint, when the handler rejects', async () => {
-    // An absent idempotencyKey fails `claimImportMessageSchema.parse` inside the handler, which is
-    // the cheapest genuine rejection: it travels the same path as any thrown handler error, through
-    // the interceptor's `tap` and on into RpcAppExceptionFilter.
     await sendRpc(harness.channel, RPC_QUEUE, RPC_PATTERNS.IMPORTS_CLAIM, {});
 
     await vi.waitFor(

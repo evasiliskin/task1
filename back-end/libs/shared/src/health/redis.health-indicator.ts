@@ -5,13 +5,6 @@ import { firstValueFrom, from, timeout } from 'rxjs';
 
 import { REDIS_CLIENT } from '../infra/client-tokens.js';
 
-/**
- * Reports whether this process can actually reach its Redis.
- *
- * `timeoutMs` is a parameter rather than injected config: the same indicator serves service-a and
- * service-b, and shared infrastructure should not depend on either one's configuration shape. This
- * mirrors the gateway's RabbitMQ ping indicator, which takes its client the same way.
- */
 @Injectable()
 export class RedisHealthIndicator {
   public constructor(

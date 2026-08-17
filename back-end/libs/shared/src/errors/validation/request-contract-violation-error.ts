@@ -16,8 +16,6 @@ export class RequestContractViolationError extends ValidationError {
     parameters: IRequestContractViolationErrorParameters,
     options?: { cause?: Error },
   ) {
-    // Client-safe message: controller/method names stay in `params` for server-side
-    // logging only and are never emitted on the wire.
     super('Request validation failed', {
       code: 'REQUEST_CONTRACT_VIOLATION',
       category: ErrorCategory.VALIDATION,

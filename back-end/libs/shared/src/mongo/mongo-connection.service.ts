@@ -21,11 +21,6 @@ export class MongoConnectionService implements OnModuleInit, OnApplicationShutdo
     this.logger.info({}, 'Connected to MongoDB');
   }
 
-  /**
-   * `onApplicationShutdown`, not `onModuleDestroy`: Nest runs `onModuleDestroy` first, which used
-   * to close the client while an import was still writing. Shutdown order is now drain
-   * (`onModuleDestroy`) → stop consuming (dispose) → close connections (here).
-   */
   public async onApplicationShutdown(): Promise<void> {
     await this.client.close();
   }

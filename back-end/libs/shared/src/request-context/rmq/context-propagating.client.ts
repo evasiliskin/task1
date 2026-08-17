@@ -5,13 +5,6 @@ import { type Observable } from 'rxjs';
 import { buildOutboundHeaders } from '../propagation.util.js';
 import { RequestContextService } from '../request-context.service.js';
 
-/**
- * The single place correlation headers are attached to an outbound RabbitMQ message.
- *
- * Every `ClientProxy.emit`/`.send` in this monorepo must go through here. Calling the raw client
- * directly drops `x-correlation-id`, and the receiving side silently mints a new one — a break
- * that produces perfectly well-formed but untraceable logs.
- */
 @Injectable()
 export class ContextPropagatingClient {
   public constructor(private readonly requestContextService: RequestContextService) {}

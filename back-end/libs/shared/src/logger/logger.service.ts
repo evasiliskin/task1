@@ -6,10 +6,6 @@ import { type ILoggerFactory } from './logger-factory.interface.js';
 import { LOG_CHANNEL, PINO_LOGGER } from './logger.tokens.js';
 import { type LogChannel } from './types.js';
 
-/**
- * The one logger factory. Which transport a service runs on is expressed by the injected
- * `LOG_CHANNEL` default, not by having two classes with the same name in two directories.
- */
 @Injectable()
 export class LoggerService implements ILoggerFactory {
   public constructor(

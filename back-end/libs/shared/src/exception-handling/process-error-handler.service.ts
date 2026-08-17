@@ -6,24 +6,12 @@ import { type IRequestContext } from '../request-context/request-context.types.j
 
 import { CentralizedErrorHandlerService } from './centralized-error-handler.service.js';
 
-/**
- * The context of the request that raised the error, smuggled on the error itself.
- *
- * `unhandledRejection` still runs inside the AsyncLocalStorage store, but the `uncaughtException`
- * it is rethrown into does not — Node dispatches that from the top of the event loop. Attaching
- * the attributes here is the only way the fatal line can name the request that killed the process.
- */
 export const RAISING_REQUEST_CONTEXT = Symbol('RAISING_REQUEST_CONTEXT');
 
 interface IContextCarrier {
   [RAISING_REQUEST_CONTEXT]?: Partial<IRequestContext>;
 }
 
-/**
- * Registers process-level error handlers per nodejsbestpractices:
- * unhandledRejection is rethrown to become an uncaughtException, which is
- * the single place fatal errors are logged and the process is terminated.
- */
 @Injectable()
 export class ProcessErrorHandlerService implements OnModuleInit, OnModuleDestroy {
   public constructor(

@@ -43,9 +43,6 @@ async function bootstrap(): Promise<void> {
 
     bootstrapLogger.info({ documentationMounted }, 'API documentation availability resolved');
 
-    // Bootstrap is over. Everything Nest logs from here on — unhandled errors surfaced by
-    // GlobalExceptionFilter, shutdown notices — belongs to request handling, not to startup, so
-    // it must not keep the "bootstrap" channel.
     app.useLogger(new NestLoggerBridge(loggerService.getLogger('Nest', 'http'), pinoLogger));
   } catch (error) {
     if (app === undefined) {

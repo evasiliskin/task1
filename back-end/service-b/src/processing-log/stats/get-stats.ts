@@ -19,7 +19,6 @@ import { type StatsRollupTracker } from './stats-rollup.tracker.js';
 
 const FAILED_READ_MONGO_STATS_LOG = 'Failed to read processing-log stats from MongoDB';
 
-/** The unique {importId, status} index caps an import at one document per status enum value. */
 const MAX_STATUSES_PER_IMPORT = 4;
 
 const EMPTY_MONGO_STATS: IMongoStats = {
@@ -49,10 +48,6 @@ export interface IGetStatsOptions {
   logger?: AppLogger;
 }
 
-/**
- * Only an unreachable database degrades a result. A `TypeError` from a malformed pipeline is a bug,
- * and reporting it as `degraded: true` made that class of defect invisible in production.
- */
 function isInfrastructureFailure(error: unknown): boolean {
   return error instanceof MongoNetworkError || error instanceof MongoServerSelectionError;
 }
@@ -67,7 +62,6 @@ async function readAggregateTotals(
       return { stats: rolledUp, degraded: false };
     }
 
-    // Unseeded rollup: fall back to the scan so the endpoint still answers during the cutover.
     const groups = await options.collection.aggregate<IStatsGroup>(buildStatsPipeline()).toArray();
 
     return { stats: shapeStats(groups), degraded: false };
@@ -120,8 +114,6 @@ async function getImportStats(
   const durationStats = deriveImportDurationStats(documents);
 
   return {
-    // One query serves both the totals and the duration; the aggregation that used to run first is
-    // redundant for a single import whose documents are already in hand.
     ...shapeStatsFromDocuments(documents),
     ...(durationStats.processingDurationMs === undefined
       ? {}

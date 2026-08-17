@@ -14,14 +14,6 @@ const NEST_TO_PINO_LEVEL: Record<LogLevel, string> = {
 
 const PINO_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 
-/**
- * Bridges Nest's own `LoggerService` interface onto `AppLogger`.
- *
- * `source` is a pino child binding and is fixed to `'Nest'` for every line this bridge writes —
- * a per-line override would emit the key twice (see `LogFields`). Nest's own context (the class
- * that logged) therefore lands in `nestContext`: `source:"Nest"` selects every framework line,
- * `nestContext` narrows within them.
- */
 export class NestLoggerBridge implements LoggerService {
   public constructor(
     private readonly logger: AppLogger,
@@ -33,9 +25,6 @@ export class NestLoggerBridge implements LoggerService {
   }
 
   public error(message: unknown, ...optionalParameters: unknown[]): void {
-    // Nest hands the stack in as a pre-formatted string, not an Error, so there is nothing for the
-    // `err` serializer to walk — `stack` is the honest name for what this actually is. `trace`
-    // meant distributed-trace id to every aggregator that read it.
     this.logger.error(
       { nestContext: optionalParameters[1], stack: optionalParameters[0] },
       String(message),
@@ -58,10 +47,6 @@ export class NestLoggerBridge implements LoggerService {
     this.logger.fatal({ nestContext: optionalParameters[0] }, String(message));
   }
 
-  /**
-   * Nest's level control and pino's must not drift. The lowest level Nest asks for becomes pino's
-   * threshold; without a pino logger to act on, this is a no-op rather than a silent lie.
-   */
   public setLogLevels(levels: LogLevel[]): void {
     if (this.pinoLogger === undefined || levels.length === 0) {
       return;

@@ -44,9 +44,6 @@ export class UploadImportController {
     this.logger = loggerService.getLogger(UploadImportController.name);
   }
 
-  // Tighter than the global default. `Resolvable` values are evaluated per request, so the limit
-  // comes from validated configuration rather than a literal that a comment asked humans to keep in
-  // sync with `throttle.config.ts` — `THROTTLE_UPLOAD_LIMIT` is now genuinely live.
   @Throttle({
     default: {
       limit: () => throttleConfig().uploadLimit,

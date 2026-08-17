@@ -1,11 +1,5 @@
 export const REDACT_CENSOR = '[REDACTED]' as const;
 
-/**
- * The single source of truth for "this key is sensitive wherever it appears".
- *
- * Entries are compared after normalization (lowercased, non-alphanumerics stripped), so
- * `x-api-key`, `X_API_KEY` and `xApiKey` all match the single entry `xapikey`.
- */
 export const SENSITIVE_KEYS: readonly string[] = [
   'authorization',
   'proxyauthorization',
@@ -39,12 +33,6 @@ export function isSensitiveKey(key: string): boolean {
   return NORMALIZED_SENSITIVE_KEYS.has(normalizeKey(key));
 }
 
-/**
- * Pino `redact.paths`. Pino matches paths literally (with one-level `*` wildcards) — it does not
- * recurse — so these must mirror the shapes this application actually emits. The deep, recursive
- * pass lives in `redactLogPayload`, which `AppLogger` applies to every field object; these paths
- * are the belt-and-braces layer for anything that reaches pino by another route.
- */
 export const REDACT_PATHS: readonly string[] = [
   'request.headers.authorization',
   'request.headers.cookie',
@@ -74,8 +62,6 @@ export const REDACT_PATHS: readonly string[] = [
   '*.privateKey',
   '*.sessionId',
 
-  // Belt-and-braces for the error subtree. `appErrorFields` already deep-redacts `err.params`;
-  // these cover an error object that reaches pino by some other route.
   'err.params.password',
   'err.params.token',
   'err.params.apiKey',

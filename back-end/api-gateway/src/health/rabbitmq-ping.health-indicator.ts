@@ -18,9 +18,6 @@ export class RabbitMqPingHealthIndicator {
 
   public async isHealthy(key: string, client: ClientProxy): Promise<HealthIndicatorResult> {
     const indicator = this.healthIndicatorService.check(key);
-    // Deliberately outside the try block: a missing request context is a programming error
-    // (MissingRequestContextError), not a downstream health failure, so it must propagate
-    // rather than be reported as the target service being down.
     const request$ = this.propagatingClient.send(client, RPC_PATTERNS.HEALTH_CHECK, {});
 
     try {

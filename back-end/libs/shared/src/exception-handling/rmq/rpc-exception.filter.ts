@@ -35,7 +35,6 @@ export class RpcAppExceptionFilter implements RpcExceptionFilter<unknown, Observ
 
   private readonly logger: AppLogger;
 
-  /** The pattern is the only handle on *which* consumer failed; without it the line is unactionable. */
   private resolvePattern(host: ArgumentsHost): string {
     try {
       return host.switchToRpc().getContext<RmqContext>().getPattern();

@@ -7,8 +7,6 @@ import { LoggerCoreModule } from '../logger-core.module.js';
 import { RmqLoggingInterceptor } from './rmq-logging.interceptor.js';
 
 @Module({
-  // RequestContextModule is imported first so its RmqContextInterceptor is registered ahead of
-  // RmqLoggingInterceptor — the correlation id must be in the ALS store before anything logs.
   imports: [RequestContextModule, LoggerCoreModule.forChannel('rmq')],
   providers: [{ provide: APP_INTERCEPTOR, useClass: RmqLoggingInterceptor }],
   exports: [LoggerCoreModule],
