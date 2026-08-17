@@ -35,14 +35,17 @@ Several invariants fail loudly instead of silently, so a "small" edit can break 
   the shared pino wrapper.
 - New top-level documentation files. The set is `README.md`, `AGENTS.md`, `CLAUDE.md`, and one
   README per service.
-- Queue, exchange or routing-key declarations. Topology comes from `deriveQueueTopology` and the
-  `MessagingModule`.
+- Queue, exchange or routing-key declarations. Main queues (with their `x-dead-letter-*` arguments)
+  are declared by the transport options in each service's `main.ts`; the matching `.retry`/`.dlq`
+  queues come from `deriveQueueTopology` and `MessagingModule`'s bootstrap initializer. There is no
+  third place, and no custom exchange.
 
 ## Tests are part of the change
 
-Unit tests are colocated and the suites enforce 90% line and branch coverage. New logic should be a
-pure exported function with its own `*.spec.ts` next to it, not an untested method on a service.
-Do not move a Testcontainers test into the unit suite to make it run in `pnpm test`.
+Unit tests are colocated, and each package's `test:cov` enforces 90% line and branch coverage (plain
+`pnpm test` does not gate on it). New logic should be a pure exported function with its own
+`*.spec.ts` next to it, not an untested method on a service. Do not move a Testcontainers test into
+the unit suite to make it run in `pnpm test`.
 
 ## After modifying
 

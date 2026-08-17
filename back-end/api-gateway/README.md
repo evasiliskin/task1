@@ -39,9 +39,10 @@ Health routes are `@Public()` and skip throttling. `/health` always returns 200 
 
 Ordering matters and is set up in `main.ts` / `app.module.ts`:
 
-1. `NestFactory.create(..., { bodyParser: false })` — the body parsers are applied _after_ the
-   request-context middleware so every parse error already has a correlation ID.
-2. Request-context middleware → Helmet → Express `json`/`urlencoded`.
+1. `NestFactory.create(..., { bodyParser: false })` — Nest's automatic body parsing is disabled so
+   the parsers can be mounted _after_ the request-context middleware and every parse error already
+   has a correlation ID.
+2. Middleware, in registration order: request-context → Express `json`/`urlencoded` → Helmet.
 3. Global guards: `ThrottlerGuard`, then `AuthGuard`.
 4. Global interceptors: `ContractValidationInterceptor` (validates the handler's return value) and
    `ResponseEnvelopeInterceptor` (wraps it; `StreamableFile` passes through unwrapped).
@@ -50,15 +51,17 @@ Ordering matters and is set up in `main.ts` / `app.module.ts`:
 ### Contract-first validation
 
 There is **no global `ValidationPipe`**. Instead each HTTP handler declares
-`@Contract({ request, response })` and binds its input with `@ModelBinder(Schema)`:
+`@Contract({ request, response })`, and handlers that take input bind it with `@ModelBinder(Schema)`:
 
 - Request schemas are strict Zod objects keyed by `params` / `query` / `body`; the binder merges the
   parsed sections into one flat object and raises `RequestContractViolationError` (HTTP 400 with
-  per-field details) on failure.
+  per-field details) on failure. Handlers with no input (the health routes) declare
+  `EmptyRequestSchema` and skip the binder.
 - The response schema is enforced at runtime by the interceptor; a mismatch is a 500
   `ResponseContractViolationError`, not a silently wrong payload.
 - `ContractScanner` walks every controller at startup and **fails the boot** if any HTTP handler is
-  missing `@Contract`. Adding an endpoint without a contract is not possible.
+  missing `@Contract` (`@ModelBinder` is not scanned for). Adding an endpoint without a contract is
+  not possible.
 - The same Zod schemas generate the Swagger response schemas via `@ApiSingleResponse` /
   `@ApiListResponse`.
 

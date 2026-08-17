@@ -46,8 +46,11 @@ logged and never abort the import:
 
 `ImportOrchestrationService` → `importArchive` runs the same sequence for both sources:
 
-1. Record `started` in `imports` (only if the run has no `startedAt` yet) and emit
-   `github.import.started`.
+1. Record `started` in `imports` and emit `github.import.started`. A first (`fresh`) delivery may
+   only start a run with no `startedAt`; a retried or redelivered message may also reopen a run that
+   is not `completed` and is either no longer `started` or has been stuck in `started` past the
+   download-timeout budget. Anything else is a conflict (`ImportAlreadyClaimedError` /
+   `ImportRunInProgressError`).
 2. **download** source: fetch `<GITHUB_ARCHIVE_BASE_URL>/<dateHour>.json.gz` to a `.download.tmp`
    file with per-attempt and total timeouts and bounded retries.
    **upload** source: the file the gateway already placed in `STORAGE_DIR`.

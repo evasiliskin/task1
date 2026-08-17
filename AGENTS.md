@@ -22,7 +22,7 @@ pnpm workspace (`back-end/*`, `back-end/libs/*`). ESM throughout: **relative imp
 
 - A service never imports another service's source. The only shared code is `@task1/shared`.
 - No cross-service database access. `service-a` owns Mongo `service_a`, `service-b` owns
-  `service_b`, the gateway owns nothing.
+  `service_b`, the gateway owns no database at all.
 - The gateway must not grow domain logic, queries, or persistence. If a request needs a decision,
   add an RPC pattern and make the owning service decide.
 - Services talk over RabbitMQ only — never HTTP. The only outbound HTTP in the system is service-a
@@ -39,15 +39,23 @@ It must not contain business rules. Import counting, stats derivation, report co
 building and search logic stay in the owning service. If shared code starts branching on a domain
 concept, it is in the wrong package.
 
-Adding an export means also adding it to `src/index.ts`.
+Services import from `@task1/shared` two ways: the root barrel (`src/index.ts`, used for small
+leaf utilities such as `requireInProduction` and the pagination constants) and deep subpaths such as
+`@task1/shared/logger/logger.service` (used for everything else, including the Nest modules, which
+are deliberately _not_ re-exported from the barrel). Follow whichever the surrounding code uses; add
+to `src/index.ts` only when the new export belongs in the barrel group.
 
 ## Messaging rules
 
-- Add or rename patterns only in `@task1/shared`: `messaging/rpc-patterns.const.ts` (RPC) or
-  `github-archive/events/event-patterns.const.ts` (events). Never hard-code a pattern string.
+- Add or rename patterns only in `@task1/shared`: `messaging/rpc-patterns.const.ts` or
+  `github-archive/events/event-patterns.const.ts`. Never hard-code a pattern string. The file names
+  do not map cleanly onto the transport kind — `ARCHIVE_IMPORT_DOWNLOAD` and
+  `ARCHIVE_PROCESS_UPLOAD` sit in `RPC_PATTERNS` but are consumed with `@EventPattern`. Check how a
+  pattern is consumed before assuming it is RPC.
 - Choose deliberately: `send`/`@MessagePattern` for anything the caller waits on,
-  `emit`/`@EventPattern` for work and notifications. Gateway RPC calls must set
-  `.pipe(timeout(rpcTimeoutMs))`.
+  `emit`/`@EventPattern` for work and notifications. Gateway publishes go through
+  `sendRpcMessage` / `publishImportMessage`, which apply the `rpcTimeoutMs` timeout and wrap
+  transport failures — do not call the client directly.
 - Every publish goes through `ContextPropagatingClient`. Calling a raw `ClientProxy` drops
   `x-correlation-id` and silently breaks the trace.
 - Every consumer re-validates its payload with a Zod schema. Malformed payloads are logged and
@@ -55,7 +63,9 @@ Adding an export means also adding it to `src/index.ts`.
 - Consumers use manual ack (`noAck: false`). RPC handlers ack in `finally`; event handlers ack on
   success and delegate failures to `RetryPublisher`. Never leave a path that neither acks nor nacks.
 - There are no custom exchanges. Queue naming is `<queue>`, `<queue>.retry`, `<queue>.dlq`, derived
-  by `deriveQueueTopology`. Do not declare topology by hand.
+  by `deriveQueueTopology`. Main queues are declared by the transport options in each service's
+  `main.ts`, the retry/DLQ pair by `MessagingModule`'s bootstrap initializer — do not add a third
+  declaration site. The gateway's clients use `noAssert: true` and must keep doing so.
 - A pattern's payload shape is owned by the consumer's schema; changing it means changing both sides
   in the same commit.
 
@@ -73,8 +83,9 @@ controller (@MessagePattern / @EventPattern / HTTP)
 Prefer adding a pure function plus a thin service over a new stateful class. Collections are exposed
 through `*-collection.provider.ts` tokens injected into services.
 
-Gateway-specific: every HTTP handler needs `@Contract({ request, response })` and `@ModelBinder` —
-`ContractScanner` fails startup otherwise. Do not add a global `ValidationPipe`; validation is Zod.
+Gateway-specific: every HTTP handler needs `@Contract({ request, response })` — `ContractScanner`
+fails startup otherwise — and binds its input with `@ModelBinder(Schema)` unless it takes none. Do
+not add a global `ValidationPipe`; validation is Zod.
 
 ## Configuration
 
@@ -90,7 +101,7 @@ an `Error` in the fields object; errors go in the third argument.
 
 ## Testing
 
-- Unit tests are `*.spec.ts` colocated with the source; coverage thresholds are 90% lines/branches.
+- Unit tests are `*.spec.ts` colocated with the source; `test:cov` gates on 90% lines/branches.
 - Gateway HTTP tests are `src/**/*.int.spec.ts` (Supertest, RabbitMQ clients mocked) and run with
   the unit suite.
 - `test/int/*.int.spec.ts` in service-a/service-b use Testcontainers and only run via `test:int`.
