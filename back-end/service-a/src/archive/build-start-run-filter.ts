@@ -12,17 +12,36 @@ export function buildReopenRunFilter(
     return undefined;
   }
 
+  const notCompleted: Filter<IImportRunDocument> = {
+    importId,
+    startedAt: { $exists: true },
+    status: { $ne: 'completed' },
+  };
+
   if (delivery === 'redelivery') {
-    return { importId, startedAt: { $exists: true } };
+    return notCompleted;
   }
 
   return {
-    importId,
-    startedAt: { $exists: true },
+    ...notCompleted,
     $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: staleBefore } }],
   };
 }
 
 export function buildStartRunFilter(importId: string): Filter<IImportRunDocument> {
   return { importId, startedAt: { $exists: false } };
+}
+
+export function buildRecordStartedFilter(
+  importId: string,
+  delivery: ImportDeliveryKind,
+  staleBefore: Date,
+): Filter<IImportRunDocument> {
+  const reopenFilter = buildReopenRunFilter(importId, delivery, staleBefore);
+
+  if (reopenFilter === undefined) {
+    return buildStartRunFilter(importId);
+  }
+
+  return { $or: [buildStartRunFilter(importId), reopenFilter] };
 }

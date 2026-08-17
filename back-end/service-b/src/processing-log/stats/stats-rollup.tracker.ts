@@ -7,11 +7,7 @@ import { buildAppliedEntryKey } from './applied-entry-key.js';
 import { buildRollupDelta } from './rollup-delta.js';
 import { type IMongoStats } from './shape-stats.js';
 import { STATS_ROLLUP_COLLECTION } from './stats-rollup-collection.provider.js';
-import {
-  APPLIED_ENTRIES_HISTORY,
-  STATS_ROLLUP_ID,
-  type IStatsRollupDocument,
-} from './stats-rollup.types.js';
+import { STATS_ROLLUP_ID, type IStatsRollupDocument } from './stats-rollup.types.js';
 
 @Injectable()
 export class StatsRollupTracker {
@@ -37,12 +33,7 @@ export class StatsRollupTracker {
 
     await this.collection.updateOne(
       { _id: STATS_ROLLUP_ID, appliedEntries: { $ne: appliedEntry } },
-      {
-        $inc: delta,
-        $push: {
-          appliedEntries: { $each: [appliedEntry], $slice: -APPLIED_ENTRIES_HISTORY },
-        },
-      },
+      { $inc: delta, $push: { appliedEntries: appliedEntry } },
     );
   }
 

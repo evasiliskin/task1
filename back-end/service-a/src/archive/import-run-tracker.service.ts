@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { DUPLICATE_KEY_ERROR_CODE } from '@task1/shared/mongo/duplicate-key.const';
-import { type Collection, MongoServerError, type UpdateFilter } from 'mongodb';
+import { type Collection, MongoServerError } from 'mongodb';
 
 import archiveConfig, { type ArchiveConfiguration } from '../config/archive.config.js';
 
-import { buildReopenRunFilter, buildStartRunFilter } from './build-start-run-filter.js';
+import { buildRecordStartedFilter } from './build-start-run-filter.js';
 import { ImportAlreadyClaimedError } from './import-claim.error.js';
 import { type ImportDeliveryKind } from './import-delivery-kind.js';
 import { ImportRunInProgressError } from './import-run-in-progress.error.js';
@@ -58,16 +58,17 @@ export class ImportRunTracker {
     startedAt: Date,
     delivery: ImportDeliveryKind = 'fresh',
   ): Promise<void> {
-    const update: UpdateFilter<IImportRunDocument> = {
-      $set: { importId, source, status: 'started', startedAt },
-    };
-
-    if (await this.reopenRun(importId, delivery, startedAt, update)) {
-      return;
-    }
+    const staleBefore = new Date(
+      startedAt.getTime() - computeImportRunStalenessMs(this.archiveConfiguration),
+    );
+    const filter = buildRecordStartedFilter(importId, delivery, staleBefore);
 
     try {
-      await this.collection.updateOne(buildStartRunFilter(importId), update, { upsert: true });
+      await this.collection.updateOne(
+        filter,
+        { $set: { importId, source, status: 'started', startedAt } },
+        { upsert: true },
+      );
     } catch (error) {
       if (error instanceof MongoServerError && error.code === DUPLICATE_KEY_ERROR_CODE) {
         throw delivery === 'fresh'
@@ -129,26 +130,6 @@ export class ImportRunTracker {
     });
 
     return result.deletedCount;
-  }
-
-  private async reopenRun(
-    importId: string,
-    delivery: ImportDeliveryKind,
-    startedAt: Date,
-    update: UpdateFilter<IImportRunDocument>,
-  ): Promise<boolean> {
-    const staleBefore = new Date(
-      startedAt.getTime() - computeImportRunStalenessMs(this.archiveConfiguration),
-    );
-    const filter = buildReopenRunFilter(importId, delivery, staleBefore);
-
-    if (filter === undefined) {
-      return false;
-    }
-
-    const result = await this.collection.updateOne(filter, update);
-
-    return result.matchedCount === 1;
   }
 
   private async readClaimedImportId(

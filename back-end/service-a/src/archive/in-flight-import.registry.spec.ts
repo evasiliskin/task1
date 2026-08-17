@@ -56,16 +56,6 @@ describe('InFlightImportRegistry', () => {
     expect(registry.size).toBe(0);
   });
 
-  it('should report that it is shutting down, when shutdown has begun', () => {
-    const registry = new InFlightImportRegistry();
-
-    expect(registry.isShuttingDown).toBe(false);
-
-    registry.beginShutdown();
-
-    expect(registry.isShuttingDown).toBe(true);
-  });
-
   it('should drain immediately, when nothing is in flight', async () => {
     await expect(new InFlightImportRegistry().drain(50)).resolves.toBe(true);
   });

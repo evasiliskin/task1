@@ -126,7 +126,7 @@ describe('ImportRunTracker', () => {
       );
     });
 
-    it('should reopen a settled run, when the delivery is a retry', async () => {
+    it('should reopen a settled, not-completed run in a single query, when the delivery is a retry', async () => {
       const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
       const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
 
@@ -135,38 +135,34 @@ describe('ImportRunTracker', () => {
       expect(updateOne).toHaveBeenCalledTimes(1);
       expect(updateOne).toHaveBeenCalledWith(
         {
-          importId,
-          startedAt: { $exists: true },
-          $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: STALE_BEFORE } }],
+          $or: [
+            { importId, startedAt: { $exists: false } },
+            {
+              importId,
+              startedAt: { $exists: true },
+              status: { $ne: 'completed' },
+              $or: [{ status: { $ne: 'started' } }, { startedAt: { $lt: STALE_BEFORE } }],
+            },
+          ],
         },
         { $set: { importId, source: SOURCE, status: 'started', startedAt: STARTED_AT } },
+        { upsert: true },
       );
     });
 
-    it('should reopen the run unconditionally, when the broker redelivered the same message', async () => {
+    it('should reopen a started or failed run but never a completed one, when the broker redelivered the same message', async () => {
       const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
       const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
 
       await tracker.recordStarted(importId, SOURCE, STARTED_AT, 'redelivery');
 
       expect(updateOne).toHaveBeenCalledWith(
-        { importId, startedAt: { $exists: true } },
-        { $set: { importId, source: SOURCE, status: 'started', startedAt: STARTED_AT } },
-      );
-    });
-
-    it('should fall back to the fresh upsert, when a retry finds no run document to reopen', async () => {
-      const updateOne = vi
-        .fn()
-        .mockResolvedValueOnce({ matchedCount: 0 })
-        .mockResolvedValueOnce({ matchedCount: 0, upsertedCount: 1 });
-      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
-
-      await tracker.recordStarted(importId, SOURCE, STARTED_AT, 'retry');
-
-      expect(updateOne).toHaveBeenNthCalledWith(
-        2,
-        { importId, startedAt: { $exists: false } },
+        {
+          $or: [
+            { importId, startedAt: { $exists: false } },
+            { importId, startedAt: { $exists: true }, status: { $ne: 'completed' } },
+          ],
+        },
         { $set: { importId, source: SOURCE, status: 'started', startedAt: STARTED_AT } },
         { upsert: true },
       );
@@ -174,14 +170,21 @@ describe('ImportRunTracker', () => {
 
     it('should throw ImportRunInProgressError, when a retry collides with a run another consumer still holds', async () => {
       const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
-      const updateOne = vi
-        .fn()
-        .mockResolvedValueOnce({ matchedCount: 0 })
-        .mockRejectedValueOnce(duplicate);
+      const updateOne = vi.fn().mockRejectedValue(duplicate);
       const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
 
       await expect(
         tracker.recordStarted(importId, SOURCE, STARTED_AT, 'retry'),
+      ).rejects.toBeInstanceOf(ImportRunInProgressError);
+    });
+
+    it('should throw ImportRunInProgressError, when a redelivery collides with a run already completed', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const updateOne = vi.fn().mockRejectedValue(duplicate);
+      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
+
+      await expect(
+        tracker.recordStarted(importId, SOURCE, STARTED_AT, 'redelivery'),
       ).rejects.toBeInstanceOf(ImportRunInProgressError);
     });
 

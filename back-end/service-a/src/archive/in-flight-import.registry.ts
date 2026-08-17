@@ -50,10 +50,6 @@ export class InFlightImportRegistry {
     return this.operations.size;
   }
 
-  public get isShuttingDown(): boolean {
-    return this.shuttingDown;
-  }
-
   private readonly operations = new Set<Promise<void>>();
 
   private shuttingDown = false;

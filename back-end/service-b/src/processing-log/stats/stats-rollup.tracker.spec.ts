@@ -2,7 +2,7 @@ import { type IProcessingLogDocument } from '../processing-log.types.js';
 
 import { buildAppliedEntryKey } from './applied-entry-key.js';
 import { StatsRollupTracker } from './stats-rollup.tracker.js';
-import { APPLIED_ENTRIES_HISTORY, STATS_ROLLUP_ID } from './stats-rollup.types.js';
+import { STATS_ROLLUP_ID } from './stats-rollup.types.js';
 
 const IMPORT_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
@@ -45,12 +45,7 @@ describe('StatsRollupTracker', () => {
           eventsProcessed: 10,
           successfulEvents: 9,
         },
-        $push: {
-          appliedEntries: {
-            $each: [buildAppliedEntryKey(entry)],
-            $slice: -APPLIED_ENTRIES_HISTORY,
-          },
-        },
+        $push: { appliedEntries: buildAppliedEntryKey(entry) },
       },
     );
   });

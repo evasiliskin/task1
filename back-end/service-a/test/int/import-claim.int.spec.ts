@@ -146,4 +146,21 @@ describe('import claim/start against real MongoDB', () => {
     ).resolves.toBeUndefined();
     await expect(collection.countDocuments({ importId })).resolves.toBe(1);
   });
+
+  it('should throw ImportRunInProgressError instead of resurrecting the run, when the broker redelivers the message of an already-completed import', async () => {
+    const { importId } = await tracker.claim('c56a4180-65aa-42ec-a945-5fd21dec0538');
+    const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
+
+    await tracker.recordStarted(importId, source, new Date());
+    await tracker.recordCompleted(
+      importId,
+      { eventsProcessed: 1, validEvents: 1, invalidEvents: 0, duplicateEvents: 0, errorCount: 0 },
+      new Date(),
+    );
+
+    await expect(
+      tracker.recordStarted(importId, source, new Date(), 'redelivery'),
+    ).rejects.toBeInstanceOf(ImportRunInProgressError);
+    expect(await tracker.findByImportId(importId)).toMatchObject({ status: 'completed' });
+  });
 });
