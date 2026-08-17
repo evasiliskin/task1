@@ -5,9 +5,8 @@ import { RequestContextService } from '@task1/shared/request-context/request-con
 
 import archiveConfig, { type ArchiveConfiguration } from '../config/archive.config.js';
 
+import { computeImportRunStalenessMs } from './import-run-staleness.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
-
-const STALENESS_MULTIPLIER = 3;
 
 const RECONCILED_LOG = 'Failed import runs abandoned in "started" by an interrupted process';
 const RECONCILE_FAILED_LOG = 'Could not reconcile abandoned import runs';
@@ -33,7 +32,7 @@ export class ImportRunReconciliationService implements OnApplicationBootstrap {
   private readonly logger: AppLogger;
 
   private async reconcile(): Promise<void> {
-    const stalenessMs = this.archiveConfiguration.downloadTotalTimeoutMs * STALENESS_MULTIPLIER;
+    const stalenessMs = computeImportRunStalenessMs(this.archiveConfiguration);
     const cutoff = new Date(Date.now() - stalenessMs);
 
     try {

@@ -8,11 +8,14 @@ import {
   type IRmqReturnedMessage,
 } from './rmq-channel.types.js';
 
+const CONFIRM_TIMED_OUT_REASON = 'The broker did not confirm the publish before the deadline';
+
 export interface IConfirmPublishOptions {
   channel: IRmqChannel;
   queue: string;
   content: Buffer;
   headers: Record<string, unknown>;
+  timeoutMs: number;
   expiration?: string;
 }
 
@@ -32,6 +35,7 @@ function buildPublishOptions(
 export async function publishConfirmed(options: IConfirmPublishOptions): Promise<void> {
   const messageId = randomUUID();
   let rejectUnroutable: ((error: Error) => void) | undefined;
+  let deadline: NodeJS.Timeout | undefined;
 
   const onReturn = (returned: IRmqReturnedMessage): void => {
     if (returned.properties.messageId === messageId) {
@@ -44,6 +48,9 @@ export async function publishConfirmed(options: IConfirmPublishOptions): Promise
   try {
     await new Promise<void>((resolve, reject) => {
       rejectUnroutable = reject;
+      deadline = setTimeout(() => {
+        reject(new MessagePublishFailedError(options.queue, new Error(CONFIRM_TIMED_OUT_REASON)));
+      }, options.timeoutMs);
 
       options.channel.sendToQueue(
         options.queue,
@@ -61,6 +68,7 @@ export async function publishConfirmed(options: IConfirmPublishOptions): Promise
       );
     });
   } finally {
+    clearTimeout(deadline);
     options.channel.off('return', onReturn);
   }
 }

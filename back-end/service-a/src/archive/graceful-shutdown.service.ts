@@ -22,25 +22,26 @@ export class GracefulShutdownService implements OnModuleDestroy {
   }
 
   public async onModuleDestroy(): Promise<void> {
+    this.inFlightImports.beginShutdown();
+
     const pending = this.inFlightImports.size;
-
-    if (pending === 0) {
-      return;
-    }
-
     const timeoutMs = this.archiveConfiguration.shutdownDrainTimeoutMs;
 
-    this.logger.info({ pending, timeoutMs }, DRAINING_LOG);
+    if (pending > 0) {
+      this.logger.info({ pending, timeoutMs }, DRAINING_LOG);
+    }
 
     const drained = await this.inFlightImports.drain(timeoutMs);
 
-    if (drained) {
-      this.logger.info({ pending }, DRAINED_LOG);
+    if (!drained) {
+      this.logger.warn({ pending: this.inFlightImports.size, timeoutMs }, DRAIN_TIMED_OUT_LOG);
 
       return;
     }
 
-    this.logger.warn({ pending: this.inFlightImports.size, timeoutMs }, DRAIN_TIMED_OUT_LOG);
+    if (pending > 0) {
+      this.logger.info({ pending }, DRAINED_LOG);
+    }
   }
 
   private readonly logger: AppLogger;

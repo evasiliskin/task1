@@ -11,7 +11,7 @@ function buildRmqContext(ack: ReturnType<typeof vi.fn> = vi.fn(), retryCount?: n
   return {
     getChannelRef: () => ({ ack, nack: vi.fn() }),
     getMessage: () => ({
-      fields: { deliveryTag: 1 },
+      fields: { deliveryTag: 1, redelivered: false },
       properties: { headers: retryCount === undefined ? {} : { 'x-retry-count': retryCount } },
     }),
   } as unknown as RmqContext;
@@ -57,10 +57,14 @@ describe('UploadImportController', () => {
 
     await controller.handleUpload(validPayload, buildRmqContext());
 
-    expect(importUpload).toHaveBeenCalledWith(validPayload.filePath, validPayload.importId, 0);
+    expect(importUpload).toHaveBeenCalledWith(
+      validPayload.filePath,
+      validPayload.importId,
+      'fresh',
+    );
   });
 
-  it('should pass the delivery retry count on, when the message carries x-retry-count', async () => {
+  it('should run the import as a retry, when the message carries x-retry-count', async () => {
     const importUpload = vi.fn().mockResolvedValue({
       eventsProcessed: 1,
       validEvents: 1,
@@ -72,7 +76,11 @@ describe('UploadImportController', () => {
 
     await controller.handleUpload(validPayload, buildRmqContext(vi.fn(), 3));
 
-    expect(importUpload).toHaveBeenCalledWith(validPayload.filePath, validPayload.importId, 3);
+    expect(importUpload).toHaveBeenCalledWith(
+      validPayload.filePath,
+      validPayload.importId,
+      'retry',
+    );
   });
 
   it('should ack and not retry, when another consumer already claimed the import', async () => {

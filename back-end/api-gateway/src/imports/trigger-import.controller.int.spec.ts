@@ -236,5 +236,16 @@ describe('TriggerImportController (HTTP Integration)', () => {
       expect(response.status).toBe(504);
       expect(response.body).toMatchObject({ status: 'FAILED', code: 504 });
     });
+
+    it('should return 504 instead of hanging, when the broker never confirms the publish', async () => {
+      serviceAImportsClient.emit.mockReturnValue(new Observable<never>());
+
+      const response = await request(httpServer)
+        .post('/imports')
+        .send({ dateHour: '2026-08-11-0' });
+
+      expect(response.status).toBe(504);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 504 });
+    });
   });
 });

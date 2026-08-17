@@ -9,6 +9,7 @@ const rabbitmqConfigSchema = z.object({
   maxRetries: z.coerce.number().int().positive().default(5),
   retryDelayMs: z.coerce.number().int().positive().default(5000),
   maxRetryDelayMs: z.coerce.number().int().positive().default(600_000),
+  publishConfirmTimeoutMs: z.coerce.number().int().positive().default(10_000),
 });
 
 export type RabbitmqConfiguration = z.infer<typeof rabbitmqConfigSchema>;
@@ -25,5 +26,6 @@ export default registerAs('rabbitmq', (): RabbitmqConfiguration =>
     maxRetries: process.env.RABBITMQ_MAX_RETRIES,
     retryDelayMs: process.env.RABBITMQ_RETRY_DELAY_MS,
     maxRetryDelayMs: process.env.RABBITMQ_MAX_RETRY_DELAY_MS,
+    publishConfirmTimeoutMs: process.env.RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS,
   }),
 );

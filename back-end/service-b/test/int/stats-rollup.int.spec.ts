@@ -14,6 +14,11 @@ import { STATS_ROLLUP_ID } from '../../src/processing-log/stats/stats-rollup.typ
 
 const RETENTION_MS = 2_592_000_000;
 
+const IMPORT_ONE = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+const IMPORT_TWO = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const IMPORT_THREE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+const IMPORT_FOUR = 'e2d5a7c4-1b83-4f60-9a2e-7c5b4d1f8a03';
+
 function buildEntry(
   importId: string,
   status: IProcessingLogDocument['status'],
@@ -69,9 +74,9 @@ describe('stats rollup against real MongoDB', () => {
   });
 
   it('should produce the same totals as the aggregation, when the same events are applied', async () => {
-    await tracker.upsertLog(buildEntry('i1', 'started'));
+    await tracker.upsertLog(buildEntry(IMPORT_ONE, 'started'));
     await tracker.upsertLog(
-      buildEntry('i1', 'completed', {
+      buildEntry(IMPORT_ONE, 'completed', {
         eventsProcessed: 100,
         validEvents: 90,
         invalidEvents: 7,
@@ -80,7 +85,7 @@ describe('stats rollup against real MongoDB', () => {
       }),
     );
     await tracker.upsertLog(
-      buildEntry('i2', 'completed', {
+      buildEntry(IMPORT_TWO, 'completed', {
         eventsProcessed: 40,
         validEvents: 40,
         invalidEvents: 0,
@@ -88,7 +93,7 @@ describe('stats rollup against real MongoDB', () => {
         errorCount: 0,
       }),
     );
-    await tracker.upsertLog(buildEntry('i3', 'failed'));
+    await tracker.upsertLog(buildEntry(IMPORT_THREE, 'failed'));
 
     const groups = await logs.aggregate<IStatsGroup>(buildStatsPipeline()).toArray();
     const fromAggregation = shapeStats(groups);
@@ -98,7 +103,7 @@ describe('stats rollup against real MongoDB', () => {
   });
 
   it('should not double-count, when an event is redelivered', async () => {
-    const completed = buildEntry('i1', 'completed', {
+    const completed = buildEntry(IMPORT_ONE, 'completed', {
       eventsProcessed: 100,
       validEvents: 100,
       invalidEvents: 0,
@@ -113,13 +118,53 @@ describe('stats rollup against real MongoDB', () => {
     const fromRollup = await new StatsRollupTracker(rollups as never).read();
 
     expect(fromRollup).toMatchObject({ archivesProcessed: 1, eventsProcessed: 100 });
-    await expect(
-      logs.countDocuments({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
-    ).resolves.toBe(1);
+    await expect(logs.countDocuments({ importId: IMPORT_ONE, status: 'completed' })).resolves.toBe(
+      1,
+    );
+  });
+
+  it('should count the entry exactly once, when the process crashed after writing the log but before incrementing', async () => {
+    const completed = buildEntry(IMPORT_FOUR, 'completed', {
+      eventsProcessed: 100,
+      validEvents: 100,
+      invalidEvents: 0,
+      duplicateEvents: 0,
+      errorCount: 0,
+    });
+
+    await logs.insertOne({ ...completed });
+
+    await tracker.upsertLog(completed);
+
+    const fromRollup = await new StatsRollupTracker(rollups as never).read();
+
+    expect(fromRollup).toMatchObject({ archivesProcessed: 1, eventsProcessed: 100 });
+  });
+
+  it('should count the entry exactly once, when the process crashed after incrementing but before stamping rolledUpAt', async () => {
+    const completed = buildEntry(IMPORT_FOUR, 'completed', {
+      eventsProcessed: 100,
+      validEvents: 100,
+      invalidEvents: 0,
+      duplicateEvents: 0,
+      errorCount: 0,
+    });
+
+    await tracker.upsertLog(completed);
+    await logs.updateOne(
+      { importId: IMPORT_FOUR, status: 'completed' },
+      { $unset: { rolledUpAt: '' } },
+    );
+
+    await tracker.upsertLog(completed);
+
+    const fromRollup = await new StatsRollupTracker(rollups as never).read();
+
+    expect(fromRollup).toMatchObject({ archivesProcessed: 1, eventsProcessed: 100 });
   });
 
   it('should stay consistent with the aggregation, when an event has been redelivered', async () => {
-    const entry = buildEntry('i9', 'failed');
+    const entry = buildEntry(IMPORT_THREE, 'failed');
 
     await tracker.upsertLog(entry);
     await tracker.upsertLog(entry);
@@ -130,8 +175,8 @@ describe('stats rollup against real MongoDB', () => {
   });
 
   it('should keep the rollup as a single document, when many events are applied', async () => {
-    await tracker.upsertLog(buildEntry('i1', 'completed', { eventsProcessed: 1 }));
-    await tracker.upsertLog(buildEntry('i2', 'completed', { eventsProcessed: 1 }));
+    await tracker.upsertLog(buildEntry(IMPORT_ONE, 'completed', { eventsProcessed: 1 }));
+    await tracker.upsertLog(buildEntry(IMPORT_TWO, 'completed', { eventsProcessed: 1 }));
 
     await expect(rollups.countDocuments({})).resolves.toBe(1);
     await expect(rollups.countDocuments({ _id: STATS_ROLLUP_ID })).resolves.toBe(1);

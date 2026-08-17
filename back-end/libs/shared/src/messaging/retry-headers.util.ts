@@ -10,6 +10,10 @@ export function getRetryCount(message: IRmqMessage): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+export function isRedelivered(message: IRmqMessage): boolean {
+  return message.fields?.redelivered === true;
+}
+
 export function buildRetryHeaders(
   message: IRmqMessage,
   retryCount: number,

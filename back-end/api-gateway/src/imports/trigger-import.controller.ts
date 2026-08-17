@@ -64,6 +64,7 @@ export class TriggerImportController {
       client: this.serviceAImportsClient,
       pattern: RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD,
       payload: { importId, dateHour: bound.data.dateHour },
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
     });
 
     return { importId };

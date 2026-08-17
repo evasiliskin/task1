@@ -3,6 +3,7 @@ import { type Collection } from 'mongodb';
 
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
+import { buildAppliedEntryKey } from './applied-entry-key.js';
 import { buildRollupDelta } from './rollup-delta.js';
 import { type IMongoStats } from './shape-stats.js';
 import { STATS_ROLLUP_COLLECTION } from './stats-rollup-collection.provider.js';
@@ -22,11 +23,25 @@ export class StatsRollupTracker {
       return;
     }
 
-    await this.collection.updateOne({ _id: STATS_ROLLUP_ID }, { $inc: delta }, { upsert: true });
+    await this.collection.updateOne(
+      { _id: STATS_ROLLUP_ID },
+      { $setOnInsert: { appliedEntries: [] } },
+      { upsert: true },
+    );
+
+    const appliedEntry = buildAppliedEntryKey(entry);
+
+    await this.collection.updateOne(
+      { _id: STATS_ROLLUP_ID, appliedEntries: { $ne: appliedEntry } },
+      { $inc: delta, $push: { appliedEntries: appliedEntry } },
+    );
   }
 
   public async read(): Promise<IMongoStats | undefined> {
-    const document = await this.collection.findOne({ _id: STATS_ROLLUP_ID });
+    const document = await this.collection.findOne(
+      { _id: STATS_ROLLUP_ID },
+      { projection: { appliedEntries: 0 } },
+    );
 
     if (document?.seededAt === undefined) {
       return undefined;

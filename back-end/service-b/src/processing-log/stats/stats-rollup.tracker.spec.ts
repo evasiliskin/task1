@@ -1,15 +1,18 @@
 import { type IProcessingLogDocument } from '../processing-log.types.js';
 
+import { buildAppliedEntryKey } from './applied-entry-key.js';
 import { StatsRollupTracker } from './stats-rollup.tracker.js';
 import { STATS_ROLLUP_ID } from './stats-rollup.types.js';
+
+const IMPORT_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
 function buildEntry(
   status: IProcessingLogDocument['status'],
   metadata: Record<string, number> = {},
 ): IProcessingLogDocument {
   return {
-    importId: '11111111-1111-4111-8111-111111111111',
-    eventType: 'github.import.completed',
+    importId: IMPORT_ID,
+    eventType: `github.import.${status}`,
     service: 'service-a',
     status,
     timestamp: new Date('2026-08-11T00:00:00Z'),
@@ -20,23 +23,43 @@ function buildEntry(
 }
 
 describe('StatsRollupTracker', () => {
-  it('should increment the singleton rollup, when the entry completed', async () => {
+  it('should increment the singleton rollup guarded by the applied-entry key, when the entry completed', async () => {
     const updateOne = vi.fn().mockResolvedValue({});
     const tracker = new StatsRollupTracker({ updateOne } as never);
+    const entry = buildEntry('completed', { eventsProcessed: 10, validEvents: 9 });
 
-    await tracker.applyEntry(buildEntry('completed', { eventsProcessed: 10, validEvents: 9 }));
+    await tracker.applyEntry(entry);
 
-    expect(updateOne).toHaveBeenCalledWith(
+    expect(updateOne).toHaveBeenNthCalledWith(
+      1,
       { _id: STATS_ROLLUP_ID },
+      { $setOnInsert: { appliedEntries: [] } },
+      { upsert: true },
+    );
+    expect(updateOne).toHaveBeenNthCalledWith(
+      2,
+      { _id: STATS_ROLLUP_ID, appliedEntries: { $ne: buildAppliedEntryKey(entry) } },
       {
         $inc: {
           archivesProcessed: 1,
           eventsProcessed: 10,
           successfulEvents: 9,
         },
+        $push: { appliedEntries: buildAppliedEntryKey(entry) },
       },
-      { upsert: true },
     );
+  });
+
+  it('should record the applied-entry key in the same update as the increment, when the entry is applied', async () => {
+    const updateOne = vi.fn().mockResolvedValue({});
+    const tracker = new StatsRollupTracker({ updateOne } as never);
+
+    await tracker.applyEntry(buildEntry('failed'));
+
+    const [, update] = updateOne.mock.calls[1] as [unknown, { $inc?: object; $push?: object }];
+
+    expect(update.$inc).toBeDefined();
+    expect(update.$push).toBeDefined();
   });
 
   it('should not touch the database, when the entry contributes nothing', async () => {
@@ -67,6 +90,10 @@ describe('StatsRollupTracker', () => {
       invalidEvents: 1,
       errors: 1,
     });
+    expect(findOne).toHaveBeenCalledWith(
+      { _id: STATS_ROLLUP_ID },
+      { projection: { appliedEntries: 0 } },
+    );
   });
 
   it('should return undefined, when the rollup has never been written', async () => {

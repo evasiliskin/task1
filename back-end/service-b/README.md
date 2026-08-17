@@ -33,10 +33,11 @@ It **publishes nothing** — service-b is a terminal consumer.
 ## Event handling and idempotency
 
 Each event is Zod-validated; a malformed payload is logged and acked (never retried). A valid event
-is upserted on `(importId, status)`, then the entry is claimed for roll-up by setting `rolledUpAt`
-in a conditional update — only the update that actually modifies the document applies the delta, so
-a redelivered event cannot double-count. If the rollup write fails, the claim is released and the
-error propagates so the retry path can run.
+is upserted on `(importId, status)` and the stored document is read back: if it already carries a
+`rolledUpAt` stamp the delta is skipped, otherwise the delta is applied to `stats-rollups` and only
+then is the entry stamped. A redelivery of an already-rolled-up event is therefore a no-op, and a
+delivery that died between applying and stamping re-applies rather than being lost. If the rollup
+write fails, nothing is stamped and the error propagates so the retry path can run.
 
 A write failure goes to the shared `RetryPublisher` (`service_b_queue.retry` → `.dlq`). When the
 message is finally dead-lettered, the handler makes a last attempt to record the entry with status
@@ -87,6 +88,7 @@ MongoDB · Redis (RedisTimeSeries reads; metrics writes from the shared RMQ inte
 | `RABBITMQ_PREFETCH_COUNT`                                 | `10`                                                           | Concurrency                          |
 | `RABBITMQ_MAX_RETRIES`                                    | `5`                                                            | Retries before dead-lettering        |
 | `RABBITMQ_RETRY_DELAY_MS` / `RABBITMQ_MAX_RETRY_DELAY_MS` | `5000` / `600000`                                              | Backoff base and cap                 |
+| `RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS`                     | `10000`                                                        | Publisher-confirm deadline           |
 | `MONGODB_URI`                                             | `mongodb://localhost:27017/service_b` (required in production) | Database                             |
 | `PROCESSING_LOG_RETENTION_MS`                             | `2592000000` (30 days)                                         | TTL index on `processing-logs`       |
 | `REDIS_URL`                                               | localhost (required in production)                             | Metrics reads                        |

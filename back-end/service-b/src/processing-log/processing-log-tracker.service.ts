@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Inject, Injectable } from '@nestjs/common';
 import { type Collection } from 'mongodb';
 
@@ -16,37 +14,20 @@ export class ProcessingLogTracker {
   ) {}
 
   public async upsertLog(entry: IProcessingLogDocument): Promise<void> {
-    await this.collection.updateOne(
-      { importId: entry.importId, status: entry.status },
+    const key = { importId: entry.importId, status: entry.status };
+
+    const stored = await this.collection.findOneAndUpdate(
+      key,
       { $set: entry },
-      { upsert: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
-    const rollupId = randomUUID();
-
-    const claim = await this.collection.updateOne(
-      { importId: entry.importId, status: entry.status, rollupId: { $exists: false } },
-      { $set: { rollupId } },
-    );
-
-    if (claim.modifiedCount !== 1) {
+    if (stored?.rolledUpAt !== undefined) {
       return;
     }
 
-    try {
-      await this.statsRollup.applyEntry(entry);
-    } catch (error) {
-      await this.collection.updateOne(
-        { importId: entry.importId, status: entry.status, rollupId },
-        { $unset: { rollupId: '' } },
-      );
+    await this.statsRollup.applyEntry(entry);
 
-      throw error;
-    }
-
-    await this.collection.updateOne(
-      { importId: entry.importId, status: entry.status, rollupId },
-      { $set: { rolledUpAt: new Date() } },
-    );
+    await this.collection.updateOne(key, { $set: { rolledUpAt: new Date() } });
   }
 }

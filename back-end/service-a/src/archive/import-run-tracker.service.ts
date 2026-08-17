@@ -4,10 +4,21 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DUPLICATE_KEY_ERROR_CODE } from '@task1/shared/mongo/duplicate-key.const';
 import { type Collection, MongoServerError } from 'mongodb';
 
-import { ImportAlreadyClaimedError } from './import-claim.error.js';
-import { type IImportRunDocument, type ImportSourceRecord } from './import-run.types.js';
+import archiveConfig, { type ArchiveConfiguration } from '../config/archive.config.js';
+
+import { buildRecordStartedFilter } from './build-start-run-filter.js';
+import { type ImportAlreadyClaimedError } from './import-claim.error.js';
+import { type ImportDeliveryKind } from './import-delivery-kind.js';
+import { type ImportRunInProgressError } from './import-run-in-progress.error.js';
+import { computeImportRunStalenessMs } from './import-run-staleness.js';
+import {
+  type IImportRunDocument,
+  type ImportRunStatus,
+  type ImportSourceRecord,
+} from './import-run.types.js';
 import { IMPORTS_COLLECTION } from './imports-collection.provider.js';
 import { type ImportResult } from './processing/process-archive.js';
+import { resolveStartConflictError } from './resolve-start-conflict-error.js';
 
 const ERROR_SAMPLE_MAX_LENGTH = 500;
 const ERROR_SAMPLES_LIMIT = 5;
@@ -16,6 +27,7 @@ const ERROR_SAMPLES_LIMIT = 5;
 export class ImportRunTracker {
   public constructor(
     @Inject(IMPORTS_COLLECTION) private readonly collection: Collection<IImportRunDocument>,
+    @Inject(archiveConfig.KEY) private readonly archiveConfiguration: ArchiveConfiguration,
   ) {}
 
   public async findByImportId(importId: string): Promise<IImportRunDocument | null> {
@@ -49,9 +61,12 @@ export class ImportRunTracker {
     importId: string,
     source: ImportSourceRecord,
     startedAt: Date,
-    isRetry = false,
+    delivery: ImportDeliveryKind = 'fresh',
   ): Promise<void> {
-    const filter = isRetry ? { importId } : { importId, startedAt: { $exists: false } };
+    const staleBefore = new Date(
+      startedAt.getTime() - computeImportRunStalenessMs(this.archiveConfiguration),
+    );
+    const filter = buildRecordStartedFilter(importId, delivery, staleBefore);
 
     try {
       await this.collection.updateOne(
@@ -61,7 +76,7 @@ export class ImportRunTracker {
       );
     } catch (error) {
       if (error instanceof MongoServerError && error.code === DUPLICATE_KEY_ERROR_CODE) {
-        throw new ImportAlreadyClaimedError(importId);
+        throw await this.buildStartConflictError(importId, delivery);
       }
 
       throw error;
@@ -118,6 +133,24 @@ export class ImportRunTracker {
     });
 
     return result.deletedCount;
+  }
+
+  private async buildStartConflictError(
+    importId: string,
+    delivery: ImportDeliveryKind,
+  ): Promise<ImportAlreadyClaimedError | ImportRunInProgressError> {
+    const status = delivery === 'fresh' ? undefined : await this.readRunStatus(importId);
+
+    return resolveStartConflictError(importId, delivery, status);
+  }
+
+  private async readRunStatus(importId: string): Promise<ImportRunStatus | undefined> {
+    const existing = await this.collection.findOne(
+      { importId },
+      { projection: { _id: 0, status: 1 } },
+    );
+
+    return existing?.status;
   }
 
   private async readClaimedImportId(

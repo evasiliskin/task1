@@ -20,27 +20,21 @@ pnpm workspace monorepo. Three runnable services and one shared library.
 ## Architecture
 
 ```text
-                    Client
-                      │ HTTP  /api/v1  (only public surface)
-                      ▼
-                 api-gateway ─────────────────────────────┐
-                      │                                   │
-        RPC  send/@MessagePattern            emit/@EventPattern
-                      │                                   │
-        ┌─────────────┴─────────────┐          service_a_imports_queue
-        ▼                           ▼                     │
-    service-a                   service-b ◀───────────────┘ (import work)
-  service_a_queue             service_b_queue
-        │                           ▲
-        │   emit/@EventPattern      │  github.import.started|completed|failed
-        └───────────────────────────┘
-        │                           │
-        ▼                           ▼
-  MongoDB service_a           MongoDB service_b
-  events, imports             processing-logs, stats-rollups
-
-        Redis (RedisTimeSeries metrics; gateway also uses it for rate-limit storage)
-        Shared volumes: /data/archives (gateway ⇄ service-a), /data/reports (service-b → gateway)
+Client
+  │ HTTP  /api/v1                                    (the only public surface)
+  ▼
+api-gateway ──────────────────────────────────────► Redis   (throttler storage, health ping)
+  │
+  ├─ send → service_a_queue         ─┐
+  ├─ emit → service_a_imports_queue ─┴───────────► service-a ──► MongoDB service_a
+  │                                                    │         data.gharchive.org
+  │                                                    │         Redis (metric writes)
+  │                                                    │
+  │                                emit  github.import.started | completed | failed
+  │                                                    ▼
+  └─ send → service_b_queue ─────────────────────► service-b ──► MongoDB service_b
+                                                               Redis (metric reads)
+                                                               REPORT_DIR (writes PDFs)
 ```
 
 - **api-gateway** is the only process with an HTTP listener. `service-a` and `service-b` are
@@ -56,7 +50,7 @@ pnpm workspace monorepo. Three runnable services and one shared library.
 
 | Package                                                          | Role                                                                                                                                       | Owns                                                                        | Talks to                                                                       |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [`back-end/api-gateway`](back-end/api-gateway)                   | Public REST API (`/api/v1`, Swagger at `/api-docs`) — validation, response enveloping, auth seam, rate limiting, HTTP↔RabbitMQ translation | Nothing persistent                                                          | RabbitMQ (both services), Redis (throttler + health)                           |
+| [`back-end/api-gateway`](back-end/api-gateway)                   | Public REST API (`/api/v1`, Swagger at `/api-docs`) — validation, response enveloping, auth seam, rate limiting, HTTP↔RabbitMQ translation | No database; the upload half of the shared archive directory                | RabbitMQ (both services), Redis (throttler + health)                           |
 | [`back-end/service-a`](back-end/service-a)                       | GH Archive ingestion: download/upload handling, streaming parse, event persistence, import-run tracking, event search                      | Mongo `service_a`: `events`, `imports`; archive files on disk               | MongoDB, Redis (metrics), RabbitMQ (consumes; publishes events to `service-b`) |
 | [`back-end/service-b`](back-end/service-b)                       | Processing log, aggregate statistics, PDF report generation                                                                                | Mongo `service_b`: `processing-logs`, `stats-rollups`; report files on disk | MongoDB, Redis (reads metrics), RabbitMQ (consumes only)                       |
 | [`back-end/libs/shared`](back-end/libs/shared) (`@task1/shared`) | Cross-cutting infrastructure and message contracts                                                                                         | —                                                                           | —                                                                              |
@@ -78,17 +72,19 @@ durable and consumers use manual acknowledgement (`noAck: false`).
 | `service_b_queue`         | service-b | 10       | RPC requests + import lifecycle events |
 
 **Request/response (RPC)** — `ClientProxy.send` → `@MessagePattern`. Every gateway call is wrapped
-in an rxjs `timeout(RABBITMQ_RPC_TIMEOUT_MS)` (default 10s). Patterns:
-`events.search`, `logs.search`, `stats.get`, `reports.pdf.generate`, `imports.status.get`,
-`imports.claim`, `health.check`.
+in an rxjs `timeout(RABBITMQ_RPC_TIMEOUT_MS)` (default 10s). Patterns: `events.search`,
+`logs.search`, `stats.get`, `reports.pdf.generate`, `imports.status.get`, `imports.claim`,
+`health.check`.
 
 **Events (fire-and-forget)** — `ClientProxy.emit` → `@EventPattern`. Nothing waits for a reply.
 
 - gateway → service-a: `archive.import.download`, `archive.process.upload`
 - service-a → service-b: `github.import.started`, `github.import.completed`, `github.import.failed`
 
-Both pattern sets are declared once in `@task1/shared` (`messaging/rpc-patterns.const.ts`,
-`github-archive/events/event-patterns.const.ts`) and imported by producer and consumer alike.
+Pattern strings are declared once in `@task1/shared` and imported by producer and consumer alike.
+Note that the two gateway→service-a event patterns live in `messaging/rpc-patterns.const.ts`
+alongside the RPC ones despite being used with `@EventPattern`; only the `github.import.*` patterns
+live in `github-archive/events/event-patterns.const.ts`.
 
 **Payload contracts.** Producers send plain objects. Every consumer re-validates the payload with a
 Zod schema at the handler boundary; a payload that fails validation is logged and acked (never
@@ -98,10 +94,14 @@ retried, since a retry would fail identically).
 `x-dead-letter-routing-key: <queue>.dlq` on the default exchange. `MessagingModule` additionally
 declares, at bootstrap, a `<queue>.retry` queue that dead-letters back to `<queue>`. When an event
 handler throws, `RetryPublisher` republishes the message to `<queue>.retry` with a per-message TTL
-(exponential backoff with 20% jitter, capped at `RABBITMQ_MAX_RETRY_DELAY_MS`) and an incremented
+(exponential backoff with ±20% jitter, capped at `RABBITMQ_MAX_RETRY_DELAY_MS`) and an incremented
 `x-retry-count` header; once `RABBITMQ_MAX_RETRIES` is exceeded, the message goes to `<queue>.dlq`.
 This retry topology is wired for `service_a_imports_queue` and `service_b_queue` — `service_a_queue`
 (RPC only) has a DLQ but no retry queue, because RPC failures are propagated to the caller instead.
+Every republish is a mandatory, persistent publish awaited under a publisher confirm bounded by
+`RABBITMQ_PUBLISH_CONFIRM_TIMEOUT_MS`; a broker that is reachable but not confirming (a resource
+alarm, for example) makes the republish fail rather than hang, and the original delivery is nacked
+to the dead-letter exchange instead of being left unsettled.
 
 **Error propagation.** A microservice handler's exception is caught by the shared
 `RpcAppExceptionFilter`, which serialises it to `{ statusCode, code, category, message, … }` and
@@ -155,8 +155,10 @@ Consistency between the two databases is eventual, carried by the import lifecyc
   UUID) makes the gateway resolve the id via the `imports.claim` RPC, which upserts on a unique
   partial index — replaying the same key returns the same `importId` and does not start a second
   import.
-- **Single start per import.** `recordStarted` only matches documents without `startedAt`; a
-  duplicate delivery raises `ImportAlreadyClaimedError`, which is acked rather than retried.
+- **Single start per import.** A first (`fresh`) delivery may only start a run that has no
+  `startedAt`; a duplicate raises `ImportAlreadyClaimedError`, which is acked rather than retried. A
+  retried or redelivered message may additionally reopen a run that is not `completed` and is either
+  no longer `started` or has been stuck in `started` past the download-timeout budget.
 - **Upload validation** is by content: multer accepts `*.json.gz` names, then the gateway checks the
   gzip magic bytes and deletes the file if they do not match.
 - **Streaming limits.** Processing is bounded by `ARCHIVE_MAX_DECOMPRESSED_BYTES` and
@@ -169,9 +171,9 @@ Consistency between the two databases is eventual, carried by the import lifecyc
   timeouts and expires never-started claims; it also sweeps abandoned `.download.tmp` files. On
   shutdown it drains in-flight imports for up to `SHUTDOWN_DRAIN_TIMEOUT_MS` before exiting.
 - **Statistics** come from an incrementally-maintained rollup document, seeded once from history on
-  first boot. Roll-up is claimed per log entry with a `rolledUpAt` marker so a redelivered event
-  cannot double-count. If Mongo or Redis is unreachable, stats return `degraded: true` rather than
-  failing.
+  first boot. Each processing-log entry is stamped `rolledUpAt` after its delta has been applied, so
+  a redelivered event that finds the stamp skips the delta. If Mongo or Redis is unreachable, stats
+  return `degraded: true` rather than failing.
 
 ## Technology
 
@@ -200,10 +202,11 @@ Installs dependencies and the Husky hooks (`git push` runs `pnpm check`).
 pnpm docker:up
 ```
 
-Builds and starts RabbitMQ, MongoDB, Redis Stack and all three services. The compose file supplies
-every environment variable, so no `.env` is needed. The API is on <http://localhost:3000/api/v1>,
-Swagger on <http://localhost:3000/api-docs>, the RabbitMQ management UI on <http://localhost:15672>.
-Services wait for the infrastructure health checks before starting. `pnpm docker:down` stops it.
+Builds and starts RabbitMQ, MongoDB, Redis Stack and all three services. The compose file sets every
+variable the stack needs to reach the containers; the rest fall back to their code defaults, so no
+`.env` is required. The API is on <http://localhost:3000/api/v1>, Swagger on
+<http://localhost:3000/api-docs>, the RabbitMQ management UI on <http://localhost:15672>. Services
+wait for the infrastructure health checks before starting. `pnpm docker:down` stops it.
 
 ### Running services from source
 
@@ -233,9 +236,9 @@ dependencies through `/api/v1/health` instead of failing to boot.
 export it into the shell (or use `dotenv-cli`). Each config file is parsed by a Zod schema at
 startup, so an invalid value fails the boot rather than surfacing later.
 
-Values marked `requireInProduction` fall back to a localhost default when `NODE_ENV !== production`
-and throw when it is. The per-service variables are listed in each service README; the ones that
-must agree across services are:
+Values passed through `requireInProduction` fall back to a localhost default when
+`NODE_ENV !== production` and throw when it is. The per-service variables are listed in each service
+README; the ones that must agree across services are:
 
 | Variable                                                      | Must match                     | Because                                               |
 | ------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------- |
@@ -263,8 +266,9 @@ Three tiers, deliberately separated:
 - **Gateway HTTP integration** — `src/**/*.int.spec.ts`, Supertest against a real Nest application
   with the RabbitMQ `ClientProxy` mocked. Runs as part of `pnpm test`.
 - **Service integration** — `back-end/service-{a,b}/test/int/*.int.spec.ts`, run only by
-  `pnpm test:int` with a separate config (serial, long timeouts). These start real RabbitMQ, MongoDB
-  and Redis Stack containers, so **Docker must be running**.
+  `pnpm test:int` with a separate config (serial, long timeouts). These start real containers —
+  MongoDB for both services, plus RabbitMQ and Redis Stack for service-a — so **Docker must be
+  running**.
 
 There is no e2e suite spanning all three services.
 
