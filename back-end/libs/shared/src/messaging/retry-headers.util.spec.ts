@@ -1,4 +1,4 @@
-import { buildRetryHeaders, getRetryCount } from './retry-headers.util.js';
+import { buildRetryHeaders, getRetryCount, isRedelivered } from './retry-headers.util.js';
 import { type IRmqMessage } from './rmq-channel.types.js';
 
 describe('retryHeadersUtil', () => {
@@ -31,6 +31,44 @@ describe('retryHeadersUtil', () => {
       };
 
       expect(getRetryCount(message)).toBe(0);
+    });
+  });
+
+  describe('isRedelivered', () => {
+    it('should return false, when the delivery is fresh and carries no retry header', () => {
+      const message: IRmqMessage = {
+        content: Buffer.from('{}'),
+        properties: { headers: {} },
+        fields: { redelivered: false },
+      };
+
+      expect(isRedelivered(message)).toBe(false);
+    });
+
+    it('should return false, when the message carries a retry header but is a first delivery', () => {
+      const message: IRmqMessage = {
+        content: Buffer.from('{}'),
+        properties: { headers: { 'x-retry-count': 1 } },
+        fields: { redelivered: false },
+      };
+
+      expect(isRedelivered(message)).toBe(false);
+    });
+
+    it('should return true, when the broker redelivered an unacked message without a retry header', () => {
+      const message: IRmqMessage = {
+        content: Buffer.from('{}'),
+        properties: { headers: {} },
+        fields: { redelivered: true },
+      };
+
+      expect(isRedelivered(message)).toBe(true);
+    });
+
+    it('should return false, when the delivery fields are absent', () => {
+      const message: IRmqMessage = { content: Buffer.from('{}'), properties: {} };
+
+      expect(isRedelivered(message)).toBe(false);
     });
   });
 

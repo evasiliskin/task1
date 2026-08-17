@@ -12,6 +12,7 @@ import {
   toStartedEvent,
   type ImportSourceInput,
 } from './import-archive-steps.js';
+import { type ImportDeliveryKind } from './import-delivery-kind.js';
 import { type ImportSourceRecord } from './import-run.types.js';
 import { type ImportResult } from './processing/process-archive.js';
 
@@ -33,7 +34,7 @@ export interface IImportArchiveDependencies {
     importId: string,
     source: ImportSourceRecord,
     startedAt: Date,
-    isRetry: boolean,
+    delivery: ImportDeliveryKind,
   ) => Promise<void>;
   recordImportCompleted: (
     importId: string,
@@ -69,16 +70,16 @@ export async function importArchive(
   source: ImportSourceInput,
   importId: string,
   dependencies: IImportArchiveDependencies,
-  isRetry = false,
+  delivery: ImportDeliveryKind = 'fresh',
 ): Promise<ImportResult> {
   const startedAt = new Date();
   const { archiveLabel, sourceRecord } = buildImportSource(source);
 
   const logger = dependencies.logger.with({ importId, archive: archiveLabel });
 
-  logger.info({ importSource: sourceRecord.type, isRetry }, IMPORT_STARTED_LOG);
+  logger.info({ importSource: sourceRecord.type, delivery }, IMPORT_STARTED_LOG);
 
-  await dependencies.recordImportStarted(importId, sourceRecord, startedAt, isRetry);
+  await dependencies.recordImportStarted(importId, sourceRecord, startedAt, delivery);
   dependencies.emitEvent(
     EVENT_PATTERNS.IMPORT_STARTED,
     toStartedEvent(importId, archiveLabel, startedAt),

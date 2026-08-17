@@ -18,6 +18,7 @@ import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { type Request } from 'express';
 
+import rabbitmqConfig, { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
 import storageConfig, { type StorageConfiguration } from '../config/storage.config.js';
 import throttleConfig from '../config/throttle.config.js';
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
@@ -38,6 +39,7 @@ export class UploadImportController {
   public constructor(
     @Inject(SERVICE_A_IMPORTS_RMQ_CLIENT) private readonly serviceAImportsClient: ClientProxy,
     @Inject(storageConfig.KEY) private readonly storageConfiguration: StorageConfiguration,
+    @Inject(rabbitmqConfig.KEY) private readonly rabbitmqConfiguration: RabbitmqConfiguration,
     private readonly propagatingClient: ContextPropagatingClient,
     loggerService: LoggerService,
   ) {
@@ -84,6 +86,7 @@ export class UploadImportController {
       client: this.serviceAImportsClient,
       pattern: RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD,
       payload: { importId, filePath: finalPath },
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
     });
 
     return { importId };

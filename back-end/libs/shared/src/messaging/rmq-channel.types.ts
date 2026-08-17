@@ -1,6 +1,7 @@
 export interface IRmqMessage {
   content: Buffer;
   properties: { headers?: Record<string, unknown> };
+  fields?: { redelivered?: boolean };
 }
 
 export interface IRmqReturnedMessage {

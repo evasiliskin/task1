@@ -42,8 +42,8 @@ export class DownloadImportController {
     const { importId, dateHour } = parsed.data;
 
     await settleImportResult({
-      run: (retryCount) =>
-        this.importOrchestrationService.importDownload(dateHour, importId, retryCount),
+      run: (delivery) =>
+        this.importOrchestrationService.importDownload(dateHour, importId, delivery),
       channel: context.getChannelRef() as IRmqChannel,
       message: context.getMessage() as IRmqMessage,
       retryPublisher: this.retryPublisher,

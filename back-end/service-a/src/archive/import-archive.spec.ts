@@ -98,7 +98,7 @@ describe('importArchive', () => {
         importId,
         { type: 'download', archive: '2026-08-11-0.json.gz' },
         expect.any(Date),
-        false,
+        'fresh',
       );
       expect(dependencies.recordImportCompleted).toHaveBeenCalledWith(
         importId,
@@ -171,7 +171,7 @@ describe('importArchive', () => {
         importId,
         { type: 'upload', filename: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.json.gz' },
         expect.any(Date),
-        false,
+        'fresh',
       );
     });
   });

@@ -10,6 +10,7 @@ import { RequestContextService } from '@task1/shared/request-context/request-con
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { of } from 'rxjs';
 
+import { type RabbitmqConfiguration } from '../config/rabbitmq.config.js';
 import { type StorageConfiguration } from '../config/storage.config.js';
 
 import { ArchiveUploadError, UnsupportedArchiveFormatError } from './errors.js';
@@ -53,6 +54,7 @@ function buildController(
   const controller = new UploadImportController(
     serviceAClient,
     storageConfiguration,
+    { rpcTimeoutMs: 10_000 } as RabbitmqConfiguration,
     new ContextPropagatingClient(requestContextService),
     loggerService,
   );

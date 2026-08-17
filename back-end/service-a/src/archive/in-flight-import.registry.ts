@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 
+import { ImportShuttingDownError } from './import-shutdown.error.js';
+
 @Injectable()
 export class InFlightImportRegistry {
   public async track<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.shuttingDown) {
+      throw new ImportShuttingDownError();
+    }
+
     const running = operation();
     const settled = running.then(
       () => undefined,
@@ -16,6 +22,10 @@ export class InFlightImportRegistry {
     } finally {
       this.operations.delete(settled);
     }
+  }
+
+  public beginShutdown(): void {
+    this.shuttingDown = true;
   }
 
   public async drain(timeoutMs: number): Promise<boolean> {
@@ -40,7 +50,13 @@ export class InFlightImportRegistry {
     return this.operations.size;
   }
 
+  public get isShuttingDown(): boolean {
+    return this.shuttingDown;
+  }
+
   private readonly operations = new Set<Promise<void>>();
+
+  private shuttingDown = false;
 
   private async awaitCurrentOperations(timeoutMs: number): Promise<boolean> {
     let timer: NodeJS.Timeout | undefined;

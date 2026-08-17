@@ -41,8 +41,7 @@ export class UploadImportController {
     const { importId, filePath } = parsed.data;
 
     await settleImportResult({
-      run: (retryCount) =>
-        this.importOrchestrationService.importUpload(filePath, importId, retryCount),
+      run: (delivery) => this.importOrchestrationService.importUpload(filePath, importId, delivery),
       channel: context.getChannelRef() as IRmqChannel,
       message: context.getMessage() as IRmqMessage,
       retryPublisher: this.retryPublisher,

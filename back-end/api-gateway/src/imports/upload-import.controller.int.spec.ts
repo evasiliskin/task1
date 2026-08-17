@@ -17,7 +17,7 @@ import { ExceptionHandlingModule } from '@task1/shared/exception-handling/http/e
 import { LoggerService } from '@task1/shared/logger/logger.service';
 import { RequestContextModule } from '@task1/shared/request-context/http/request-context.module';
 import { Redis } from 'ioredis';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import request from 'supertest';
 
 import { AuthGuard } from '../auth/auth.guard.js';
@@ -69,6 +69,7 @@ describe('UploadImportController (HTTP Integration)', () => {
   beforeAll(async () => {
     storageDirectory = mkdtempSync(join(tmpdir(), 'upload-import-spec-'));
     process.env.STORAGE_DIR = storageDirectory;
+    process.env.RABBITMQ_RPC_TIMEOUT_MS = '50';
 
     serviceAClient = { emit: vi.fn(() => of(undefined)) };
     loggerSpy = {
@@ -112,6 +113,7 @@ describe('UploadImportController (HTTP Integration)', () => {
     await app.close();
     rmSync(storageDirectory, { recursive: true, force: true });
     delete process.env.STORAGE_DIR;
+    delete process.env.RABBITMQ_RPC_TIMEOUT_MS;
   });
 
   beforeEach(() => {
@@ -208,6 +210,17 @@ describe('UploadImportController (HTTP Integration)', () => {
       expect(response.status).toBe(503);
       expect((response.body as { status: string; code: number }).status).toBe('FAILED');
       expect((response.body as { status: string; code: number }).code).toBe(503);
+    });
+
+    it('should return 504 instead of hanging, when the broker never confirms the publish', async () => {
+      serviceAClient.emit.mockReturnValue(new Observable<never>());
+
+      const response = await request(httpServer)
+        .post('/imports/upload')
+        .attach('file', gzipSync(Buffer.from('gz-bytes')), 'archive.json.gz');
+
+      expect(response.status).toBe(504);
+      expect(response.body).toMatchObject({ status: 'FAILED', code: 504 });
     });
 
     it('should rename the upload into the configured storage directory, when the upload succeeds', async () => {

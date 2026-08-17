@@ -3,8 +3,12 @@ import { MongoClient, type Collection } from 'mongodb';
 
 import { ensureImportIndexes } from '../../src/archive/ensure-import-indexes.js';
 import { ImportAlreadyClaimedError } from '../../src/archive/import-claim.error.js';
+import { ImportRunInProgressError } from '../../src/archive/import-run-in-progress.error.js';
 import { ImportRunTracker } from '../../src/archive/import-run-tracker.service.js';
 import { type IImportRunDocument } from '../../src/archive/import-run.types.js';
+import { type ArchiveConfiguration } from '../../src/config/archive.config.js';
+
+const ARCHIVE_CONFIGURATION = { downloadTotalTimeoutMs: 600_000 } as ArchiveConfiguration;
 
 describe('import claim/start against real MongoDB', () => {
   let container: StartedMongoDBContainer;
@@ -18,7 +22,7 @@ describe('import claim/start against real MongoDB', () => {
     await client.connect();
     collection = client.db('service_a_int').collection<IImportRunDocument>('imports');
     await ensureImportIndexes(collection);
-    tracker = new ImportRunTracker(collection);
+    tracker = new ImportRunTracker(collection, ARCHIVE_CONFIGURATION);
   });
 
   afterAll(async () => {
@@ -104,5 +108,42 @@ describe('import claim/start against real MongoDB', () => {
     await expect(tracker.recordStarted(importId, source, new Date())).rejects.toBeInstanceOf(
       ImportAlreadyClaimedError,
     );
+  });
+
+  it('should throw ImportRunInProgressError, when a retry arrives while the run is still held', async () => {
+    const { importId } = await tracker.claim('9b2b4d1e-6f3a-4c8e-9d2a-8f1e5c7a3b04');
+    const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
+
+    await tracker.recordStarted(importId, source, new Date());
+
+    await expect(
+      tracker.recordStarted(importId, source, new Date(), 'retry'),
+    ).rejects.toBeInstanceOf(ImportRunInProgressError);
+  });
+
+  it('should reopen the run, when a retry arrives after the previous attempt failed', async () => {
+    const { importId } = await tracker.claim('7c9e6679-7425-40de-944b-e07fc1f90ae7');
+    const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
+
+    await tracker.recordStarted(importId, source, new Date());
+    await tracker.recordFailed(importId, 'download failed', new Date());
+
+    await expect(
+      tracker.recordStarted(importId, source, new Date(), 'retry'),
+    ).resolves.toBeUndefined();
+    await expect(collection.countDocuments({ importId })).resolves.toBe(1);
+    expect(await tracker.findByImportId(importId)).toMatchObject({ status: 'started' });
+  });
+
+  it('should reopen the run, when the broker redelivers the message of a crash-interrupted run', async () => {
+    const { importId } = await tracker.claim('3f8a1c72-5d94-4b1e-a0f6-2c7d9e4b8a52');
+    const source = { type: 'download' as const, archive: '2026-08-11-0.json.gz' };
+
+    await tracker.recordStarted(importId, source, new Date());
+
+    await expect(
+      tracker.recordStarted(importId, source, new Date(), 'redelivery'),
+    ).resolves.toBeUndefined();
+    await expect(collection.countDocuments({ importId })).resolves.toBe(1);
   });
 });

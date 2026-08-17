@@ -9,6 +9,7 @@ import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/cont
 
 import { ArchiveDownloadService } from './download/archive-download.service.js';
 import { importArchive, type IImportArchiveDependencies } from './import-archive.js';
+import { type ImportDeliveryKind } from './import-delivery-kind.js';
 import { ImportRunTracker } from './import-run-tracker.service.js';
 import { InFlightImportRegistry } from './in-flight-import.registry.js';
 import { type ImportResult } from './processing/process-archive.js';
@@ -34,15 +35,23 @@ export class ImportOrchestrationService {
     this.dependencies = this.buildDependencies();
   }
 
-  public importDownload(dateHour: string, importId: string, retryCount = 0): Promise<ImportResult> {
+  public importDownload(
+    dateHour: string,
+    importId: string,
+    delivery: ImportDeliveryKind = 'fresh',
+  ): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'download', dateHour }, importId, this.dependencies, retryCount > 0),
+      importArchive({ type: 'download', dateHour }, importId, this.dependencies, delivery),
     );
   }
 
-  public importUpload(filePath: string, importId: string, retryCount = 0): Promise<ImportResult> {
+  public importUpload(
+    filePath: string,
+    importId: string,
+    delivery: ImportDeliveryKind = 'fresh',
+  ): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'upload', filePath }, importId, this.dependencies, retryCount > 0),
+      importArchive({ type: 'upload', filePath }, importId, this.dependencies, delivery),
     );
   }
 
@@ -65,8 +74,8 @@ export class ImportOrchestrationService {
       },
       recordMetric: (key, value) => this.metricsService.recordMetric(key, value),
       recordMetrics: (entries) => this.metricsService.recordMetrics(entries),
-      recordImportStarted: (importId, source, startedAt, isRetry) =>
-        this.importRunTracker.recordStarted(importId, source, startedAt, isRetry),
+      recordImportStarted: (importId, source, startedAt, delivery) =>
+        this.importRunTracker.recordStarted(importId, source, startedAt, delivery),
       recordImportCompleted: (importId, result, completedAt) =>
         this.importRunTracker.recordCompleted(importId, result, completedAt),
       recordImportFailed: (importId, reason, failedAt) =>
