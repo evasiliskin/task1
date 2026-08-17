@@ -1,4 +1,5 @@
 import { type AppLogger } from '@task1/shared/logger/app-logger';
+import { getRetryCount } from '@task1/shared/messaging/retry-headers.util';
 import { type RetryPublisher } from '@task1/shared/messaging/retry-publisher';
 import { type IRmqChannel, type IRmqMessage } from '@task1/shared/messaging/rmq-channel.types';
 
@@ -7,7 +8,7 @@ import { ImportAlreadyClaimedError } from './import-claim.error.js';
 const ALREADY_CLAIMED_LOG = 'Import already claimed by another consumer, skipping duplicate';
 
 export interface ISettleImportOptions {
-  run: () => Promise<unknown>;
+  run: (retryCount: number) => Promise<unknown>;
   channel: IRmqChannel;
   message: IRmqMessage;
   retryPublisher: RetryPublisher;
@@ -16,11 +17,13 @@ export interface ISettleImportOptions {
 }
 
 export async function settleImportResult(options: ISettleImportOptions): Promise<void> {
+  const retryCount = getRetryCount(options.message);
+
   try {
-    await options.run();
+    await options.run(retryCount);
   } catch (error) {
     if (error instanceof ImportAlreadyClaimedError) {
-      options.logger.info({ importId: options.importId }, ALREADY_CLAIMED_LOG);
+      options.logger.info({ importId: options.importId, retryCount }, ALREADY_CLAIMED_LOG);
       options.channel.ack(options.message);
 
       return;

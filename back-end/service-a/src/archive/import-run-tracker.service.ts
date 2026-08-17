@@ -28,23 +28,34 @@ export class ImportRunTracker {
   public async claim(idempotencyKey: string): Promise<{ importId: string }> {
     const candidateImportId = randomUUID();
 
-    const document = await this.collection.findOneAndUpdate(
-      { idempotencyKey },
-      { $setOnInsert: { importId: candidateImportId, idempotencyKey, claimedAt: new Date() } },
-      { upsert: true, returnDocument: 'after' },
-    );
+    try {
+      const document = await this.collection.findOneAndUpdate(
+        { idempotencyKey },
+        { $setOnInsert: { importId: candidateImportId, idempotencyKey, claimedAt: new Date() } },
+        { upsert: true, returnDocument: 'after' },
+      );
 
-    return { importId: document?.importId ?? candidateImportId };
+      return { importId: document?.importId ?? candidateImportId };
+    } catch (error) {
+      if (!(error instanceof MongoServerError) || error.code !== DUPLICATE_KEY_ERROR_CODE) {
+        throw error;
+      }
+
+      return await this.readClaimedImportId(idempotencyKey, error);
+    }
   }
 
   public async recordStarted(
     importId: string,
     source: ImportSourceRecord,
     startedAt: Date,
+    isRetry = false,
   ): Promise<void> {
+    const filter = isRetry ? { importId } : { importId, startedAt: { $exists: false } };
+
     try {
       await this.collection.updateOne(
-        { importId, startedAt: { $exists: false } },
+        filter,
         { $set: { importId, source, status: 'started', startedAt } },
         { upsert: true },
       );
@@ -107,5 +118,21 @@ export class ImportRunTracker {
     });
 
     return result.deletedCount;
+  }
+
+  private async readClaimedImportId(
+    idempotencyKey: string,
+    duplicateKeyError: MongoServerError,
+  ): Promise<{ importId: string }> {
+    const existing = await this.collection.findOne(
+      { idempotencyKey },
+      { projection: { _id: 0, importId: 1 } },
+    );
+
+    if (existing === null) {
+      throw duplicateKeyError;
+    }
+
+    return { importId: existing.importId };
   }
 }

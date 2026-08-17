@@ -6,6 +6,7 @@ import { LoggerModule } from '@task1/shared/logger/http/logger.module';
 import { type ILoggerFactory } from '@task1/shared/logger/logger-factory.interface';
 import { LOGGER_FACTORY } from '@task1/shared/logger/logger.tokens';
 import { createRedisClient } from '@task1/shared/redis/create-redis-client';
+import { RedisConnectionService } from '@task1/shared/redis/redis-connection.service';
 
 import redisConfig from '../config/redis.config.js';
 
@@ -19,6 +20,7 @@ import { RabbitMqPingHealthIndicator } from './rabbitmq-ping.health-indicator.js
   imports: [TerminusModule, LoggerModule],
   controllers: [HealthController],
   providers: [
+    RedisConnectionService,
     HealthCheckService,
     RabbitMqPingHealthIndicator,
     GatewayHealthIndicator,

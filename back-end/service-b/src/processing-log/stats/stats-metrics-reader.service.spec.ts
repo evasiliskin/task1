@@ -46,7 +46,7 @@ describe('StatsMetricsReader', () => {
       });
     });
 
-    it('should call TS.RANGE with AGGREGATION avg bucketed by the configured retention, when called', async () => {
+    it('should average one bucket aligned to the start of the retention window, when called', async () => {
       const call = vi.fn().mockResolvedValue([]);
       const reader = buildReader(call);
 
@@ -55,12 +55,27 @@ describe('StatsMetricsReader', () => {
       expect(call).toHaveBeenCalledWith(
         'TS.RANGE',
         'service_a.archive.processing.duration',
-        '-',
+        expect.any(Number),
         '+',
+        'ALIGN',
+        'start',
         'AGGREGATION',
         'avg',
         604_800_000,
       );
+    });
+
+    it('should start the window one retention period ago, when called', async () => {
+      const call = vi.fn().mockResolvedValue([]);
+      const reader = buildReader(call);
+      const before = Date.now();
+
+      await reader.readAverageProcessingDuration();
+
+      const fromTimestamp = call.mock.calls[0][2] as number;
+
+      expect(fromTimestamp).toBeGreaterThanOrEqual(before - 604_800_000);
+      expect(fromTimestamp).toBeLessThanOrEqual(Date.now() - 604_800_000);
     });
 
     it('should return undefined and degraded true, and log a warning, when Redis rejects', async () => {
@@ -97,7 +112,7 @@ describe('StatsMetricsReader', () => {
       });
     });
 
-    it('should call TS.RANGE with a bucket size capping the series at 50 points, when called', async () => {
+    it('should sum each bucket over a series capped at 50 points, when called', async () => {
       const call = vi.fn().mockResolvedValue([]);
       const reader = buildReader(call);
 
@@ -106,10 +121,12 @@ describe('StatsMetricsReader', () => {
       expect(call).toHaveBeenCalledWith(
         'TS.RANGE',
         'service_a.archive.events.processed',
-        '-',
+        expect.any(Number),
         '+',
+        'ALIGN',
+        'start',
         'AGGREGATION',
-        'avg',
+        'sum',
         Math.ceil(604_800_000 / 50),
       );
     });

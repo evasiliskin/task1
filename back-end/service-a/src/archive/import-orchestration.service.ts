@@ -34,15 +34,15 @@ export class ImportOrchestrationService {
     this.dependencies = this.buildDependencies();
   }
 
-  public importDownload(dateHour: string, importId: string): Promise<ImportResult> {
+  public importDownload(dateHour: string, importId: string, retryCount = 0): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'download', dateHour }, importId, this.dependencies),
+      importArchive({ type: 'download', dateHour }, importId, this.dependencies, retryCount > 0),
     );
   }
 
-  public importUpload(filePath: string, importId: string): Promise<ImportResult> {
+  public importUpload(filePath: string, importId: string, retryCount = 0): Promise<ImportResult> {
     return this.inFlightImports.track(() =>
-      importArchive({ type: 'upload', filePath }, importId, this.dependencies),
+      importArchive({ type: 'upload', filePath }, importId, this.dependencies, retryCount > 0),
     );
   }
 
@@ -65,8 +65,8 @@ export class ImportOrchestrationService {
       },
       recordMetric: (key, value) => this.metricsService.recordMetric(key, value),
       recordMetrics: (entries) => this.metricsService.recordMetrics(entries),
-      recordImportStarted: (importId, source, startedAt) =>
-        this.importRunTracker.recordStarted(importId, source, startedAt),
+      recordImportStarted: (importId, source, startedAt, isRetry) =>
+        this.importRunTracker.recordStarted(importId, source, startedAt, isRetry),
       recordImportCompleted: (importId, result, completedAt) =>
         this.importRunTracker.recordCompleted(importId, result, completedAt),
       recordImportFailed: (importId, reason, failedAt) =>

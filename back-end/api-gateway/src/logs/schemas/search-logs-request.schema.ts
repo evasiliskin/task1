@@ -10,7 +10,7 @@ export const SearchLogsRequestSchema = z.object({
       status: z.enum(LOG_STATUSES).optional(),
       from: z.iso.datetime().optional(),
       to: z.iso.datetime().optional(),
-      cursor: z.string().optional(),
+      cursor: z.string().min(1).optional(),
       limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
     })
     .strict()

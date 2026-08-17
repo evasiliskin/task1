@@ -120,6 +120,19 @@ describe('ImportRunTracker', () => {
       );
     });
 
+    it('should restart the run without the startedAt guard, when the delivery is a retry', async () => {
+      const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+      const tracker = buildTracker(vi.fn(), vi.fn(), updateOne);
+
+      await tracker.recordStarted(importId, SOURCE, STARTED_AT, true);
+
+      expect(updateOne).toHaveBeenCalledWith(
+        { importId },
+        { $set: { importId, source: SOURCE, status: 'started', startedAt: STARTED_AT } },
+        { upsert: true },
+      );
+    });
+
     it('should throw ImportAlreadyClaimedError, when the run has already started', async () => {
       const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
       const tracker = new ImportRunTracker({
@@ -160,6 +173,44 @@ describe('ImportRunTracker', () => {
       const second = await tracker.claim('k');
 
       expect(second).toEqual(first);
+    });
+
+    it('should resolve to the winning importId, when a concurrent claim raises a duplicate key error', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const findOne = vi
+        .fn()
+        .mockResolvedValue({ importId: 'e2d5a7c4-1b83-4f60-9a2e-7c5b4d1f8a03' });
+      const tracker = new ImportRunTracker({
+        findOneAndUpdate: vi.fn().mockRejectedValue(duplicate),
+        findOne,
+      } as never);
+
+      await expect(tracker.claim('k')).resolves.toEqual({
+        importId: 'e2d5a7c4-1b83-4f60-9a2e-7c5b4d1f8a03',
+      });
+      expect(findOne).toHaveBeenCalledWith(
+        { idempotencyKey: 'k' },
+        { projection: { _id: 0, importId: 1 } },
+      );
+    });
+
+    it('should rethrow the duplicate key error, when the conflicting claim cannot be read back', async () => {
+      const duplicate = Object.assign(new MongoServerError({ message: 'dup' }), { code: 11_000 });
+      const tracker = new ImportRunTracker({
+        findOneAndUpdate: vi.fn().mockRejectedValue(duplicate),
+        findOne: vi.fn().mockResolvedValue(null),
+      } as never);
+
+      await expect(tracker.claim('k')).rejects.toBe(duplicate);
+    });
+
+    it('should rethrow, when findOneAndUpdate fails for an unrelated reason', async () => {
+      const failure = new Error('connection reset');
+      const tracker = new ImportRunTracker({
+        findOneAndUpdate: vi.fn().mockRejectedValue(failure),
+      } as never);
+
+      await expect(tracker.claim('k')).rejects.toBe(failure);
     });
 
     it('should return an importId distinct from the key, when a run is reserved', async () => {

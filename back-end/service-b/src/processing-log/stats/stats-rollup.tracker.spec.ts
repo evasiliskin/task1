@@ -33,8 +33,6 @@ describe('StatsRollupTracker', () => {
           archivesProcessed: 1,
           eventsProcessed: 10,
           successfulEvents: 9,
-          invalidEvents: 0,
-          errors: 0,
         },
       },
       { upsert: true },

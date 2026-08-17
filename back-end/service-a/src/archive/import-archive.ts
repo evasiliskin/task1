@@ -33,6 +33,7 @@ export interface IImportArchiveDependencies {
     importId: string,
     source: ImportSourceRecord,
     startedAt: Date,
+    isRetry: boolean,
   ) => Promise<void>;
   recordImportCompleted: (
     importId: string,
@@ -68,15 +69,16 @@ export async function importArchive(
   source: ImportSourceInput,
   importId: string,
   dependencies: IImportArchiveDependencies,
+  isRetry = false,
 ): Promise<ImportResult> {
   const startedAt = new Date();
   const { archiveLabel, sourceRecord } = buildImportSource(source);
 
   const logger = dependencies.logger.with({ importId, archive: archiveLabel });
 
-  logger.info({ importSource: sourceRecord.type }, IMPORT_STARTED_LOG);
+  logger.info({ importSource: sourceRecord.type, isRetry }, IMPORT_STARTED_LOG);
 
-  await dependencies.recordImportStarted(importId, sourceRecord, startedAt);
+  await dependencies.recordImportStarted(importId, sourceRecord, startedAt, isRetry);
   dependencies.emitEvent(
     EVENT_PATTERNS.IMPORT_STARTED,
     toStartedEvent(importId, archiveLabel, startedAt),
@@ -110,11 +112,11 @@ export async function importArchive(
 
     const completedAt = new Date();
 
+    await dependencies.recordImportCompleted(importId, result, completedAt);
     dependencies.emitEvent(
       EVENT_PATTERNS.IMPORT_COMPLETED,
       toCompletedEvent(importId, archiveLabel, startedAt, completedAt, result),
     );
-    await dependencies.recordImportCompleted(importId, result, completedAt);
 
     logger.info(
       {
@@ -133,11 +135,11 @@ export async function importArchive(
 
     await dependencies.recordMetrics(buildFailureMetrics(failedAt.getTime() - startedAt.getTime()));
 
+    await dependencies.recordImportFailed(importId, reason, failedAt);
     dependencies.emitEvent(
       EVENT_PATTERNS.IMPORT_FAILED,
       toFailedEvent(importId, archiveLabel, startedAt, failedAt, reason),
     );
-    await dependencies.recordImportFailed(importId, reason, failedAt);
 
     logger.error(
       { durationMs: failedAt.getTime() - startedAt.getTime() },

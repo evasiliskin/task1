@@ -8,29 +8,24 @@ function buildService(options: {
   aggregate?: ReturnType<typeof vi.fn>;
   info?: ReturnType<typeof vi.fn>;
   warn?: ReturnType<typeof vi.fn>;
-  createIndex?: ReturnType<typeof vi.fn>;
-  processingLogRetentionMs?: number;
 }) {
   const updateOne = options.updateOne ?? vi.fn().mockResolvedValue({});
   const aggregate =
     options.aggregate ??
     vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(options.groups ?? []) });
   const findOne = vi.fn().mockResolvedValue(options.existing ?? null);
-  const createIndex = options.createIndex ?? vi.fn().mockResolvedValue('timestamp_1');
 
   return {
     service: new StatsRollupSeedService(
-      { aggregate, createIndex } as never,
+      { aggregate } as never,
       { findOne, updateOne } as never,
       { runAsRoot: (_operation: string, callback: () => unknown) => callback() } as never,
       {
         getLogger: () => ({ info: options.info ?? vi.fn(), warn: options.warn ?? vi.fn() }),
       } as never,
-      { processingLogRetentionMs: options.processingLogRetentionMs ?? 2_592_000_000 } as never,
     ),
     updateOne,
     aggregate,
-    createIndex,
   };
 }
 
@@ -110,37 +105,5 @@ describe('StatsRollupSeedService', () => {
 
     await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
-  });
-
-  it('should create the TTL retention index, when the seed attempt succeeds', async () => {
-    const { service, createIndex } = buildService({
-      groups: [],
-      processingLogRetentionMs: 86_400_000,
-    });
-
-    await service.onApplicationBootstrap();
-
-    expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
-  });
-
-  it('should create the TTL retention index, even when the seed aggregation fails', async () => {
-    const { service, createIndex } = buildService({
-      aggregate: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockRejectedValue(new Error('mongo down')),
-      }),
-      warn: vi.fn(),
-      processingLogRetentionMs: 86_400_000,
-    });
-
-    await service.onApplicationBootstrap();
-
-    expect(createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 86_400 });
-  });
-
-  it('should propagate the failure, when creating the retention index fails', async () => {
-    const createIndex = vi.fn().mockRejectedValue(new Error('index creation failed'));
-    const { service } = buildService({ groups: [], createIndex });
-
-    await expect(service.onApplicationBootstrap()).rejects.toThrow('index creation failed');
   });
 });

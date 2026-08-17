@@ -33,15 +33,31 @@ export function shapeStats(groups: IStatsGroup[]): IMongoStats {
   };
 }
 
-export function shapeStatsFromDocuments(documents: IProcessingLogDocument[]): IMongoStats {
-  const completed = documents.find((document) => document.status === COMPLETED_STATUS);
-  const failedCount = documents.filter((document) => document.status === FAILED_STATUS).length;
+export function toStatsGroups(documents: IProcessingLogDocument[]): IStatsGroup[] {
+  const groupsByStatus = new Map<string, IStatsGroup>();
 
-  return {
-    archivesProcessed: completed === undefined ? 0 : 1,
-    eventsProcessed: completed?.metadata.eventsProcessed ?? 0,
-    successfulEvents: completed?.metadata.validEvents ?? 0,
-    invalidEvents: completed?.metadata.invalidEvents ?? 0,
-    errors: failedCount + (completed?.metadata.errorCount ?? 0),
-  };
+  for (const document of documents) {
+    const group = groupsByStatus.get(document.status) ?? {
+      _id: document.status,
+      count: 0,
+      eventsProcessed: 0,
+      validEvents: 0,
+      invalidEvents: 0,
+      errorCount: 0,
+    };
+
+    group.count += 1;
+    group.eventsProcessed += document.metadata.eventsProcessed ?? 0;
+    group.validEvents += document.metadata.validEvents ?? 0;
+    group.invalidEvents += document.metadata.invalidEvents ?? 0;
+    group.errorCount += document.metadata.errorCount ?? 0;
+
+    groupsByStatus.set(document.status, group);
+  }
+
+  return [...groupsByStatus.values()];
+}
+
+export function shapeStatsFromDocuments(documents: IProcessingLogDocument[]): IMongoStats {
+  return shapeStats(toStatsGroups(documents));
 }

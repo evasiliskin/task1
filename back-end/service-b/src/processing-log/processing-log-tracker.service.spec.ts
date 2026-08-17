@@ -79,10 +79,11 @@ describe('ProcessingLogTracker', () => {
       expect(upsertCalls[0]).toEqual(upsertCalls[1]);
     });
 
-    it('should apply the rollup delta, when the claim on rolledUpAt succeeds', async () => {
+    it('should claim, apply the rollup delta and only then commit rolledUpAt, when the claim succeeds', async () => {
       const updateOne = vi
         .fn()
         .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 })
         .mockResolvedValueOnce({ modifiedCount: 1 });
       const applyEntry = vi.fn().mockResolvedValue(undefined);
       const { tracker } = buildTracker({ updateOne, applyEntry });
@@ -92,11 +93,40 @@ describe('ProcessingLogTracker', () => {
 
       expect(updateOne).toHaveBeenNthCalledWith(
         2,
-        { importId: testEntry.importId, status: testEntry.status, rolledUpAt: { $exists: false } },
-        { $set: { rolledUpAt: expect.any(Date) as Date } },
+        { importId: testEntry.importId, status: testEntry.status, rollupId: { $exists: false } },
+        { $set: { rollupId: expect.any(String) as string } },
       );
       expect(applyEntry).toHaveBeenCalledWith(testEntry);
-      expect(updateOne).toHaveBeenCalledTimes(2);
+      expect(updateOne).toHaveBeenNthCalledWith(
+        3,
+        {
+          importId: testEntry.importId,
+          status: testEntry.status,
+          rollupId: expect.any(String) as string,
+        },
+        { $set: { rolledUpAt: expect.any(Date) as Date } },
+      );
+      expect(updateOne).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not mark the entry as rolled up, when the increment fails', async () => {
+      const updateOne = vi
+        .fn()
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 })
+        .mockResolvedValueOnce({ modifiedCount: 1 });
+      const applyEntry = vi.fn().mockRejectedValue(new Error('transient mongo error'));
+      const { tracker } = buildTracker({ updateOne, applyEntry });
+
+      await expect(tracker.upsertLog(buildEntry('completed'))).rejects.toThrow(
+        'transient mongo error',
+      );
+
+      const rolledUpCalls = updateOne.mock.calls.filter((call) =>
+        Object.hasOwn((call[1] as { $set?: object }).$set ?? {}, 'rolledUpAt'),
+      );
+
+      expect(rolledUpCalls).toHaveLength(0);
     });
 
     it('should not apply the rollup delta, when the claim on rolledUpAt fails', async () => {
@@ -128,8 +158,12 @@ describe('ProcessingLogTracker', () => {
 
       expect(updateOne).toHaveBeenNthCalledWith(
         3,
-        { importId: testEntry.importId, status: testEntry.status },
-        { $unset: { rolledUpAt: '' } },
+        {
+          importId: testEntry.importId,
+          status: testEntry.status,
+          rollupId: expect.any(String) as string,
+        },
+        { $unset: { rollupId: '' } },
       );
       expect(updateOne).toHaveBeenCalledTimes(3);
     });

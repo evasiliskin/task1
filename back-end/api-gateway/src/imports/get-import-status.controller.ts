@@ -5,13 +5,13 @@ import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { type IImportStatusView } from '@task1/shared/github-archive/index';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ApiSingleResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { sendRpcMessage } from '../rmq/send-rpc-message.js';
 
 import { ImportNotFoundError } from './errors.js';
 import { GetImportStatusRequestSchema } from './schemas/get-import-status-request.schema.js';
@@ -39,13 +39,13 @@ export class GetImportStatusController {
     @ModelBinder(GetImportStatusRequestSchema)
     bound: BoundRequest<typeof GetImportStatusRequestSchema>,
   ): Promise<ImportStatusResponse> {
-    const result = await firstValueFrom(
-      this.propagatingClient
-        .send<IImportStatusView | null>(this.serviceAClient, RPC_PATTERNS.IMPORTS_STATUS_GET, {
-          importId: bound.data.importId,
-        })
-        .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
-    );
+    const result = await sendRpcMessage<IImportStatusView | null>({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceAClient,
+      pattern: RPC_PATTERNS.IMPORTS_STATUS_GET,
+      payload: { importId: bound.data.importId },
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
+    });
 
     if (result === null) {
       throw new ImportNotFoundError(bound.data.importId);

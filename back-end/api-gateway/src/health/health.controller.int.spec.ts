@@ -27,12 +27,20 @@ describe('HealthController (HTTP Integration)', () => {
   let httpServer: App;
   let serviceAClient: { send: ReturnType<typeof vi.fn> };
   let serviceBClient: { send: ReturnType<typeof vi.fn> };
-  let redisClient: { ping: ReturnType<typeof vi.fn> };
+  let redisClient: {
+    ping: ReturnType<typeof vi.fn>;
+    connect: ReturnType<typeof vi.fn>;
+    quit: ReturnType<typeof vi.fn>;
+  };
 
   beforeAll(async () => {
     serviceAClient = { send: vi.fn() };
     serviceBClient = { send: vi.fn() };
-    redisClient = { ping: vi.fn() };
+    redisClient = {
+      ping: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined),
+      quit: vi.fn().mockResolvedValue('OK'),
+    };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -74,6 +82,8 @@ describe('HealthController (HTTP Integration)', () => {
     serviceAClient.send.mockReturnValue(of({ status: 'ok' }));
     serviceBClient.send.mockReturnValue(of({ status: 'ok' }));
     redisClient.ping.mockResolvedValue('PONG');
+    redisClient.connect.mockResolvedValue(undefined);
+    redisClient.quit.mockResolvedValue('OK');
   });
 
   describe('GET /health', () => {

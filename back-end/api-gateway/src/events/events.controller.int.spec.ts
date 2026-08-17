@@ -146,6 +146,25 @@ describe('EventsController (HTTP Integration)', () => {
       expect(serviceAClient.send).not.toHaveBeenCalled();
     });
 
+    it('should return 400 and not call service-a, when a filter is provided as an empty string', async () => {
+      const response = await request(httpServer).get('/events?type=');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
+      expect(serviceAClient.send).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 and not call service-a, when the cursor is provided as an empty string', async () => {
+      const response = await request(httpServer).get('/events?cursor=');
+
+      expect(response.status).toBe(400);
+      expect(serviceAClient.send).not.toHaveBeenCalled();
+    });
+
     it('should return 400 and not call service-a, when an unknown query parameter is provided', async () => {
       const response = await request(httpServer).get('/events').query({ unknown: 'value' });
 

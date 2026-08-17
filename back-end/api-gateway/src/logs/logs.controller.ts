@@ -7,13 +7,13 @@ import { type ICursorPage } from '@task1/shared/pagination/cursor-page.types';
 import { listResult } from '@task1/shared/pagination/list-result';
 import { type ILogView } from '@task1/shared/processing-log/contracts/log-view.dto';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { firstValueFrom, timeout } from 'rxjs';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
 import { ApiListResponse } from '../contract/decorators/api-envelope-response.decorator.js';
 import { Contract } from '../contract/decorators/contract.decorator.js';
 import { type BoundRequest, ModelBinder } from '../contract/decorators/model-binder.decorator.js';
 import { SERVICE_B_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { sendRpcMessage } from '../rmq/send-rpc-message.js';
 
 import { SearchLogsRequestSchema } from './schemas/search-logs-request.schema.js';
 import {
@@ -57,11 +57,13 @@ export class LogsController {
   public async search(
     @ModelBinder(SearchLogsRequestSchema) bound: BoundRequest<typeof SearchLogsRequestSchema>,
   ): Promise<SearchLogsResponse> {
-    const result = await firstValueFrom(
-      this.propagatingClient
-        .send<ICursorPage<ILogView>>(this.serviceBClient, RPC_PATTERNS.LOGS_SEARCH, bound.data)
-        .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
-    );
+    const result = await sendRpcMessage<ICursorPage<ILogView>>({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceBClient,
+      pattern: RPC_PATTERNS.LOGS_SEARCH,
+      payload: bound.data,
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
+    });
 
     return listResult(result.data, { nextCursor: result.nextCursor });
   }

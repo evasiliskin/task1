@@ -51,14 +51,8 @@ describe('buildRollupDelta', () => {
     });
   });
 
-  it('should treat the counters as zero, when the completed metadata is missing', () => {
-    expect(buildRollupDelta(buildEntry('completed'))).toEqual({
-      archivesProcessed: 1,
-      eventsProcessed: 0,
-      successfulEvents: 0,
-      invalidEvents: 0,
-      errors: 0,
-    });
+  it('should omit the zero counters, when the completed metadata is missing', () => {
+    expect(buildRollupDelta(buildEntry('completed'))).toEqual({ archivesProcessed: 1 });
   });
 
   it('should omit duplicateEvents from the delta, when the entry completed', () => {

@@ -3,6 +3,7 @@ import type * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { type StreamableFile } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
@@ -76,22 +77,11 @@ async function flushMicrotasks(): Promise<void> {
   });
 }
 
-async function waitFor(
-  condition: () => boolean,
-  description: string,
-  timeoutMs = 2000,
-): Promise<void> {
-  const startTime = Date.now();
+function discardStream(streamable: StreamableFile): void {
+  const stream = streamable.getStream();
 
-  while (!condition()) {
-    if (Date.now() - startTime > timeoutMs) {
-      throw new Error(`Timeout waiting for ${description} after ${timeoutMs}ms`);
-    }
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-  }
+  stream.on('error', () => undefined);
+  stream.destroy();
 }
 
 describe('ReportsController', () => {
@@ -147,8 +137,10 @@ describe('ReportsController', () => {
       expect(ReportsController.prototype.getPdfReport).toHaveLength(1);
     });
 
-    it('should log an error, when the report file cannot be read', async () => {
-      const reportPath = join(reportDirectory, 'does-not-exist.pdf');
+    it('should log the stream failure, when the report file cannot be read', async () => {
+      const reportPath = join(reportDirectory, 'report.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
+      writeFileSync(reportPath, '%PDF-1.4 fake report body');
       const sendMock = vi.fn().mockReturnValue(of({ reportPath }));
       const warn = vi.fn();
       const error = vi.fn();
@@ -159,7 +151,7 @@ describe('ReportsController', () => {
         reportDirectory,
       );
 
-      await requestContextService.run(
+      const streamable = await requestContextService.run(
         {
           correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
           requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
@@ -167,7 +159,10 @@ describe('ReportsController', () => {
         },
         () => controller.getPdfReport(bound),
       );
-      await waitFor(() => error.mock.calls.length > 0, 'the stream-error to be logged');
+
+      discardStream(streamable);
+
+      streamable.errorLogger(new Error(`ENOENT: no such file or directory, open '${reportPath}'`));
 
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({ reportPath }),
@@ -175,6 +170,82 @@ describe('ReportsController', () => {
         expect.anything(),
       );
       expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('should answer 500 without leaking the server path, when the report stream fails before the headers are sent', async () => {
+      const reportPath = join(reportDirectory, 'report.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
+      writeFileSync(reportPath, '%PDF-1.4 fake report body');
+      const controller = buildController(
+        vi.fn().mockReturnValue(of({ reportPath })),
+        { warn: vi.fn(), error: vi.fn() },
+        requestContextService,
+        reportDirectory,
+      );
+
+      const streamable = await requestContextService.run(
+        {
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
+        () => controller.getPdfReport(bound),
+      );
+
+      discardStream(streamable);
+
+      const response = {
+        destroyed: false,
+        headersSent: false,
+        statusCode: 200,
+        send: vi.fn(),
+        end: vi.fn(),
+      };
+
+      streamable.errorHandler(
+        new Error(`ENOENT: no such file or directory, open '${reportPath}'`),
+        response,
+      );
+
+      expect(response.statusCode).toBe(500);
+      expect(response.send).toHaveBeenCalledWith('The generated report could not be read.');
+      expect(response.send).not.toHaveBeenCalledWith(expect.stringContaining(reportPath));
+    });
+
+    it('should only end the response, when the report stream fails after the headers are sent', async () => {
+      const reportPath = join(reportDirectory, 'report.pdf');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test fixture inside a temp directory this spec owns.
+      writeFileSync(reportPath, '%PDF-1.4 fake report body');
+      const controller = buildController(
+        vi.fn().mockReturnValue(of({ reportPath })),
+        { warn: vi.fn(), error: vi.fn() },
+        requestContextService,
+        reportDirectory,
+      );
+
+      const streamable = await requestContextService.run(
+        {
+          correlationId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          requestId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          correlationIdSource: 'inbound',
+        },
+        () => controller.getPdfReport(bound),
+      );
+
+      discardStream(streamable);
+
+      const response = {
+        destroyed: false,
+        headersSent: true,
+        statusCode: 200,
+        send: vi.fn(),
+        end: vi.fn(),
+      };
+
+      streamable.errorHandler(new Error('socket hang up'), response);
+
+      expect(response.send).not.toHaveBeenCalled();
+      expect(response.end).toHaveBeenCalledTimes(1);
     });
 
     it('should throw, when the RMQ reply reportPath resolves outside the configured report directory', async () => {

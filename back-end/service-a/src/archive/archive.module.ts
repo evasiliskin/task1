@@ -40,7 +40,8 @@ import { UploadImportController } from './upload/upload-import.controller.js';
           options: {
             urls: [config.url],
             queue: config.serviceBQueue,
-            queueOptions: { durable: true },
+            queueOptions: { durable: true, noAssert: true },
+            persistent: true,
           },
         }),
       },

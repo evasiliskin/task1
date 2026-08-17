@@ -162,7 +162,7 @@ describe('drawEventsOverTimeChart', () => {
     expect(doc.text).toHaveBeenCalledWith('0');
   });
 
-  it('should title the chart "Processing Duration (this import)" and label the axis, when isAggregate is false and a single point is given', () => {
+  it('should title the chart "Events Processed (this import)" and label the axis, when isAggregate is false and a single point is given', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
     drawEventsOverTimeChart(
@@ -171,7 +171,7 @@ describe('drawEventsOverTimeChart', () => {
       false,
     );
 
-    expect(doc.text).toHaveBeenCalledWith('Processing Duration (this import)', {
+    expect(doc.text).toHaveBeenCalledWith('Events Processed (this import)', {
       underline: true,
     });
     expect(doc.text).toHaveBeenCalledWith('10');
@@ -286,7 +286,7 @@ describe('drawEventsOverTimeChart', () => {
     expect(rendered).toContain('Time (UTC)');
   });
 
-  it('should name the y-axis with the duration metric, when isAggregate is false', () => {
+  it('should name the y-axis with the plotted event metric, when isAggregate is false', () => {
     const doc = buildFakeDoc(['moveTo', 'lineTo', 'stroke', 'circle', 'fill']);
 
     drawEventsOverTimeChart(
@@ -301,7 +301,8 @@ describe('drawEventsOverTimeChart', () => {
       >
     ).mock.calls.map((call) => call[0]);
 
-    expect(rendered).toContain('Duration (ms)');
+    expect(rendered).toContain('Events');
+    expect(rendered).not.toContain('Duration (ms)');
   });
 });
 

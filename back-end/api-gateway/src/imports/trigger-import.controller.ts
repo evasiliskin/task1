@@ -4,11 +4,9 @@ import { Controller, Headers, HttpCode, HttpStatus, Inject, Post } from '@nestjs
 import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { MessagePublishFailedError } from '@task1/shared/errors/index';
 import { type IImportClaimView } from '@task1/shared/github-archive/index';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
-import { firstValueFrom, timeout } from 'rxjs';
 import { z } from 'zod';
 
 import rabbitmqConfig from '../config/rabbitmq.config.js';
@@ -18,6 +16,7 @@ import { type BoundRequest, ModelBinder } from '../contract/decorators/model-bin
 import { toSwaggerSchema } from '../contract/schemas/swagger-schema.js';
 import { publishImportMessage } from '../rmq/publish-import-message.js';
 import { SERVICE_A_IMPORTS_RMQ_CLIENT, SERVICE_A_RMQ_CLIENT } from '../rmq/rmq-client.tokens.js';
+import { sendRpcMessage } from '../rmq/send-rpc-message.js';
 
 import { InvalidIdempotencyKeyError } from './errors.js';
 import { TriggerImportRequestSchema } from './schemas/trigger-import-request.schema.js';
@@ -75,16 +74,12 @@ export class TriggerImportController {
       return { importId: randomUUID() };
     }
 
-    try {
-      return await firstValueFrom(
-        this.propagatingClient
-          .send<IImportClaimView>(this.serviceAClient, RPC_PATTERNS.IMPORTS_CLAIM, {
-            idempotencyKey,
-          })
-          .pipe(timeout(this.rabbitmqConfiguration.rpcTimeoutMs)),
-      );
-    } catch (error) {
-      throw new MessagePublishFailedError(RPC_PATTERNS.IMPORTS_CLAIM, error);
-    }
+    return await sendRpcMessage<IImportClaimView>({
+      propagatingClient: this.propagatingClient,
+      client: this.serviceAClient,
+      pattern: RPC_PATTERNS.IMPORTS_CLAIM,
+      payload: { idempotencyKey },
+      timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
+    });
   }
 }
