@@ -5,6 +5,7 @@ export const searchEventsMessageSchema = z.object({
   type: z.string().min(1).optional(),
   repository: z.string().min(1).optional(),
   actor: z.string().min(1).optional(),
+  importId: z.string().uuid().optional(),
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
   cursor: z.string().min(1).optional(),

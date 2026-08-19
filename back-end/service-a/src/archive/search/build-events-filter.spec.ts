@@ -25,6 +25,14 @@ describe('buildEventsFilter', () => {
     });
   });
 
+  it('should filter by importId, when importId is provided', () => {
+    expect(
+      buildEventsFilter({ ...baseMessage, importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
+    ).toEqual({
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    });
+  });
+
   it('should filter createdAt with only $gte, when only from is provided', () => {
     expect(buildEventsFilter({ ...baseMessage, from: '2026-08-01T00:00:00.000Z' })).toEqual({
       createdAt: { $gte: new Date('2026-08-01T00:00:00.000Z') },
@@ -53,11 +61,13 @@ describe('buildEventsFilter', () => {
         type: 'PushEvent',
         repository: 'octocat/hello-world',
         actor: 'octocat',
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       }),
     ).toEqual({
       eventType: 'PushEvent',
       'repo.name': 'octocat/hello-world',
       'actor.login': 'octocat',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     });
   });
 

@@ -14,6 +14,7 @@ describe('SearchEventsRequestSchema', () => {
         type: 'PushEvent',
         repository: 'octocat/hello-world',
         actor: 'octocat',
+        importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         from: '2026-08-01T00:00:00.000Z',
         to: '2026-08-11T00:00:00.000Z',
         cursor: 'some-cursor',
@@ -23,6 +24,12 @@ describe('SearchEventsRequestSchema', () => {
 
     expect(result.success).toBe(true);
     expect(result.success && result.data.query.limit).toBe(25);
+  });
+
+  it('should reject an importId that is not a valid UUID, when parsed', () => {
+    const result = SearchEventsRequestSchema.safeParse({ query: { importId: 'not-a-uuid' } });
+
+    expect(result.success).toBe(false);
   });
 
   it('should reject a limit exceeding 200, when parsed', () => {

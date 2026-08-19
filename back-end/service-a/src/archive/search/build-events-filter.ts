@@ -22,6 +22,10 @@ export function buildEventsFilter(
     filter['actor.login'] = message.actor;
   }
 
+  if (message.importId !== undefined) {
+    filter.importId = message.importId;
+  }
+
   if (message.from !== undefined || message.to !== undefined) {
     filter.createdAt = {
       ...(message.from === undefined ? {} : { $gte: new Date(message.from) }),
