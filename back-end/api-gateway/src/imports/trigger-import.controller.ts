@@ -5,6 +5,7 @@ import { type ConfigType } from '@nestjs/config';
 import { type ClientProxy } from '@nestjs/microservices';
 import { ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { type IImportClaimView } from '@task1/shared/github-archive/index';
+import { COMMAND_PATTERNS } from '@task1/shared/messaging/command-patterns.const';
 import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { z } from 'zod';
@@ -70,7 +71,7 @@ export class TriggerImportController {
     await publishImportMessage({
       propagatingClient: this.propagatingClient,
       client: this.serviceAImportsClient,
-      pattern: RPC_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD,
+      pattern: COMMAND_PATTERNS.ARCHIVE_IMPORT_DOWNLOAD,
       payload: { importId, dateHour: bound.data.dateHour },
       timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
     });

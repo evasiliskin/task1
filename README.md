@@ -68,7 +68,7 @@ durable and consumers use manual acknowledgement (`noAck: false`).
 | Queue                     | Consumer  | Prefetch | Carries                                |
 | ------------------------- | --------- | -------- | -------------------------------------- |
 | `service_a_queue`         | service-a | 20       | RPC requests                           |
-| `service_a_imports_queue` | service-a | 2        | import work (events)                   |
+| `service_a_imports_queue` | service-a | 2        | import work (commands)                 |
 | `service_b_queue`         | service-b | 10       | RPC requests + import lifecycle events |
 
 **Request/response (RPC)** — `ClientProxy.send` → `@MessagePattern`. Every gateway call is wrapped
@@ -76,15 +76,17 @@ in an rxjs `timeout(RABBITMQ_RPC_TIMEOUT_MS)` (default 10s). Patterns: `events.s
 `logs.search`, `stats.get`, `reports.pdf.generate`, `imports.status.get`, `imports.claim`,
 `health.check`.
 
-**Events (fire-and-forget)** — `ClientProxy.emit` → `@EventPattern`. Nothing waits for a reply.
+**Fire-and-forget** — `ClientProxy.emit` → `@EventPattern`. Nothing waits for a reply. Two distinct
+kinds share this transport style:
 
-- gateway → service-a: `archive.import.download`, `archive.process.upload`
-- service-a → service-b: `github.import.started`, `github.import.completed`, `github.import.failed`
+- **Commands** (`COMMAND_PATTERNS`, `messaging/command-patterns.const.ts`) — an imperative
+  instruction to do work: gateway → service-a: `archive.import.download`, `archive.process.upload`.
+- **Domain events** (`EVENT_PATTERNS`, `github-archive/events/event-patterns.const.ts`) — a
+  past-tense notification that something already happened: service-a → service-b:
+  `github.import.started`, `github.import.completed`, `github.import.failed`.
 
-Pattern strings are declared once in `@task1/shared` and imported by producer and consumer alike.
-Note that the two gateway→service-a event patterns live in `messaging/rpc-patterns.const.ts`
-alongside the RPC ones despite being used with `@EventPattern`; only the `github.import.*` patterns
-live in `github-archive/events/event-patterns.const.ts`.
+Pattern strings are declared once in `@task1/shared` and imported by producer and consumer alike —
+never hard-coded at the call site.
 
 **Payload contracts.** Producers send plain objects. Every consumer re-validates the payload with a
 Zod schema at the handler boundary; a payload that fails validation is logged and acked (never
