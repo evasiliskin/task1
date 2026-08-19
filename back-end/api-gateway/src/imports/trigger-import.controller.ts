@@ -46,12 +46,20 @@ export class TriggerImportController {
     description:
       'Client-supplied UUID. The returned importId is always server-generated — replaying the same key resolves to the same server-generated importId and does not start a second import.',
   })
-  @ApiBody({ schema: toSwaggerSchema(TriggerImportRequestSchema.shape.body) })
+  @ApiBody({
+    schema: toSwaggerSchema(TriggerImportRequestSchema.shape.body),
+    examples: {
+      default: {
+        summary: 'Single hour import',
+        value: { dateHour: '2026-01-02-12' },
+      },
+    },
+  })
   @ApiSingleResponse(TriggerImportResponseSchema, { status: HttpStatus.ACCEPTED })
   public async trigger(
     @ModelBinder(TriggerImportRequestSchema)
     bound: BoundRequest<typeof TriggerImportRequestSchema>,
-    @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
   ): Promise<{ importId: string }> {
     if (idempotencyKey !== undefined && !isValidIdempotencyKey(idempotencyKey)) {
       throw new InvalidIdempotencyKeyError(idempotencyKey);

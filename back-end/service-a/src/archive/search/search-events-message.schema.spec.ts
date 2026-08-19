@@ -10,6 +10,7 @@ describe('searchEventsMessageSchema', () => {
       type: 'PushEvent',
       repository: 'octocat/hello-world',
       actor: 'octocat',
+      importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       from: '2026-08-01T00:00:00.000Z',
       to: '2026-08-11T00:00:00.000Z',
       cursor: 'some-cursor',
@@ -37,5 +38,9 @@ describe('searchEventsMessageSchema', () => {
 
   it('should throw, when type is an empty string', () => {
     expect(() => searchEventsMessageSchema.parse({ type: '' })).toThrow();
+  });
+
+  it('should throw, when importId is not a valid UUID', () => {
+    expect(() => searchEventsMessageSchema.parse({ importId: 'not-a-uuid' })).toThrow();
   });
 });

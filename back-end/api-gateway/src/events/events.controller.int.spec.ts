@@ -122,6 +122,34 @@ describe('EventsController (HTTP Integration)', () => {
       expect(record.data).toEqual(expect.objectContaining({ type: 'PushEvent', limit: 50 }));
     });
 
+    it('should forward the importId filter inside the RMQ message, when a search is performed', async () => {
+      serviceAClient.send.mockReturnValue(of({ data: [] }));
+
+      await request(httpServer)
+        .get('/events')
+        .query({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' });
+
+      const [, record] = serviceAClient.send.mock.calls[0] as [
+        string,
+        { data: { importId: string } },
+      ];
+      expect(record.data).toEqual(
+        expect.objectContaining({ importId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
+      );
+    });
+
+    it('should return 400 and not call service-a, when importId is not a valid UUID', async () => {
+      const response = await request(httpServer).get('/events').query({ importId: 'not-a-uuid' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        status: 'FAILED',
+        code: 400,
+        reason: 'REQUEST_CONTRACT_VIOLATION',
+      });
+      expect(serviceAClient.send).not.toHaveBeenCalled();
+    });
+
     it('should send a message record whose headers include a correlation id, when a search is performed', async () => {
       serviceAClient.send.mockReturnValue(of({ data: [] }));
 

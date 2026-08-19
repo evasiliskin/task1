@@ -42,6 +42,7 @@ export class EventsController {
     description: 'Repository full name, e.g. octocat/hello-world',
   })
   @ApiQuery({ name: 'actor', required: false, description: 'Actor login' })
+  @ApiQuery({ name: 'importId', required: false, description: 'Import run id (UUID)' })
   @ApiQuery({ name: 'from', required: false, description: 'ISO-8601 lower bound for createdAt' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO-8601 upper bound for createdAt' })
   @ApiQuery({
