@@ -1,0 +1,110 @@
+import { type ExecutionContext } from '@nestjs/common';
+import { RequestContractViolationError } from '@task1/shared/errors/index';
+import { z } from 'zod';
+
+import { bindRequest, ModelBinder } from './model-binder.decorator.js';
+
+const ROUTE_ARGS_METADATA = '__routeArguments__';
+
+interface IFakeRequest {
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+function makeContext(request: IFakeRequest): ExecutionContext {
+  return {
+    switchToHttp: () => ({ getRequest: () => request }),
+    getClass: () => ({ name: 'TestController' }),
+    getHandler: () => ({ name: 'testMethod' }),
+  } as unknown as ExecutionContext;
+}
+
+describe('bindRequest', () => {
+  it('should return merged data from params, query, and body, when all validate', () => {
+    const schema = z.object({
+      params: z.object({ id: z.string() }).strict(),
+      query: z.object({ page: z.coerce.number() }).strict(),
+      body: z.object({ name: z.string() }).strict(),
+    });
+    const context = makeContext({
+      params: { id: 'p-1' },
+      query: { page: '2' },
+      body: { name: 'archive' },
+    });
+
+    const bound = bindRequest(schema, context);
+
+    expect(bound).toEqual({ data: { id: 'p-1', page: 2, name: 'archive' } });
+  });
+
+  it('should apply a query default, when no query params are sent', () => {
+    const schema = z.object({
+      query: z
+        .object({ limit: z.coerce.number().default(50) })
+        .strict()
+        .default({ limit: 50 }),
+    });
+    const context = makeContext({ query: {} });
+
+    const bound = bindRequest(schema, context);
+
+    expect(bound).toEqual({ data: { limit: 50 } });
+  });
+
+  it('should throw RequestContractViolationError, when the input fails validation', () => {
+    const schema = z.object({
+      query: z.object({ limit: z.coerce.number().max(200) }).strict(),
+    });
+    const context = makeContext({ query: { limit: '500' } });
+
+    expect(() => bindRequest(schema, context)).toThrow(RequestContractViolationError);
+  });
+
+  it('should throw RequestContractViolationError, when an unexpected key is present', () => {
+    const schema = z.object({ query: z.object({ page: z.coerce.number() }).strict() });
+    const context = makeContext({ query: { page: '1', unexpected: 'value' } });
+
+    expect(() => bindRequest(schema, context)).toThrow(RequestContractViolationError);
+  });
+
+  it('should attach field errors, when validation fails', () => {
+    const schema = z.object({ query: z.object({ limit: z.number() }) });
+    const context = makeContext({ query: { limit: 'ten' } });
+
+    try {
+      bindRequest(schema, context);
+      expect.unreachable('bindRequest should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RequestContractViolationError);
+      expect((error as RequestContractViolationError).fieldErrors).toEqual([
+        {
+          field: 'limit',
+          errorType: 'INVALID_TYPE',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any(String) is typed `any` by vitest; value is asserted at runtime, not statically typeable.
+          message: expect.any(String),
+        },
+      ]);
+    }
+  });
+});
+
+describe('ModelBinder', () => {
+  it('should record non-undefined param data, when applied to a real handler parameter', () => {
+    const schema = z.object({});
+
+    class TestController {
+      public handle(@ModelBinder(schema) _bound: unknown): boolean {
+        return true;
+      }
+    }
+
+    const metadata = Reflect.getMetadata(ROUTE_ARGS_METADATA, TestController, 'handle') as Record<
+      string,
+      { data?: unknown }
+    >;
+    const [paramMetadata] = Object.values(metadata);
+
+    expect(paramMetadata.data).toBeDefined();
+  });
+});

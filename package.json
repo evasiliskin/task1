@@ -1,0 +1,30 @@
+{
+  "name": "task1",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Multi-service workspace: NestJS microservices back-end",
+  "scripts": {
+    "dev:api-gateway": "cross-env NODE_ENV=development pnpm --filter api-gateway run start:dev",
+    "dev:service-b": "cross-env NODE_ENV=development pnpm --filter service-b run start:dev",
+    "dev:service-a": "cross-env NODE_ENV=development pnpm --filter service-a run start:dev",
+    "build": "cross-env NODE_ENV=production pnpm -r run build",
+    "test": "cross-env NODE_ENV=test pnpm -r run test",
+    "test:int": "cross-env NODE_ENV=test pnpm -r run test:int",
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm run lint && pnpm run test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "engines": {
+    "node": "26.5.0"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2"
+  }
+}
