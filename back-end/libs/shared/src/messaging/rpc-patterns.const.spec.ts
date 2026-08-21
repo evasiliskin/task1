@@ -9,8 +9,6 @@ describe('RPC_PATTERNS', () => {
       REPORTS_PDF_GENERATE: 'reports.pdf.generate',
       IMPORTS_STATUS_GET: 'imports.status.get',
       IMPORTS_CLAIM: 'imports.claim',
-      ARCHIVE_IMPORT_DOWNLOAD: 'archive.import.download',
-      ARCHIVE_PROCESS_UPLOAD: 'archive.process.upload',
       HEALTH_CHECK: 'health.check',
     });
   });

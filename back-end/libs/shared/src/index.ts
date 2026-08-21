@@ -16,6 +16,7 @@ export * from './exception-handling/strategies/default.format-strategy.js';
 export * from './exception-handling/strategies/http-exception.format-strategy.js';
 
 export * from './messaging/rpc-patterns.const.js';
+export * from './messaging/command-patterns.const.js';
 export * from './messaging/ack.util.js';
 export * from './messaging/confirm-publish.js';
 export * from './messaging/messaging.module.js';

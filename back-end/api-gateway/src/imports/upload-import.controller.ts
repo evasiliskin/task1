@@ -14,7 +14,7 @@ import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { type AppLogger } from '@task1/shared/logger/app-logger';
 import { LoggerService } from '@task1/shared/logger/logger.service';
-import { RPC_PATTERNS } from '@task1/shared/messaging/rpc-patterns.const';
+import { COMMAND_PATTERNS } from '@task1/shared/messaging/command-patterns.const';
 import { ContextPropagatingClient } from '@task1/shared/request-context/rmq/context-propagating.client';
 import { type Request } from 'express';
 
@@ -84,7 +84,7 @@ export class UploadImportController {
     await publishImportMessage({
       propagatingClient: this.propagatingClient,
       client: this.serviceAImportsClient,
-      pattern: RPC_PATTERNS.ARCHIVE_PROCESS_UPLOAD,
+      pattern: COMMAND_PATTERNS.ARCHIVE_PROCESS_UPLOAD,
       payload: { importId, filePath: finalPath },
       timeoutMs: this.rabbitmqConfiguration.rpcTimeoutMs,
     });

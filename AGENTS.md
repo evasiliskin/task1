@@ -47,11 +47,13 @@ to `src/index.ts` only when the new export belongs in the barrel group.
 
 ## Messaging rules
 
-- Add or rename patterns only in `@task1/shared`: `messaging/rpc-patterns.const.ts` or
-  `github-archive/events/event-patterns.const.ts`. Never hard-code a pattern string. The file names
-  do not map cleanly onto the transport kind — `ARCHIVE_IMPORT_DOWNLOAD` and
-  `ARCHIVE_PROCESS_UPLOAD` sit in `RPC_PATTERNS` but are consumed with `@EventPattern`. Check how a
-  pattern is consumed before assuming it is RPC.
+- Add or rename patterns only in `@task1/shared`, in the constant group matching the transport kind:
+  `messaging/rpc-patterns.const.ts` (`RPC_PATTERNS`, consumed with `@MessagePattern` via `send`/RPC),
+  `messaging/command-patterns.const.ts` (`COMMAND_PATTERNS`, consumed with `@EventPattern` — a
+  fire-and-forget instruction to do work, e.g. `archive.import.download`), or
+  `github-archive/events/event-patterns.const.ts` (`EVENT_PATTERNS`, also `@EventPattern` — a
+  past-tense notification that something already happened, e.g. `github.import.completed`). Never
+  hard-code a pattern string.
 - Choose deliberately: `send`/`@MessagePattern` for anything the caller waits on,
   `emit`/`@EventPattern` for work and notifications. Gateway publishes go through
   `sendRpcMessage` / `publishImportMessage`, which apply the `rpcTimeoutMs` timeout and wrap
